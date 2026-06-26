@@ -12,6 +12,8 @@
   <img src="https://img.shields.io/badge/Built%20by-LabOps.ai-111111?style=for-the-badge" alt="Built by LabOps.ai">
 </p>
 
+<p align="center"><a href="README.md"><b>English</b></a> · <a href="README.ru.md">Русский</a></p>
+
 <p align="center">
   <b>Система labops:</b>
   <a href="https://github.com/dediukhinpa/labops-tg-plugin">tg-plugin</a> ·
@@ -19,98 +21,113 @@
   <a href="https://github.com/dediukhinpa/labops-agent-architecture">agent-architecture</a>
 </p>
 
-> **Общий мозг команды Claude Code-агентов.** Self-hosted на одном VPS: Postgres 16 + pgvector, набор MCP-серверов (память, гибридный recall, координация роя, задачи) и фоновые воркеры. Markdown-vault как единый источник правды + семантический поиск поверх него. Часть архитектуры **labops** (см. [`labops-tg-plugin`](#связанные-репозитории) и [`labops-agent-architecture`](#связанные-репозитории)).
+> **A shared brain for a team of Claude Code agents.** Self-hosted on a single VPS: Postgres 16 + pgvector, a set of MCP servers (memory, hybrid recall, swarm coordination, tasks) and background workers. A Markdown vault as the single source of truth + semantic search on top of it. Part of the **labops** architecture (see [`labops-tg-plugin`](#part-of-labops) and [`labops-agent-architecture`](#part-of-labops)).
 
-Это слой **долговременной общей памяти**. Каждый агент держит свою «горячую» память в workspace (`CLAUDE.md`, `hot/`, `warm/`), а `labops-second-brain` — это **L4**: смысловой, общий для всей команды, с поиском по эмбеддингам и строгим разграничением доступа.
+This is the **long-term shared memory** layer. Each agent keeps its own "hot" memory in its workspace (`CLAUDE.md`, `hot/`, `warm/`), while `labops-second-brain` is **L4**: semantic, shared across the whole team, with embedding search and strict access control.
 
-> **Платформа:** заточено под **Linux + systemd + Postgres peer-auth** (OS-пользователь == pg-роль, обычно `second_brain`). Не Docker, не macOS/Windows.
-
----
-
-## Минимум чтобы взлетело
-
-Если читать некогда — вот необходимый и достаточный набор:
-
-1. **Postgres 16 + pgvector** на хосте (ставит сам `install.sh` из `apt.postgresql.org`).
-2. **Запустить установщик** на чистом Ubuntu 22.04+ под root:
-   ```bash
-   sudo bash scripts/install.sh
-   ```
-3. **Заполнить только обязательные переменные** в `.env` (остальное генерируется/опционально — см. блок Quick Start в начале [`.env.example`](.env.example)):
-   - `PG_HOST` (по умолчанию unix-сокет `/var/run/postgresql` → peer-auth, пароль не нужен), `PG_DATABASE`, `PG_USER` — БД;
-   - `MCP_MEMORY_PORT` / `MCP_RECALL_PORT` / `MCP_SWARM_PORT` — порты серверов (дефолты 8767/8768/8766).
-   - `PG_PASSWORD` нужен **только** при TCP-хосте; при peer-auth оставьте пустым.
-
-Установка считается успешной только при зелёном **smoke-test** в конце (если он падает — см. [Troubleshooting](#troubleshooting)).
+> **Platform:** built for **Linux + systemd + Postgres peer-auth** (OS user == pg role, usually `second_brain`). Not Docker, not macOS/Windows.
 
 ---
 
-## Содержание
+## Why a shared memory backend
 
-- [Зачем нужен общий мозг](#зачем-нужен-общий-мозг)
-- [Слои памяти](#слои-памяти)
-- [Архитектура](#архитектура)
-- [MCP-серверы и порты](#mcp-серверы-и-порты)
-- [Хранилище: vault + Postgres](#хранилище-vault--postgres)
-- [Scopes и RBAC](#scopes-и-rbac)
-- [Гибридный recall](#гибридный-recall)
-- [dual-write и политика записи](#dual-write-и-политика-записи)
-- [Координация роя (inter-agent)](#координация-роя-inter-agent)
-- [Инструменты записи](#инструменты-записи)
-- [Установка](#установка)
-- [Troubleshooting](#troubleshooting)
-- [Переменные и порты](#переменные-и-порты)
-- [Тесты](#тесты)
-- [Связанные репозитории](#связанные-репозитории)
-- [Лицензия](#лицензия)
+A single agent remembers its own session. A team of agents does not: knowledge gained by one is invisible to the others, is lost on compaction, and cannot be searched by meaning. `labops-second-brain` solves this — a shared layer reachable by every agent over MCP, with semantic recall, dual-write so nothing is lost on compaction, scoped RBAC, and signed inter-agent webhooks instead of blind direct calls.
 
----
-
-## Зачем нужен общий мозг
-
-Один агент помнит свою сессию. Команда агентов — нет: знание, добытое одним, недоступно другим, теряется при компакции и не ищется по смыслу. `labops-second-brain` решает это:
-
-| Проблема | Решение |
+| Problem | Solution |
 |---|---|
-| Знание заперто в одной сессии | общий слой, доступный всем агентам по MCP |
-| Контекст теряется при компакции | важное пишется сразу в vault + БД (dual-write) |
-| «Где-то я это уже видел» | семантический recall по эмбеддингам, не grep |
-| Кто что может читать/писать | scopes + per-agent токены (RBAC) |
-| Рой дёргает друг друга вслепую | inter-agent webhooks с подписью и ретраями |
+| Knowledge locked inside one session | a shared layer reachable by all agents over MCP |
+| Context lost on compaction | important things are written straight to the vault + DB (dual-write) |
+| "I've seen this somewhere before" | semantic recall over embeddings, not grep |
+| Who may read/write what | scopes + per-agent tokens (RBAC) |
+| The swarm pokes each other blindly | inter-agent webhooks with signatures and retries |
 
 ---
 
-## Слои памяти
+## Quickstart
+
+If you have no time to read — this is the necessary and sufficient set.
+
+**1. Run the installer** on a clean Ubuntu 22.04+ host as root. It installs Postgres 16 + pgvector from `apt.postgresql.org` for you:
+
+```bash
+sudo bash scripts/install.sh
+```
+
+**2. Fill in only the required variables** in `.env` (everything else is generated / optional — see the Quick Start block at the top of [`.env.example`](.env.example)):
+
+- `PG_HOST` — DB host (default is the unix socket `/var/run/postgresql` → peer-auth, no password needed), `PG_DATABASE`, `PG_USER`;
+- `MCP_MEMORY_PORT` / `MCP_RECALL_PORT` / `MCP_SWARM_PORT` — server ports (defaults `8767` / `8768` / `8766`);
+- `PG_PASSWORD` is needed **only** with a TCP host; leave it empty for peer-auth.
+
+The install is considered successful only when the **smoke-test** at the end is green (if it fails, see [Troubleshooting](#troubleshooting)).
+
+**3. First write + query (via MCP).** Issue a per-agent Bearer token on the VPS, wire it into the agent's `.mcp.json`, then write and recall:
+
+```bash
+# issue a token (printed once — save it)
+sudo -u second_brain python /opt/second_brain/scripts/issue-agent-token.py \
+  --agent my-agent --scopes '*'
+```
+
+```jsonc
+// ~/.claude/.mcp.json on the agent host
+{
+  "mcpServers": {
+    "second_brain-memory": { "url": "http://<VPS>:8767/mcp", "headers": { "Authorization": "Bearer <token>" } },
+    "second_brain-recall": { "url": "http://<VPS>:8768/mcp", "headers": { "Authorization": "Bearer <token>" } },
+    "second_brain-swarm":  { "url": "http://<VPS>:8766/mcp", "headers": { "Authorization": "Bearer <token>" } }
+  }
+}
+```
+
+```text
+# write — the agent calls the memory tool
+create_decision_note(title="Use pgvector for recall", body="...", scope="30-decisions")
+
+# query — the agent calls recall
+recall(query="how do we store embeddings")
+```
+
+To probe the brain directly without an agent:
+
+```bash
+curl -sS -H "Authorization: Bearer <token>" http://<VPS>:8768/mcp/
+# expect 406 with an MCP error body (live upstream). 401 → wrong token. Connection refused → firewall.
+```
+
+---
+
+## Memory layers
 
 ```mermaid
 flowchart LR
-    L1["L1 · Идентичность<br/>CLAUDE.md, rules.md<br/>(в системном промпте)"]
-    L2["L2 · Горячая<br/>hot/recent.md, handoff.md<br/>(текущая работа)"]
-    L3["L3 · Тёплая<br/>warm/decisions.md<br/>(ротация)"]
-    L4["L4 · Общий мозг<br/>labops-second-brain<br/>(vault + pgvector)"]
+    L1["L1 · Identity<br/>CLAUDE.md, rules.md<br/>(in the system prompt)"]
+    L2["L2 · Hot<br/>hot/recent.md, handoff.md<br/>(current work)"]
+    L3["L3 · Warm<br/>warm/decisions.md<br/>(rotation)"]
+    L4["L4 · Shared brain<br/>labops-second-brain<br/>(vault + pgvector)"]
     L1 --> L2 --> L3 --> L4
 ```
 
-- **L1–L3 живут в workspace агента** (это слой [`labops-agent-architecture`](#связанные-репозитории)) — личные, быстрые, в контексте сессии.
-- **L4 — этот репозиторий** — общий, смысловой, переживает сессии и компакцию. Сюда выгружают решения, ошибки, исследования, заметки о человеке и проекте. Поиск — по смыслу, доступ — по scopes.
+- **L1–L3 live in the agent's workspace** (that is the [`labops-agent-architecture`](#part-of-labops) layer) — personal, fast, in the session context.
+- **L4 — this repository** — shared, semantic, surviving sessions and compaction. Decisions, errors, research, notes about the person and the project are flushed here. Search is by meaning; access is by scopes.
 
 ---
 
-## Архитектура
+## Architecture
 
 ```mermaid
 flowchart TB
-    subgraph agents["Агенты (Claude Code сессии)"]
-        A1["агент 1"]; A2["агент 2"]; A3["агент N"]
+    subgraph agents["Agents (Claude Code sessions)"]
+        A1["agent 1"]; A2["agent 2"]; A3["agent N"]
     end
 
-    subgraph brain["labops-second-brain (один VPS)"]
-        MEM["memory-mcp :8767<br/>запись заметок в vault"]
-        REC["recall-mcp :8768<br/>гибридный поиск"]
-        SW["swarm-mcp :8766<br/>координация роя"]
-        TASK["task-mcp :8769<br/>задачи/доска"]
-        IW["ingest-worker<br/>чанкинг + эмбеддинги"]
-        SWW["swarm-worker<br/>доставка webhooks"]
+    subgraph brain["labops-second-brain (single VPS)"]
+        MEM["memory-mcp :8767<br/>writes notes to the vault"]
+        REC["recall-mcp :8768<br/>hybrid search"]
+        SW["swarm-mcp :8766<br/>swarm coordination"]
+        TASK["task-mcp :8769<br/>tasks/board"]
+        IW["ingest-worker<br/>chunking + embeddings"]
+        SWW["swarm-worker<br/>webhook delivery"]
         PG[("Postgres 16 + pgvector<br/>documents · embeddings ·<br/>agent_tokens · audit ·<br/>swarm_outbox · tasks")]
         VAULT["vault/ (Markdown SSOT)"]
     end
@@ -118,194 +135,205 @@ flowchart TB
     A1 & A2 & A3 -- "MCP (HTTP, Bearer/HMAC)" --> MEM & REC & SW & TASK
     MEM --> VAULT
     MEM --> PG
-    IW -- "следит за vault, считает эмбеддинги" --> PG
+    IW -- "watches the vault, computes embeddings" --> PG
     REC --> PG
     SW --> SWW --> A1
 ```
 
-- **MCP-серверы** — точки входа для агентов (HTTP, аутентификация Bearer-токеном или HMAC-подписью).
-- **ingest-worker** — следит за изменениями vault, режет документы на чанки с контекстом и считает эмбеддинги (FastEmbed `multilingual-e5-large`).
-- **swarm-worker** — асинхронно доставляет inter-agent webhooks с ретраями.
-- **core-mcp** — режим, агрегирующий memory+swarm+task в одном процессе (см. tool-gating ниже).
+- **MCP servers** — the entry points for agents (HTTP, authenticated with a Bearer token or an HMAC signature).
+- **ingest-worker** — watches the vault for changes, splits documents into context-aware chunks and computes embeddings (FastEmbed `multilingual-e5-large`).
+- **swarm-worker** — asynchronously delivers inter-agent webhooks with retries.
+- **core-mcp** — a mode that aggregates memory+swarm+task in a single process (see tool-gating below).
 
----
+### MCP servers & ports
 
-## MCP-серверы и порты
-
-| Сервер | Порт | Назначение | systemd |
+| Server | Port | Purpose | systemd |
 |---|---|---|---|
-| `memory-mcp` | **8767** | запись заметок в vault (decision/runbook/error/external/personal/project), дедуп по sha256 | `memory-mcp.service` |
-| `recall-mcp` | **8768** | гибридный поиск (semantic + lexical + rerank), кросс-линки | `recall-mcp.service` |
-| `swarm-mcp` | **8766** | координация роя: outbox, inter-agent сообщения | `swarm-mcp.service` |
-| `task-mcp` | **8769** | задачи, доска, supervisor агентов | `task-mcp.service` |
-| `ingest-worker` | — | чанкинг + эмбеддинги (watermark по изменениям) | `ingest-worker.service` |
-| `swarm-worker` | — | доставка webhooks (5 ретраев, exp backoff) | `swarm-worker.service` |
+| `memory-mcp` | **8767** | writes notes to the vault (decision/runbook/error/external/personal/project), dedup by sha256 | `memory-mcp.service` |
+| `recall-mcp` | **8768** | hybrid search (semantic + lexical + rerank), cross-links | `recall-mcp.service` |
+| `swarm-mcp` | **8766** | swarm coordination: outbox, inter-agent messages | `swarm-mcp.service` |
+| `task-mcp` | **8769** | tasks, board, agent supervisor | `task-mcp.service` |
+| `ingest-worker` | — | chunking + embeddings (watermark over changes) | `ingest-worker.service` |
+| `swarm-worker` | — | webhook delivery (5 retries, exp backoff) | `swarm-worker.service` |
 
-**tool-gating:** переменная `SECOND_BRAIN_TOOLS` (дефолт `core`) определяет, какие инструменты сервер отдаёт клиентам. Новый memory-инструмент виден только если он есть в `CORE_TOOLS_BY_SERVER` (`services/shared/tool_gating.py`), а не только в коде.
-
----
-
-## Хранилище: vault + Postgres
-
-- **vault/** — каталог Markdown-файлов, **единственный источник правды** (human-readable, git-friendly). Каждая заметка = `.md` с YAML-frontmatter.
-- **Postgres + pgvector** — индекс поверх vault: `documents`, `embeddings` (вектор на чанк), `agent_tokens` (RBAC), `audit` (кто что писал), `swarm_outbox`, `tasks`. БД — производная; правда — в vault.
-
-Документ проходит: запись через `memory-mcp` → файл в vault + строка в `documents` → `ingest-worker` режет на чанки и считает эмбеддинги → доступен в `recall`.
-
-> **Важно:** `ingest-worker` эмбеддит только то, что пришло через запись `memory-mcp` (строка в `documents` + задача в очереди). `.md`-файлы, **положенные в vault руками** (минуя `memory-mcp`), НЕ индексируются автоматически и не находятся в recall.
+**tool-gating:** the `SECOND_BRAIN_TOOLS` variable (default `core`) decides which tools the server exposes to clients. A new memory tool is visible only if it is present in `CORE_TOOLS_BY_SERVER` (`services/shared/tool_gating.py`), not just in the code.
 
 ---
 
-## Scopes и RBAC
+## Storage: vault + Postgres
 
-Числовые префиксы (`10-`, `30-`, `90-`…) — это просто **папки верхнего уровня в vault**, по которым раскладывается знание (стратегия, решения, входящее и т.д.); цифры задают порядок и группировку, не приоритет. Каждый scope — отдельная «полка», и доступ к чтению/записи выдаётся по списку этих полок. Новичку проще всего выдать себе токен со `scopes='*'` (доступ ко всем полкам — удобно для админки и тестов) и сузить права позже, когда станет ясно, кому что нужно.
+- **vault/** — a directory of Markdown files, the **single source of truth** (human-readable, git-friendly). Each note = a `.md` file with YAML frontmatter.
+- **Postgres + pgvector** — an index on top of the vault: `documents`, `embeddings` (a vector per chunk), `agent_tokens` (RBAC), `audit` (who wrote what), `swarm_outbox`, `tasks`. The DB is derived; the truth is in the vault.
 
-**Scope** = первая папка пути в vault. Разрешённый список — `services/memory_mcp/path_guard.py` (`ALLOWED_SCOPES`):
+A document flows: written via `memory-mcp` → a file in the vault + a row in `documents` → `ingest-worker` splits it into chunks and computes embeddings → available in `recall`.
 
-| Scope | Что хранит |
+> **Important:** `ingest-worker` only embeds what arrived through a `memory-mcp` write (a row in `documents` + a job in the queue). `.md` files **dropped into the vault by hand** (bypassing `memory-mcp`) are NOT indexed automatically and are not found in recall.
+
+---
+
+## Scopes & RBAC
+
+Numeric prefixes (`10-`, `30-`, `90-`…) are simply **top-level folders in the vault** into which knowledge is sorted (strategy, decisions, inbox, etc.); the digits set ordering and grouping, not priority. Each scope is a separate "shelf", and read/write access is granted as a list of these shelves. The easiest start for a newcomer is to issue yourself a token with `scopes='*'` (access to every shelf — handy for admin and tests) and narrow the rights later, once it is clear who needs what.
+
+**Scope** = the first folder of a path in the vault. The allowed list is `services/memory_mcp/path_guard.py` (`ALLOWED_SCOPES`):
+
+| Scope | What it stores |
 |---|---|
-| `10-strategy` / `10-system` | стратегия, системные заметки |
-| `15-personal` | про человека: ФИО, навыки, опыт, жизненные ситуации |
-| `20-daily` / `20-metrics` | дневные логи, метрики |
-| `30-decisions` | архитектурные/продуктовые решения |
-| `40-projects` | бизнес: бухгалтерия, договора, регламенты, переписка, коммтайна |
-| `50-external` / `50-knowledge` | внешние источники, исследования, статьи |
-| `60-tasks` | задачи |
-| `70-runbooks` | воспроизводимые процессы |
-| `80-error-patterns` | баги и их фиксы |
-| `90-inbox` | входящее, не разобранное |
+| `10-strategy` / `10-system` | strategy, system notes |
+| `15-personal` | about the person: name, skills, experience, life situations |
+| `20-daily` / `20-metrics` | daily logs, metrics |
+| `30-decisions` | architectural/product decisions |
+| `40-projects` | business: accounting, contracts, policies, correspondence, commercial secrets |
+| `50-external` / `50-knowledge` | external sources, research, articles |
+| `60-tasks` | tasks |
+| `70-runbooks` | reproducible processes |
+| `80-error-patterns` | bugs and their fixes |
+| `90-inbox` | incoming, unsorted |
 
-**RBAC:** у каждого агента — токен в `agent_tokens` с `can_read_scopes` / `can_write_scopes`. `*` = доступ к любому scope. Токены выдаёт `scripts/issue-agent-token.py` (raw-секрет печатается один раз, в БД — sha256).
-
----
-
-## Гибридный recall
-
-`recall-mcp` не grep, а смысловой поиск:
-
-1. **Semantic** — эмбеддинг запроса (e5, с правильными префиксами `query:`/`passage:`) → cosine по pgvector.
-2. **Lexical** — полнотекстовый сигнал.
-3. **Fusion (RRF)** — объединение рангов semantic+lexical.
-4. **Rerank** — переупорядочивание top-кандидатов.
-5. **Cross-link** — связанные заметки (`cross_link.py`).
-
-Кэш запросов-эмбеддингов (`recall_mcp/cache.py`) и веса источников (`source_weights.py`) — для скорости и релевантности.
+**RBAC:** each agent has a token in `agent_tokens` with `can_read_scopes` / `can_write_scopes`. `*` = access to any scope. Tokens are issued by `scripts/issue-agent-token.py` (the raw secret is printed once; the DB stores its sha256).
 
 ---
 
-## dual-write и политика записи
+## Hybrid recall, dual-write, inter-agent
 
-- **dual-write:** важное пишется в ДВА места сразу — локальный canonical `.md` (в workspace агента) **и** общий слой через `memory-mcp`. Идемпотентно по sha256 (повтор тела — no-op). Локальный `.md` — главный, second_brain — общий для команды.
-- **recall перед записью** — чтобы не плодить дубли.
-- **пиши сразу** — компакция/конец сессии НЕ выгружают знание автоматически.
+<details>
+<summary><b>Hybrid recall</b> — semantic search, not grep</summary>
 
-Полная политика «что и когда писать» — в `labops-agent-architecture` (`SECONDBRAIN_WRITE_RULES.md`, @-импортится в CLAUDE.md каждого агента).
+`recall-mcp` is not grep, but semantic search:
+
+1. **Semantic** — embed the query (e5, with the correct `query:`/`passage:` prefixes) → cosine over pgvector.
+2. **Lexical** — a full-text signal.
+3. **Fusion (RRF)** — merging semantic+lexical ranks.
+4. **Rerank** — reordering the top candidates.
+5. **Cross-link** — related notes (`cross_link.py`).
+
+A query-embedding cache (`recall_mcp/cache.py`) and per-source weights (`source_weights.py`) exist for speed and relevance.
+
+</details>
+
+<details>
+<summary><b>dual-write</b> — write policy</summary>
+
+- **dual-write:** important things are written to TWO places at once — a local canonical `.md` (in the agent's workspace) **and** the shared layer via `memory-mcp`. Idempotent by sha256 (a repeated body is a no-op). The local `.md` is primary; second_brain is shared across the team.
+- **recall before writing** — so as not to breed duplicates.
+- **write immediately** — compaction / end of session do NOT flush knowledge automatically.
+
+The full "what and when to write" policy lives in `labops-agent-architecture` (`SECONDBRAIN_WRITE_RULES.md`, @-imported into each agent's CLAUDE.md).
+
+</details>
+
+<details>
+<summary><b>Swarm coordination (inter-agent)</b> — signed webhooks</summary>
+
+Agents poke each other through **inter-agent webhooks** (not directly):
+
+- the sender puts a message into `swarm_outbox` (via `swarm-mcp`);
+- `swarm-worker` delivers it to the recipient, statuses `pending|delivered|acked|failed`;
+- **5 retries** with exponential backoff, then `failed` (a manual replay is needed);
+- requests are signed with **HMAC** (`x-hermes-signature`/`x-hermes-timestamp`, secrets in `migrations/004_hmac_secrets.sql` + `issue-hmac-secret.py`), plus Bearer tokens.
+
+Details — `docs/INTER-AGENT-WEBHOOKS.md`.
+
+</details>
 
 ---
 
-## Координация роя (inter-agent)
+## Write tools
 
-Агенты дёргают друг друга через **inter-agent webhooks** (не напрямую):
-
-- отправитель кладёт сообщение в `swarm_outbox` (через `swarm-mcp`);
-- `swarm-worker` доставляет его получателю, статусы `pending|delivered|acked|failed`;
-- **5 ретраев** с экспоненциальным backoff, потом `failed` (нужен ручной replay);
-- запросы подписаны **HMAC** (`x-hermes-signature`/`x-hermes-timestamp`, секреты в `migrations/004_hmac_secrets.sql` + `issue-hmac-secret.py`), плюс Bearer-токены.
-
-Подробности — `docs/INTER-AGENT-WEBHOOKS.md`.
-
----
-
-## Инструменты записи
-
-| Инструмент | Scope по умолчанию | Что фиксирует |
+| Tool | Default scope | What it records |
 |---|---|---|
-| `create_decision_note` | `30-decisions` | архитектурные/продуктовые решения, API-контракты, правила |
-| `create_runbook_note` | `70-runbooks` | воспроизводимые процессы |
-| `create_error_pattern_note` | `80-error-patterns` | баг + фикс + как не повторить |
-| `create_external_note` | `50-external` | внешние источники/исследования (+ `source_url`) |
-| `create_personal_note` | `15-personal` | про человека |
-| `create_project_note` | `40-projects` | про бизнес/проект |
-| `append_daily_log` | `20-daily` | дневной прогресс |
-| `create_handoff` | — | выгрузка перед компакцией/в конце сессии |
-| `supersede_decision` | `30-decisions` | устаревшее решение |
+| `create_decision_note` | `30-decisions` | architectural/product decisions, API contracts, rules |
+| `create_runbook_note` | `70-runbooks` | reproducible processes |
+| `create_error_pattern_note` | `80-error-patterns` | a bug + its fix + how not to repeat it |
+| `create_external_note` | `50-external` | external sources/research (+ `source_url`) |
+| `create_personal_note` | `15-personal` | about the person |
+| `create_project_note` | `40-projects` | about the business/project |
+| `append_daily_log` | `20-daily` | daily progress |
+| `create_handoff` | — | a flush before compaction / at the end of a session |
+| `supersede_decision` | `30-decisions` | an outdated decision |
 
-Recall: `recall(...)`. Координация: `swarm_*`. Задачи: `task_*`.
+Recall: `recall(...)`. Coordination: `swarm_*`. Tasks: `task_*`.
 
 ---
 
-## Установка
+## Installation & deployment
 
-Требования: **Ubuntu 22.04**, root/sudo. Без Docker — нативно (apt + venv + systemd).
+<details>
+<summary><b>Native install (Ubuntu 22.04, no Docker)</b></summary>
+
+Requirements: **Ubuntu 22.04**, root/sudo. No Docker — native (apt + venv + systemd).
 
 ```bash
 sudo bash scripts/install.sh
 ```
 
-Идемпотентные шаги: проверка платформы → apt (Python 3.11, Postgres 16 + pgvector, Caddy) → системный пользователь `second_brain` → `/opt/second_brain` + venv → роль/БД + расширение `vector` → секреты (0600) → миграции → предзагрузка модели эмбеддингов (`multilingual-e5-large`, ~1.3 ГБ) → рендер и установка systemd-юнитов → `systemctl enable --now` → **smoke-test** → печать admin-токена.
+Idempotent steps: platform check → apt (Python 3.11, Postgres 16 + pgvector, Caddy) → system user `second_brain` → `/opt/second_brain` + venv → role/DB + `vector` extension → secrets (0600) → migrations → preload the embedding model (`multilingual-e5-large`, ~1.3 GB) → render and install the systemd units → `systemctl enable --now` → **smoke-test** → print the admin token.
 
-**Зависимость от других репо:**
-- Если на машине **уже есть агенты** (поставлен [`labops-agent-architecture`](#связанные-репозитории)) — установщик до-регистрирует их токены (`issue-agent-token.py`), не перетирая существующие.
-- Если мозг ставится **первым** — токены агентам выдаются позже, при установке агентов.
+**Dependency on the other repos:**
+- If **agents already exist** on the machine ([`labops-agent-architecture`](#part-of-labops) is installed) — the installer additionally registers their tokens (`issue-agent-token.py`) without overwriting existing ones.
+- If the brain is installed **first** — agent tokens are issued later, when the agents are installed.
 
-Установка считается успешной только при зелёном **smoke-test** в конце.
+The install is considered successful only when the **smoke-test** at the end is green.
 
----
+A manual, human-driven walkthrough (no Claude Code agent required) lives in [`docs/setup.md`](docs/setup.md).
 
-## Troubleshooting
+</details>
 
-**Smoke-test (или embedding-probe) роняет установку.** В самом конце `install.sh` прогоняет `smoke-test.sh` (живые MCP-сервисы + БД), а на шаге 11 — проверяет, что модель эмбеддингов реально считает вектор. Любой провал по умолчанию — **HARD-стоп** (`die`), установка считается неподтверждённой. Это намеренно: лучше красный гейт, чем «зелёная» установка с молча сломанным recall.
+<details>
+<summary><b>Troubleshooting</b> — the smoke-test gate and <code>SKIP_SMOKE_GATE</code></summary>
 
-Разбор: `journalctl -u 'second_brain-*' -n 200`, затем повторить `sudo bash scripts/install.sh` (идемпотентно).
+**The smoke-test (or the embedding-probe) fails the install.** At the very end `install.sh` runs `smoke-test.sh` (live MCP services + DB), and at step 11 it checks that the embedding model really computes a vector. Any failure is a **HARD stop** by default (`die`), and the install is considered unconfirmed. This is intentional: better a red gate than a "green" install with silently broken recall.
 
-**Аварийный обход — `SKIP_SMOKE_GATE=1`.** Если нужно довести установку до конца, несмотря на падение гейта (например, сеть до сервиса ещё не поднялась, а вы чините её отдельно), запустите:
+Diagnose: `journalctl -u 'second_brain-*' -n 200`, then re-run `sudo bash scripts/install.sh` (idempotent).
+
+**Emergency bypass — `SKIP_SMOKE_GATE=1`.** If you need to push the install through despite a failing gate (e.g. the network to the service has not come up yet and you are fixing it separately), run:
 
 ```bash
 sudo SKIP_SMOKE_GATE=1 bash scripts/install.sh
 ```
 
-Тогда провал smoke-test и embedding-probe становится **предупреждением**, а не остановкой. Используйте только осознанно и временно: установка с этим флагом **не подтверждена**, recall может быть деградирован до lexical-only. Уберите флаг и перезапустите, как только причина устранена.
+Then a smoke-test and embedding-probe failure becomes a **warning** instead of a stop. Use it only deliberately and temporarily: an install with this flag is **not confirmed**, and recall may be degraded to lexical-only. Remove the flag and re-run as soon as the cause is fixed.
+
+</details>
 
 ---
 
-## Переменные и порты
+## Env & ports
 
-Полный референс — [`.env.example`](.env.example). Ключевое:
+The full reference is [`.env.example`](.env.example). The essentials:
 
-| Переменная | Назначение |
+| Variable | Purpose |
 |---|---|
-| `MCP_MEMORY_PORT` / `MCP_RECALL_PORT` / `MCP_SWARM_PORT` / `MCP_TASK_PORT` | порты серверов (8767/8768/8766/8769) |
-| `SERVICE_USER` | системный пользователь (`second_brain`) |
-| `INSTALL_DIR` | каталог установки (`/opt/second_brain`) |
-| `DOMAIN` / `ACME_EMAIL` | для Caddy + TLS (опционально) |
-| `WEBHOOK_BEARER_FILE` / `WEBHOOK_HMAC_SECRET_FILE` | секреты inter-agent auth |
-| `SECOND_BRAIN_TOOLS` | tool-gating (`core` по умолчанию) |
+| `MCP_MEMORY_PORT` / `MCP_RECALL_PORT` / `MCP_SWARM_PORT` / `MCP_TASK_PORT` | server ports (8767/8768/8766/8769) |
+| `SERVICE_USER` | system user (`second_brain`) |
+| `INSTALL_DIR` | install directory (`/opt/second_brain`) |
+| `DOMAIN` / `ACME_EMAIL` | for Caddy + TLS (optional) |
+| `WEBHOOK_BEARER_FILE` / `WEBHOOK_HMAC_SECRET_FILE` | inter-agent auth secrets |
+| `SECOND_BRAIN_TOOLS` | tool-gating (`core` by default) |
 
-> `.env.example` документирует и переменные смежных слоёв (агенты/скиллы/инсталлятор из `labops-agent-architecture`) — это полный референс экосистемы; для самого мозга достаточно перечисленных выше.
+> `.env.example` also documents the variables of adjacent layers (agents/skills/installer from `labops-agent-architecture`) — it is the full ecosystem reference; for the brain itself the ones listed above are enough. See the Quick Start block at the top of [`.env.example`](.env.example).
 
----
-
-## Тесты
+**Tests:**
 
 ```bash
-# в активированном venv с зависимостями
+# inside an activated venv with dependencies
 python -m pytest tests/ -q
 ```
 
-`scripts/install.sh` прогоняет `smoke-test.sh` в конце установки (живые сервисы + БД). Юнит/контрактные тесты (`tests/`, 400+) проверяют scopes, RBAC, tool-gating, recall, HMAC, swarm. `scripts/gbrain_doctor.py`/`scripts/check_env_sync.py` — диагностика окружения.
+`scripts/install.sh` runs `smoke-test.sh` at the end of the install (live services + DB). The unit/contract tests (`tests/`, 400+) cover scopes, RBAC, tool-gating, recall, HMAC, swarm. `scripts/gbrain_doctor.py` / `scripts/check_env_sync.py` are environment diagnostics.
 
 ---
 
-## Связанные репозитории
+## Part of labops
 
-| Репозиторий | Роль | Связь |
+| Repository | Role | Link |
 |---|---|---|
-| [`labops-tg-plugin`](#) | Telegram-канал к сессии агента | независим |
-| **labops-second-brain** (этот) | общий мозг: память + recall + координация | агенты ходят сюда по MCP |
-| [`labops-agent-architecture`](#) | воркспейсы агентов, автостарт, Developer + скилл создания агентов | регистрирует токены здесь, пишет в L4 |
+| [`labops-tg-plugin`](https://github.com/dediukhinpa/labops-tg-plugin) | Telegram channel into an agent session | independent |
+| **labops-second-brain** (this) | the shared brain: memory + recall + coordination | agents reach it over MCP |
+| [`labops-agent-architecture`](https://github.com/dediukhinpa/labops-agent-architecture) | agent workspaces, autostart, Developer + the agent-creation skill | registers tokens here, writes to L4 |
 
 ---
 
-## Лицензия
+## License
 
-Проприетарная (Proprietary) — © 2026 LabOps.ai. Все права защищены. См. [LICENSE](LICENSE).
+Proprietary — © 2026 LabOps.ai. All rights reserved. See [LICENSE](./LICENSE).
