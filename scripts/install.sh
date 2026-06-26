@@ -83,6 +83,23 @@ log "INSTALL_DIR=$INSTALL_DIR SERVICE_USER=$SERVICE_USER"
 log "PG_DATABASE=$PG_DATABASE PG_USER=$PG_USER"
 log "DOMAIN=${DOMAIN:-<unset, skip caddy>}"
 
+# Peer-auth coupling guard.
+# A unix-socket PG_HOST (path starting with "/") combined with an empty
+# PG_PASSWORD means Postgres *peer* authentication, where the OS user must
+# match the database role. If SERVICE_USER != PG_USER under this config the
+# services will fail to connect at runtime — fail fast here with guidance.
+case "$PG_HOST" in
+  /*)
+    if [ -z "$PG_PASSWORD" ] && [ "$SERVICE_USER" != "$PG_USER" ]; then
+      die "peer-auth misconfig: PG_HOST=$PG_HOST is a unix socket and PG_PASSWORD is empty (peer auth), but SERVICE_USER=$SERVICE_USER != PG_USER=$PG_USER. With Postgres peer auth the OS user MUST equal the DB role. Fix: set SERVICE_USER=PG_USER, or provide PG_PASSWORD (+ TCP PG_HOST) for password auth."
+    fi
+    log "peer-auth guard ok (unix socket PG_HOST=$PG_HOST, SERVICE_USER==PG_USER or password set)"
+    ;;
+  *)
+    log "peer-auth guard skipped (TCP PG_HOST=$PG_HOST)"
+    ;;
+esac
+
 # ---------------------------------------------------------------------------
 # 3. apt packages (Postgres 16 + pgvector from apt.postgresql.org)
 # ---------------------------------------------------------------------------
@@ -182,6 +199,40 @@ else
 fi
 
 chown -R "$SERVICE_USER":"$SERVICE_USER" "$INSTALL_DIR" "$LOG_DIR" "$STATE_DIR"
+
+# ---------------------------------------------------------------------------
+# 5b. Seed vault from vault-template + verify scope dirs (anti-false-green)
+# ---------------------------------------------------------------------------
+
+note "5b. vault seed + verify"
+
+VAULT_TEMPLATE_DIR="$INSTALL_DIR/vault-template"
+if [ -d "$VAULT_TEMPLATE_DIR" ]; then
+  # Seed the live vault from the template WITHOUT clobbering existing notes
+  # (idempotent: --ignore-existing / cp -n). On re-install this only fills in
+  # any scope dirs that were removed.
+  if command -v rsync >/dev/null 2>&1; then
+    rsync -a --ignore-existing "$VAULT_TEMPLATE_DIR/" "$VAULT_ROOT/"
+  else
+    cp -an "$VAULT_TEMPLATE_DIR/." "$VAULT_ROOT/" 2>/dev/null || true
+  fi
+  chown -R "$SERVICE_USER":"$SERVICE_USER" "$VAULT_ROOT"
+  log "seeded vault from vault-template → $VAULT_ROOT"
+else
+  log "WARNING: vault-template dir missing at $VAULT_TEMPLATE_DIR — vault not seeded"
+fi
+
+# Hard verify: a broken/empty sync (wrong VAULT_ROOT, failed copy) must turn
+# the install red here rather than surface later as "scope not allowed" writes.
+EXPECTED_SCOPES=(10-strategy 30-decisions 40-projects 70-runbooks 80-error-patterns 90-inbox)
+missing_scopes=()
+for scope in "${EXPECTED_SCOPES[@]}"; do
+  [ -d "$VAULT_ROOT/$scope" ] || missing_scopes+=("$scope")
+done
+if [ "${#missing_scopes[@]}" -ne 0 ]; then
+  die "vault-sync verification FAILED: missing scope dirs under $VAULT_ROOT: ${missing_scopes[*]} — the vault-template copy did not land. Check $VAULT_TEMPLATE_DIR and VAULT_ROOT."
+fi
+log "vault-sync verified: expected scope dirs present under $VAULT_ROOT"
 
 # ---------------------------------------------------------------------------
 # 6. Python venv + deps
@@ -341,16 +392,38 @@ fi
 # 11. Pre-download FastEmbed model (avoids first-request OOM under hardening)
 # ---------------------------------------------------------------------------
 
-note "11. FastEmbed model pre-download"
+note "11. FastEmbed model pre-download + embedding probe"
 
 FASTEMBED_MODEL="${FASTEMBED_MODEL:-intfloat/multilingual-e5-large}"
 if [ -x "$INSTALL_DIR/.venv/bin/python" ]; then
-  FASTEMBED_CACHE_DIR="$STATE_DIR/fastembed" \
-    sudo -E -u "$SERVICE_USER" "$INSTALL_DIR/.venv/bin/python" \
-      -c "from fastembed import TextEmbedding; TextEmbedding('$FASTEMBED_MODEL', cache_dir='$STATE_DIR/fastembed'); print('fastembed model ready')" \
-    || log "WARNING: fastembed pre-download failed (recall-mcp will retry on first call)"
+  # Anti-false-green: a missing/broken embedding model silently degrades recall
+  # to lexical-only and the rest of the install still looks green. Load the
+  # model AND embed a probe string, asserting a non-empty vector, so a broken
+  # embedding pipeline turns the install RED right here.
+  # (We verify at the embedding layer rather than via a recall query in the
+  # smoke test because the ingest-worker embeds asynchronously and may not have
+  # caught up by the time the smoke test runs — a recall probe would be flaky.)
+  if FASTEMBED_CACHE_DIR="$STATE_DIR/fastembed" \
+       sudo -E -u "$SERVICE_USER" "$INSTALL_DIR/.venv/bin/python" - "$FASTEMBED_MODEL" "$STATE_DIR/fastembed" <<'PY'
+import sys
+from fastembed import TextEmbedding
+
+model_name, cache_dir = sys.argv[1], sys.argv[2]
+emb = TextEmbedding(model_name, cache_dir=cache_dir)
+vecs = list(emb.embed(["query: smoke probe"]))
+if not vecs or len(vecs[0]) == 0:
+    raise SystemExit("embedding probe returned an empty vector")
+print(f"fastembed model ready: {model_name} dim={len(vecs[0])}")
+PY
+  then
+    log "fastembed model + embedding probe OK"
+  elif [ "${SKIP_SMOKE_GATE:-0}" = "1" ]; then
+    log "WARNING: fastembed pre-download/probe failed, но SKIP_SMOKE_GATE=1 — продолжаю (recall будет деградировать до lexical-only). Проверьте сеть/диск/$STATE_DIR/fastembed"
+  else
+    die "fastembed model pre-download/probe FAILED — embedding pipeline сломан, recall деградирует до lexical-only. Проверьте сеть/диск и $STATE_DIR/fastembed (SKIP_SMOKE_GATE=1 превратит это в предупреждение)"
+  fi
 else
-  log "venv missing — skipping fastembed pre-download"
+  die "venv missing at $INSTALL_DIR/.venv — cannot verify the fastembed embedding pipeline (SKIP_SMOKE_GATE not honoured here: without a venv nothing can run)"
 fi
 
 # ---------------------------------------------------------------------------
