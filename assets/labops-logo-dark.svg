@@ -10,5 +10,5 @@
     <circle cx="44" cy="4.2" r="2.4" fill="#ffffff" stroke="url(#fg)" stroke-width="1.4"/>
     <path d="M44 3 V5.4 M42.8 4.2 H45.2" stroke="url(#fg)" stroke-width="0.9" stroke-linecap="round"/>
   </g>
-  <text x="60" y="39" font-family="Helvetica Neue,Helvetica,Arial,sans-serif" font-size="34" font-weight="800" letter-spacing="-0.5" fill="#0B0B0C">LABOPS<tspan fill="#8B5CF6">.AI</tspan></text>
+  <text x="60" y="39" font-family="Helvetica Neue,Helvetica,Arial,sans-serif" font-size="34" font-weight="800" letter-spacing="-0.5" fill="#FFFFFF">LABOPS<tspan fill="#8B5CF6">.AI</tspan></text>
 </svg>

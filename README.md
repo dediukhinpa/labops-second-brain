@@ -1,10 +1,13 @@
 <p align="center">
-  <img src="assets/labops-logo.svg" alt="LabOps.ai" width="96">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/labops-logo-dark.svg">
+    <img src="assets/labops-logo.svg" alt="LabOps.ai" width="280">
+  </picture>
 </p>
 
 <h1 align="center">labops-second-brain</h1>
 
-<p align="center"><em>операционка с AI изнутри профессии</em></p>
+<p align="center"><em>AI operations — from inside the profession</em></p>
 
 <p align="center">
   <a href="https://labopsai.pro"><img src="https://img.shields.io/badge/%F0%9F%8C%90%20labopsai.pro-6E56CF?style=for-the-badge" alt="labopsai.pro"></a>
@@ -15,7 +18,7 @@
 <p align="center"><a href="README.md"><b>English</b></a> · <a href="README.ru.md">Русский</a></p>
 
 <p align="center">
-  <b>Система labops:</b>
+  <b>Part of labops:</b>
   <a href="https://github.com/dediukhinpa/labops-tg-plugin">tg-plugin</a> ·
   <b>second-brain</b> ·
   <a href="https://github.com/dediukhinpa/labops-agent-architecture">agent-architecture</a>

@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="assets/labops-logo.svg" alt="LabOps.ai" width="96">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/labops-logo-dark.svg">
+    <img src="assets/labops-logo.svg" alt="LabOps.ai" width="280">
+  </picture>
 </p>
 
 <h1 align="center">labops-second-brain</h1>
