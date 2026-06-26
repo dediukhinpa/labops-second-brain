@@ -28,6 +28,7 @@
 
 Это слой **долговременной общей памяти**. Каждый агент держит свою «горячую» память в workspace (`CLAUDE.md`, `hot/`, `warm/`), а `labops-second-brain` — это **L4**: смысловой, общий для всей команды, с поиском по эмбеддингам и строгим разграничением доступа.
 
+> [!IMPORTANT]
 > **Платформа:** заточено под **Linux + systemd + Postgres peer-auth** (OS-пользователь == pg-роль, обычно `second_brain`). Не Docker, не macOS/Windows.
 
 ---
@@ -48,7 +49,8 @@
 
 ## Quickstart
 
-Если читать некогда — вот необходимый и достаточный набор.
+> [!TIP]
+> Если читать некогда — вот необходимый и достаточный набор.
 
 **1. Запустить установщик** на чистом Ubuntu 22.04+ под root. Postgres 16 + pgvector он ставит сам из `apt.postgresql.org`:
 
@@ -71,6 +73,9 @@ sudo bash scripts/install.sh
 sudo -u second_brain python /opt/second_brain/scripts/issue-agent-token.py \
   --agent my-agent --scopes '*'
 ```
+
+> [!WARNING]
+> Raw-секрет печатается один раз — сохраните его; в БД хранится только его sha256.
 
 ```jsonc
 // ~/.claude/.mcp.json на хосте агента
@@ -103,12 +108,20 @@ curl -sS -H "Authorization: Bearer <token>" http://<VPS>:8768/mcp/
 ## Слои памяти
 
 ```mermaid
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#EDE9FE','primaryTextColor':'#4C1D95','primaryBorderColor':'#8B5CF6','lineColor':'#8B5CF6','secondaryColor':'#F1F5F9','tertiaryColor':'#ffffff','fontFamily':'Helvetica,Arial,sans-serif'}}}%%
 flowchart LR
     L1["L1 · Идентичность<br/>CLAUDE.md, rules.md<br/>(в системном промпте)"]
     L2["L2 · Горячая<br/>hot/recent.md, handoff.md<br/>(текущая работа)"]
     L3["L3 · Тёплая<br/>warm/decisions.md<br/>(ротация)"]
     L4["L4 · Общий мозг<br/>labops-second-brain<br/>(vault + pgvector)"]
     L1 --> L2 --> L3 --> L4
+    classDef brand fill:#8B5CF6,stroke:#6D28D9,color:#ffffff,font-weight:bold
+    classDef ext fill:#CCFBF1,stroke:#0D9488,color:#0F766E
+    classDef store fill:#FEF3C7,stroke:#D97706,color:#92400E
+    classDef sys fill:#E2E8F0,stroke:#334155,color:#1E293B
+    linkStyle default stroke:#8B5CF6,stroke-width:1.5px
+    class L4 brand
+    class L1,L2,L3 sys
 ```
 
 - **L1–L3 живут в workspace агента** (это слой [`labops-agent-architecture`](#часть-labops)) — личные, быстрые, в контексте сессии.
@@ -119,6 +132,7 @@ flowchart LR
 ## Архитектура
 
 ```mermaid
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#EDE9FE','primaryTextColor':'#4C1D95','primaryBorderColor':'#8B5CF6','lineColor':'#8B5CF6','secondaryColor':'#F1F5F9','tertiaryColor':'#ffffff','fontFamily':'Helvetica,Arial,sans-serif'}}}%%
 flowchart TB
     subgraph agents["Агенты (Claude Code сессии)"]
         A1["агент 1"]; A2["агент 2"]; A3["агент N"]
@@ -141,6 +155,15 @@ flowchart TB
     IW -- "следит за vault, считает эмбеддинги" --> PG
     REC --> PG
     SW --> SWW --> A1
+    classDef brand fill:#8B5CF6,stroke:#6D28D9,color:#ffffff,font-weight:bold
+    classDef ext fill:#CCFBF1,stroke:#0D9488,color:#0F766E
+    classDef store fill:#FEF3C7,stroke:#D97706,color:#92400E
+    classDef sys fill:#E2E8F0,stroke:#334155,color:#1E293B
+    linkStyle default stroke:#8B5CF6,stroke-width:1.5px
+    class MEM,REC,SW,TASK brand
+    class A1,A2,A3 ext
+    class PG,VAULT store
+    class IW,SWW sys
 ```
 
 - **MCP-серверы** — точки входа для агентов (HTTP, аутентификация Bearer-токеном или HMAC-подписью).
@@ -170,7 +193,8 @@ flowchart TB
 
 Документ проходит: запись через `memory-mcp` → файл в vault + строка в `documents` → `ingest-worker` режет на чанки и считает эмбеддинги → доступен в `recall`.
 
-> **Важно:** `ingest-worker` эмбеддит только то, что пришло через запись `memory-mcp` (строка в `documents` + задача в очереди). `.md`-файлы, **положенные в vault руками** (минуя `memory-mcp`), НЕ индексируются автоматически и не находятся в recall.
+> [!NOTE]
+> `ingest-worker` эмбеддит только то, что пришло через запись `memory-mcp` (строка в `documents` + задача в очереди). `.md`-файлы, **положенные в vault руками** (минуя `memory-mcp`), НЕ индексируются автоматически и не находятся в recall.
 
 ---
 
@@ -295,7 +319,8 @@ sudo bash scripts/install.sh
 sudo SKIP_SMOKE_GATE=1 bash scripts/install.sh
 ```
 
-Тогда провал smoke-test и embedding-probe становится **предупреждением**, а не остановкой. Используйте только осознанно и временно: установка с этим флагом **не подтверждена**, recall может быть деградирован до lexical-only. Уберите флаг и перезапустите, как только причина устранена.
+> [!IMPORTANT]
+> `SKIP_SMOKE_GATE=1` превращает провал smoke-test и embedding-probe в **предупреждение**, а не остановку. Используйте только осознанно и временно: установка с этим флагом **не подтверждена**, recall может быть деградирован до lexical-only. Уберите флаг и перезапустите, как только причина устранена.
 
 </details>
 

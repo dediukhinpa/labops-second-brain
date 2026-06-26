@@ -28,6 +28,7 @@
 
 This is the **long-term shared memory** layer. Each agent keeps its own "hot" memory in its workspace (`CLAUDE.md`, `hot/`, `warm/`), while `labops-second-brain` is **L4**: semantic, shared across the whole team, with embedding search and strict access control.
 
+> [!IMPORTANT]
 > **Platform:** built for **Linux + systemd + Postgres peer-auth** (OS user == pg role, usually `second_brain`). Not Docker, not macOS/Windows.
 
 ---
@@ -48,7 +49,8 @@ A single agent remembers its own session. A team of agents does not: knowledge g
 
 ## Quickstart
 
-If you have no time to read — this is the necessary and sufficient set.
+> [!TIP]
+> If you have no time to read — this is the necessary and sufficient set.
 
 **1. Run the installer** on a clean Ubuntu 22.04+ host as root. It installs Postgres 16 + pgvector from `apt.postgresql.org` for you:
 
@@ -71,6 +73,9 @@ The install is considered successful only when the **smoke-test** at the end is 
 sudo -u second_brain python /opt/second_brain/scripts/issue-agent-token.py \
   --agent my-agent --scopes '*'
 ```
+
+> [!WARNING]
+> The raw secret is printed once — save it; the DB stores only its sha256.
 
 ```jsonc
 // ~/.claude/.mcp.json on the agent host
@@ -103,12 +108,20 @@ curl -sS -H "Authorization: Bearer <token>" http://<VPS>:8768/mcp/
 ## Memory layers
 
 ```mermaid
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#EDE9FE','primaryTextColor':'#4C1D95','primaryBorderColor':'#8B5CF6','lineColor':'#8B5CF6','secondaryColor':'#F1F5F9','tertiaryColor':'#ffffff','fontFamily':'Helvetica,Arial,sans-serif'}}}%%
 flowchart LR
     L1["L1 · Identity<br/>CLAUDE.md, rules.md<br/>(in the system prompt)"]
     L2["L2 · Hot<br/>hot/recent.md, handoff.md<br/>(current work)"]
     L3["L3 · Warm<br/>warm/decisions.md<br/>(rotation)"]
     L4["L4 · Shared brain<br/>labops-second-brain<br/>(vault + pgvector)"]
     L1 --> L2 --> L3 --> L4
+    classDef brand fill:#8B5CF6,stroke:#6D28D9,color:#ffffff,font-weight:bold
+    classDef ext fill:#CCFBF1,stroke:#0D9488,color:#0F766E
+    classDef store fill:#FEF3C7,stroke:#D97706,color:#92400E
+    classDef sys fill:#E2E8F0,stroke:#334155,color:#1E293B
+    linkStyle default stroke:#8B5CF6,stroke-width:1.5px
+    class L4 brand
+    class L1,L2,L3 sys
 ```
 
 - **L1–L3 live in the agent's workspace** (that is the [`labops-agent-architecture`](#part-of-labops) layer) — personal, fast, in the session context.
@@ -119,6 +132,7 @@ flowchart LR
 ## Architecture
 
 ```mermaid
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#EDE9FE','primaryTextColor':'#4C1D95','primaryBorderColor':'#8B5CF6','lineColor':'#8B5CF6','secondaryColor':'#F1F5F9','tertiaryColor':'#ffffff','fontFamily':'Helvetica,Arial,sans-serif'}}}%%
 flowchart TB
     subgraph agents["Agents (Claude Code sessions)"]
         A1["agent 1"]; A2["agent 2"]; A3["agent N"]
@@ -141,6 +155,15 @@ flowchart TB
     IW -- "watches the vault, computes embeddings" --> PG
     REC --> PG
     SW --> SWW --> A1
+    classDef brand fill:#8B5CF6,stroke:#6D28D9,color:#ffffff,font-weight:bold
+    classDef ext fill:#CCFBF1,stroke:#0D9488,color:#0F766E
+    classDef store fill:#FEF3C7,stroke:#D97706,color:#92400E
+    classDef sys fill:#E2E8F0,stroke:#334155,color:#1E293B
+    linkStyle default stroke:#8B5CF6,stroke-width:1.5px
+    class MEM,REC,SW,TASK brand
+    class A1,A2,A3 ext
+    class PG,VAULT store
+    class IW,SWW sys
 ```
 
 - **MCP servers** — the entry points for agents (HTTP, authenticated with a Bearer token or an HMAC signature).
@@ -170,7 +193,8 @@ flowchart TB
 
 A document flows: written via `memory-mcp` → a file in the vault + a row in `documents` → `ingest-worker` splits it into chunks and computes embeddings → available in `recall`.
 
-> **Important:** `ingest-worker` only embeds what arrived through a `memory-mcp` write (a row in `documents` + a job in the queue). `.md` files **dropped into the vault by hand** (bypassing `memory-mcp`) are NOT indexed automatically and are not found in recall.
+> [!NOTE]
+> `ingest-worker` only embeds what arrived through a `memory-mcp` write (a row in `documents` + a job in the queue). `.md` files **dropped into the vault by hand** (bypassing `memory-mcp`) are NOT indexed automatically and are not found in recall.
 
 ---
 
@@ -295,7 +319,8 @@ Diagnose: `journalctl -u 'second_brain-*' -n 200`, then re-run `sudo bash script
 sudo SKIP_SMOKE_GATE=1 bash scripts/install.sh
 ```
 
-Then a smoke-test and embedding-probe failure becomes a **warning** instead of a stop. Use it only deliberately and temporarily: an install with this flag is **not confirmed**, and recall may be degraded to lexical-only. Remove the flag and re-run as soon as the cause is fixed.
+> [!IMPORTANT]
+> `SKIP_SMOKE_GATE=1` turns a smoke-test and embedding-probe failure into a **warning** instead of a stop. Use it only deliberately and temporarily: an install with this flag is **not confirmed**, and recall may be degraded to lexical-only. Remove the flag and re-run as soon as the cause is fixed.
 
 </details>
 
