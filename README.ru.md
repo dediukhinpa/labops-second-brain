@@ -108,7 +108,7 @@ curl -sS -H "Authorization: Bearer <token>" http://<VPS>:8768/mcp/
 ## Слои памяти
 
 ```mermaid
-%%{init: {'theme':'base','themeVariables':{'primaryColor':'#EDE9FE','primaryTextColor':'#4C1D95','primaryBorderColor':'#8B5CF6','lineColor':'#8B5CF6','secondaryColor':'#F1F5F9','tertiaryColor':'#ffffff','fontFamily':'Helvetica,Arial,sans-serif'}}}%%
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#EDE9FE','primaryTextColor':'#4C1D95','primaryBorderColor':'#8B5CF6','lineColor':'#8B5CF6','secondaryColor':'#F1F5F9','tertiaryColor':'#ffffff','clusterBkg':'transparent','clusterBorder':'#B794F4','fontFamily':'Helvetica,Arial,sans-serif'}}}%%
 flowchart LR
     L1["L1 · Идентичность<br/>CLAUDE.md, rules.md<br/>(в системном промпте)"]
     L2["L2 · Горячая<br/>hot/recent.md, handoff.md<br/>(текущая работа)"]
@@ -132,7 +132,7 @@ flowchart LR
 ## Архитектура
 
 ```mermaid
-%%{init: {'theme':'base','themeVariables':{'primaryColor':'#EDE9FE','primaryTextColor':'#4C1D95','primaryBorderColor':'#8B5CF6','lineColor':'#8B5CF6','secondaryColor':'#F1F5F9','tertiaryColor':'#ffffff','fontFamily':'Helvetica,Arial,sans-serif'}}}%%
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#EDE9FE','primaryTextColor':'#4C1D95','primaryBorderColor':'#8B5CF6','lineColor':'#8B5CF6','secondaryColor':'#F1F5F9','tertiaryColor':'#ffffff','clusterBkg':'transparent','clusterBorder':'#B794F4','fontFamily':'Helvetica,Arial,sans-serif'}}}%%
 flowchart LR
     subgraph agents["Агенты (Claude Code сессии)"]
         A1["агент 1"]; A2["агент 2"]; A3["агент N"]

@@ -108,7 +108,7 @@ curl -sS -H "Authorization: Bearer <token>" http://<VPS>:8768/mcp/
 ## Memory layers
 
 ```mermaid
-%%{init: {'theme':'base','themeVariables':{'primaryColor':'#EDE9FE','primaryTextColor':'#4C1D95','primaryBorderColor':'#8B5CF6','lineColor':'#8B5CF6','secondaryColor':'#F1F5F9','tertiaryColor':'#ffffff','fontFamily':'Helvetica,Arial,sans-serif'}}}%%
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#EDE9FE','primaryTextColor':'#4C1D95','primaryBorderColor':'#8B5CF6','lineColor':'#8B5CF6','secondaryColor':'#F1F5F9','tertiaryColor':'#ffffff','clusterBkg':'transparent','clusterBorder':'#B794F4','fontFamily':'Helvetica,Arial,sans-serif'}}}%%
 flowchart LR
     L1["L1 · Identity<br/>CLAUDE.md, rules.md<br/>(in the system prompt)"]
     L2["L2 · Hot<br/>hot/recent.md, handoff.md<br/>(current work)"]
@@ -132,7 +132,7 @@ flowchart LR
 ## Architecture
 
 ```mermaid
-%%{init: {'theme':'base','themeVariables':{'primaryColor':'#EDE9FE','primaryTextColor':'#4C1D95','primaryBorderColor':'#8B5CF6','lineColor':'#8B5CF6','secondaryColor':'#F1F5F9','tertiaryColor':'#ffffff','fontFamily':'Helvetica,Arial,sans-serif'}}}%%
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#EDE9FE','primaryTextColor':'#4C1D95','primaryBorderColor':'#8B5CF6','lineColor':'#8B5CF6','secondaryColor':'#F1F5F9','tertiaryColor':'#ffffff','clusterBkg':'transparent','clusterBorder':'#B794F4','fontFamily':'Helvetica,Arial,sans-serif'}}}%%
 flowchart LR
     subgraph agents["Agents (Claude Code sessions)"]
         A1["agent 1"]; A2["agent 2"]; A3["agent N"]
