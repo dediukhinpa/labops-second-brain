@@ -133,7 +133,7 @@ flowchart LR
 
 ```mermaid
 %%{init: {'theme':'base','themeVariables':{'primaryColor':'#EDE9FE','primaryTextColor':'#4C1D95','primaryBorderColor':'#8B5CF6','lineColor':'#8B5CF6','secondaryColor':'#F1F5F9','tertiaryColor':'#ffffff','fontFamily':'Helvetica,Arial,sans-serif'}}}%%
-flowchart TB
+flowchart LR
     subgraph agents["Агенты (Claude Code сессии)"]
         A1["агент 1"]; A2["агент 2"]; A3["агент N"]
     end
@@ -349,6 +349,26 @@ python -m pytest tests/ -q
 ```
 
 `scripts/install.sh` прогоняет `smoke-test.sh` в конце установки (живые сервисы + БД). Юнит/контрактные тесты (`tests/`, 400+) проверяют scopes, RBAC, tool-gating, recall, HMAC, swarm. `scripts/gbrain_doctor.py` / `scripts/check_env_sync.py` — диагностика окружения.
+
+---
+
+## Данные и приватность
+
+**Self-hosted по дизайну.** second_brain работает на собственном сервере / VPS оператора — все данные памяти (Postgres + файловый vault) остаются на его инфраструктуре. Никакой телеметрии и аналитических обратных вызовов нет.
+
+Единственные исходящие сетевые вызовы — это разовая загрузка моделей из настроенного model-хаба (HuggingFace, используется FastEmbed):
+
+| Endpoint | Назначение | Когда |
+|---|---|---|
+| `huggingface.co` / `cdn-lfs.huggingface.co` | Загрузка модели эмбеддингов (`intfloat/multilingual-e5-large`) и реранкера (`jinaai/jina-reranker-v2-base-multilingual`) через FastEmbed / `huggingface_hub` | Только при первом запуске — затем кэшируется и работает офлайн |
+| Настроенные оператором шлюзы агентов (`AGENT_GATEWAYS`) | HMAC-подписанные межагентные вебхуки для координации роя | Опционально; только к хостам, которые вы сами настроили (обычно localhost / ваши собственные агенты) |
+
+После загрузки моделей эмбеддинги и реранкинг считаются **полностью локально** на CPU хоста — recall никогда не отправляет текст заметок во внешний сервис. Прямого вызова LLM-провайдера нет: контекстный чанкинг вычисляется локально без API (см. `services/ingest_worker/context.py`).
+
+> [!IMPORTANT]
+> Содержимое вашей памяти — заметки, файлы vault и эмбеддинги — никогда не покидает хост. База Postgres локальна, эмбеддинги считаются локально; model-хаб получает только запрос файла модели, но не ваши данные.
+
+Секреты (пароль БД, токены агентов, HMAC-ключи) лежат в `.env` / vault с `chmod 600` и никогда не коммитятся.
 
 ---
 

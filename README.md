@@ -133,7 +133,7 @@ flowchart LR
 
 ```mermaid
 %%{init: {'theme':'base','themeVariables':{'primaryColor':'#EDE9FE','primaryTextColor':'#4C1D95','primaryBorderColor':'#8B5CF6','lineColor':'#8B5CF6','secondaryColor':'#F1F5F9','tertiaryColor':'#ffffff','fontFamily':'Helvetica,Arial,sans-serif'}}}%%
-flowchart TB
+flowchart LR
     subgraph agents["Agents (Claude Code sessions)"]
         A1["agent 1"]; A2["agent 2"]; A3["agent N"]
     end
@@ -349,6 +349,26 @@ python -m pytest tests/ -q
 ```
 
 `scripts/install.sh` runs `smoke-test.sh` at the end of the install (live services + DB). The unit/contract tests (`tests/`, 400+) cover scopes, RBAC, tool-gating, recall, HMAC, swarm. `scripts/gbrain_doctor.py` / `scripts/check_env_sync.py` are environment diagnostics.
+
+---
+
+## Data & privacy
+
+**Self-hosted by design.** second_brain runs on the operator's own server / VPS — all memory data (Postgres + the file vault) stays on their infrastructure. There is no telemetry and no analytics callback.
+
+The only outbound network calls are one-time model downloads from the configured model hub (HuggingFace, used by FastEmbed):
+
+| Endpoint | Purpose | When |
+|---|---|---|
+| `huggingface.co` / `cdn-lfs.huggingface.co` | Download the embedding model (`intfloat/multilingual-e5-large`) and the reranker (`jinaai/jina-reranker-v2-base-multilingual`) via FastEmbed / `huggingface_hub` | First run only — then cached and served offline |
+| Operator-configured agent gateways (`AGENT_GATEWAYS`) | HMAC-signed inter-agent webhooks for swarm coordination | Optional; only to hosts you configure (typically localhost / your own agents) |
+
+After the models are downloaded, embeddings and reranking run **fully locally** on the host CPU — recall never sends note text to an external service. There is no LLM-provider call: contextual chunking is computed locally without an API (see `services/ingest_worker/context.py`).
+
+> [!IMPORTANT]
+> Your memory content — notes, vault files, and embeddings — never leaves the host. The Postgres database is local and embeddings are computed locally; the model hub only ever receives a model-file request, never your data.
+
+Secrets (DB password, agent tokens, HMAC keys) live in `.env` / the vault with `chmod 600` and are never committed.
 
 ---
 

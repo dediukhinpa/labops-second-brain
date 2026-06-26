@@ -1,0 +1,11 @@
+title = "labops gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known test fixtures & placeholders — not real secrets"
+paths = [
+  '''.*/tests?/.*''',
+  '''.*\.env\.example$''',
+]
