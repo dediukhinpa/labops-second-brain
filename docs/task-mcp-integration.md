@@ -37,15 +37,15 @@ Same dual Bearer + HMAC model as other second_brain services:
 
 ### Write scope
 
-Task write operations (create, update, start, review, done, block, reopen) require the `10-tasks` scope in `can_write_scopes`:
+Task write operations (create, update, start, review, done, block, reopen) require the `task-board` scope in `can_write_scopes`:
 
 ```bash
 # Add task write scope to an existing agent token
 psql -U second_brain -d second_brain -c "
   UPDATE agent_tokens
-  SET can_write_scopes = array_append(can_write_scopes, '10-tasks')
+  SET can_write_scopes = array_append(can_write_scopes, 'task-board')
   WHERE agent = 'my-agent'
-    AND NOT ('10-tasks' = ANY(can_write_scopes));
+    AND NOT ('task-board' = ANY(can_write_scopes));
 "
 ```
 

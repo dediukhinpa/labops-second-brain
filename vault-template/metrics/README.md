@@ -1,4 +1,4 @@
-# 20-metrics
+# metrics
 
 Monitoring exports, KPI snapshots, dashboard captures.
 

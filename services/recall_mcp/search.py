@@ -12,6 +12,7 @@ import asyncpg
 import numpy as np
 from fastmcp import Context
 
+from services.shared.scopes import scope_equivalents
 from services.shared.tool_gating import should_register_tool
 
 from .cache import CacheKey, RecallCache
@@ -162,8 +163,11 @@ def _build_scope_filter(
     idx = param_offset
 
     if scopes != ["*"]:
+        # Match both the canonical name and any legacy numbered name, so rows not
+        # yet rewritten by migration 007 are still found.
+        expanded = sorted({e for s in scopes for e in scope_equivalents(s)})
         clauses.append(f"d.scope = ANY(${idx}::text[])")
-        params.append(scopes)
+        params.append(expanded)
         idx += 1
 
     if agent_filter is not None:

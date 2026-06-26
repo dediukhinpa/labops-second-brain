@@ -1,4 +1,4 @@
-# 50-external
+# external
 
 Scout sources. Inbox-agent writes here.
 
@@ -14,12 +14,12 @@ Scout sources. Inbox-agent writes here.
 ## What does NOT go here
 
 - Internal team chat — never index private conversations without explicit consent
-- Documents you authored — they go to `50-knowledge/` or the appropriate project folder
+- Documents you authored — they go to `knowledge/` or the appropriate project folder
 - Secrets, credentials, paywalled content you don't have rights to
 
 ## Compiled flag
 
-Frontmatter carries `compiled: false` when the inbox-agent first writes a raw forward. After the agent (or you) extract structured insights, set `compiled: true` and move the insights to `50-knowledge/` with a back-link. The raw forward stays here as evidence.
+Frontmatter carries `compiled: false` when the inbox-agent first writes a raw forward. After the agent (or you) extract structured insights, set `compiled: true` and move the insights to `knowledge/` with a back-link. The raw forward stays here as evidence.
 
 ```yaml
 ---

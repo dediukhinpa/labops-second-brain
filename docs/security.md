@@ -17,9 +17,9 @@ What this system protects, what it does not, and how to keep an unintentional mi
 
 - **The admin agent token has full power.** It can issue new tokens for any agent with any scopes, read every vault entry, and write into any folder. Treat it like a root SSH key.
 - **The Postgres password has full power.** Anyone with Postgres-superuser-equivalent access can `DROP TABLE`, alter the schema, or read tokens (the sha256 column does not protect against a chosen-prefix attack if the password is leaked).
-- **A compromised local workstation owns its agent tokens.** The inbox-agent token lives in `${INBOX_AGENT_HOME}/.env` — if your laptop is stolen and unlocked, the attacker can write into `50-external` and `90-inbox`.
+- **A compromised local workstation owns its agent tokens.** The inbox-agent token lives in `${INBOX_AGENT_HOME}/.env` — if your laptop is stolen and unlocked, the attacker can write into `external` and `inbox`.
 - **The brain VPS is a single point of failure.** No HA, no read replicas, no geo-redundancy. If the VPS is compromised, the attacker has everything.
-- **The vault contains whatever you put into it.** If you forward private messages to the bot, those messages are in `vault/50-external/` in plain text. Anyone with read access to the vault filesystem can read them. Encrypt the volume if the threat model demands it.
+- **The vault contains whatever you put into it.** If you forward private messages to the bot, those messages are in `vault/external/` in plain text. Anyone with read access to the vault filesystem can read them. Encrypt the volume if the threat model demands it.
 
 ---
 
@@ -39,10 +39,10 @@ The scopes argument restricts which vault folders the agent can write into. A `r
 
 | Agent role | Suggested scopes |
 |---|---|
-| Coordinator (full agent) | `20-daily, 30-decisions, 50-external, 50-knowledge, 70-runbooks, 80-error-patterns, 90-inbox` |
-| Inbox-agent (Telegram bot) | `30-decisions, 50-external, 50-knowledge, 90-inbox` |
-| Coder agent (writes runbooks, error-patterns) | `30-decisions, 70-runbooks, 80-error-patterns, 90-inbox` |
-| Reviewer agent | `30-decisions, 80-error-patterns, 90-inbox` |
+| Coordinator (full agent) | `daily, decisions, external, knowledge, runbooks, error-patterns, inbox` |
+| Inbox-agent (Telegram bot) | `decisions, external, knowledge, inbox` |
+| Coder agent (writes runbooks, error-patterns) | `decisions, runbooks, error-patterns, inbox` |
+| Reviewer agent | `decisions, error-patterns, inbox` |
 | Read-only research agent | (empty — recall works without write scopes) |
 
 **Revoke:**

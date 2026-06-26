@@ -90,7 +90,7 @@ sudo -u second_brain python /opt/second_brain/scripts/issue-agent-token.py \
 
 ```text
 # write — the agent calls the memory tool
-create_decision_note(title="Use pgvector for recall", body="...", scope="30-decisions")
+create_decision_note(title="Use pgvector for recall", body="...", scope="decisions")
 
 # query — the agent calls recall
 recall(query="how do we store embeddings")
@@ -206,16 +206,16 @@ Numeric prefixes (`10-`, `30-`, `90-`…) are simply **top-level folders in the 
 
 | Scope | What it stores |
 |---|---|
-| `10-strategy` / `10-system` | strategy, system notes |
-| `15-personal` | about the person: name, skills, experience, life situations |
-| `20-daily` / `20-metrics` | daily logs, metrics |
-| `30-decisions` | architectural/product decisions |
-| `40-projects` | business: accounting, contracts, policies, correspondence, commercial secrets |
-| `50-external` / `50-knowledge` | external sources, research, articles |
-| `60-tasks` | tasks |
-| `70-runbooks` | reproducible processes |
-| `80-error-patterns` | bugs and their fixes |
-| `90-inbox` | incoming, unsorted |
+| `strategy` / `system` | strategy, system notes |
+| `personal` | about the person: name, skills, experience, life situations |
+| `daily` / `metrics` | daily logs, metrics |
+| `decisions` | architectural/product decisions |
+| `projects` | business: accounting, contracts, policies, correspondence, commercial secrets |
+| `external` / `knowledge` | external sources, research, articles |
+| `tasks` | tasks |
+| `runbooks` | reproducible processes |
+| `error-patterns` | bugs and their fixes |
+| `inbox` | incoming, unsorted |
 
 **RBAC:** each agent has a token in `agent_tokens` with `can_read_scopes` / `can_write_scopes`. `*` = access to any scope. Tokens are issued by `scripts/issue-agent-token.py` (the raw secret is printed once; the DB stores its sha256).
 
@@ -269,15 +269,15 @@ Details — `docs/INTER-AGENT-WEBHOOKS.md`.
 
 | Tool | Default scope | What it records |
 |---|---|---|
-| `create_decision_note` | `30-decisions` | architectural/product decisions, API contracts, rules |
-| `create_runbook_note` | `70-runbooks` | reproducible processes |
-| `create_error_pattern_note` | `80-error-patterns` | a bug + its fix + how not to repeat it |
-| `create_external_note` | `50-external` | external sources/research (+ `source_url`) |
-| `create_personal_note` | `15-personal` | about the person |
-| `create_project_note` | `40-projects` | about the business/project |
-| `append_daily_log` | `20-daily` | daily progress |
+| `create_decision_note` | `decisions` | architectural/product decisions, API contracts, rules |
+| `create_runbook_note` | `runbooks` | reproducible processes |
+| `create_error_pattern_note` | `error-patterns` | a bug + its fix + how not to repeat it |
+| `create_external_note` | `external` | external sources/research (+ `source_url`) |
+| `create_personal_note` | `personal` | about the person |
+| `create_project_note` | `projects` | about the business/project |
+| `append_daily_log` | `daily` | daily progress |
 | `create_handoff` | — | a flush before compaction / at the end of a session |
-| `supersede_decision` | `30-decisions` | an outdated decision |
+| `supersede_decision` | `decisions` | an outdated decision |
 
 Recall: `recall(...)`. Coordination: `swarm_*`. Tasks: `task_*`.
 

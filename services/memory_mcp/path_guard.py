@@ -1,29 +1,19 @@
 """Path safety guard for vault filesystem operations."""
 from pathlib import Path
 
-ALLOWED_SCOPES = frozenset({
-    "10-strategy",
-    "10-system",
-    "15-personal",
-    "20-daily",
-    "20-metrics",
-    "30-decisions",
-    "40-projects",
-    "50-external",
-    "50-knowledge",
-    "60-tasks",
-    "70-runbooks",
-    "80-error-patterns",
-    "90-inbox",
-    "_templates",
-})
+from services.shared.scopes import ALLOWED_PATH_SCOPES, normalize_scope
+
+# Back-compat alias for importers; the canonical set lives in services.shared.scopes.
+ALLOWED_SCOPES = ALLOWED_PATH_SCOPES
 
 
 def validate_path(path: str, vault_root: str) -> Path:
     """Validate and resolve a vault-relative path.
 
     Args:
-        path: Relative path within the vault (e.g. '30-decisions/my-note.md').
+        path: Relative path within the vault (e.g. 'decisions/my-note.md'). Legacy
+            numbered prefixes ('30-decisions/...') are accepted and rewritten to
+            the canonical semantic folder during the migration window.
         vault_root: Absolute path to the vault root directory.
 
     Returns:
@@ -44,13 +34,18 @@ def validate_path(path: str, vault_root: str) -> Path:
     if path.startswith("/"):
         raise ValueError(f"Absolute paths blocked: '{path}'")
 
-    # Extract top-level scope from the path
+    # Extract top-level scope, accepting legacy numbered names via the alias map.
     top_level = path.split("/")[0]
-    if top_level not in ALLOWED_SCOPES:
+    canonical = normalize_scope(top_level)
+    if canonical not in ALLOWED_PATH_SCOPES:
         raise ValueError(
             f"Unknown scope '{top_level}'. "
-            f"Allowed: {', '.join(sorted(ALLOWED_SCOPES))}"
+            f"Allowed: {', '.join(sorted(ALLOWED_PATH_SCOPES))}"
         )
+    # Rewrite a legacy prefix so the file lands in the canonical semantic folder.
+    if canonical != top_level:
+        rest = path.split("/", 1)[1] if "/" in path else ""
+        path = f"{canonical}/{rest}" if rest else canonical
 
     root = Path(vault_root).resolve()
     resolved = (root / path).resolve()

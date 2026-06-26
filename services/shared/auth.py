@@ -34,6 +34,7 @@ from typing import Union
 import asyncpg
 
 from services.shared.hmac_sign import compute_digest
+from services.shared.scopes import normalize_scope
 
 logger = logging.getLogger(__name__)
 
@@ -141,14 +142,17 @@ def check_write_scope(agent_ctx: AgentContext, scope: str) -> bool:
 
     Args:
         agent_ctx: Authenticated agent context.
-        scope: Scope string (e.g. '30-decisions', '70-runbooks').
+        scope: Scope string (e.g. 'decisions', 'runbooks').
 
     Returns:
         True if agent has write access to scope.
     """
     if "*" in agent_ctx.write_scopes:
         return True
-    return scope in agent_ctx.write_scopes
+    # Normalise both sides so a token granted a legacy numbered scope still
+    # authorises the canonical semantic name (and vice versa) during the window.
+    target = normalize_scope(scope)
+    return target in {normalize_scope(s) for s in agent_ctx.write_scopes}
 
 
 def check_read_scope(agent_ctx: AgentContext, scope: str) -> bool:
@@ -158,14 +162,15 @@ def check_read_scope(agent_ctx: AgentContext, scope: str) -> bool:
 
     Args:
         agent_ctx: Authenticated agent context.
-        scope: Scope string (e.g. '30-decisions').
+        scope: Scope string (e.g. 'decisions').
 
     Returns:
         True if agent has read access to scope.
     """
     if "*" in agent_ctx.read_scopes:
         return True
-    return scope in agent_ctx.read_scopes
+    target = normalize_scope(scope)
+    return target in {normalize_scope(s) for s in agent_ctx.read_scopes}
 
 
 def restrict_read_scopes(
@@ -211,7 +216,8 @@ def restrict_read_scopes(
     if has_wildcard:
         return list(requested_scopes)
 
-    allowed = [s for s in requested_scopes if s in token_scopes]
+    token_norm = {normalize_scope(t) for t in token_scopes}
+    allowed = [s for s in requested_scopes if normalize_scope(s) in token_norm]
     if not allowed:
         raise PermissionError(
             f"Agent '{agent_ctx.agent}' cannot read any of: {requested_scopes}"

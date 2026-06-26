@@ -148,21 +148,21 @@ def test_request_auth_set_and_reset_round_trip() -> None:
 
 def test_find_wikilinks_basic() -> None:
     """Wikilink extractor returns deduplicated targets."""
-    text = "See [[30-decisions/a.md]] and [[30-decisions/a.md]] and [[70-runbooks/b.md]]."
+    text = "See [[decisions/a.md]] and [[decisions/a.md]] and [[runbooks/b.md]]."
     out = find_wikilinks(text)
-    assert out == ["30-decisions/a.md", "70-runbooks/b.md"]
+    assert out == ["decisions/a.md", "runbooks/b.md"]
 
 
 def test_find_wikilinks_with_related_frontmatter() -> None:
     """Wikilink extractor picks up related: frontmatter entries as well."""
     text = (
-        "related: 40-projects/x.md, 40-projects/y.md\n"
-        "body with [[30-decisions/z.md]] mention."
+        "related: projects/x.md, projects/y.md\n"
+        "body with [[decisions/z.md]] mention."
     )
     out = find_wikilinks(text)
-    assert "30-decisions/z.md" in out
-    assert "40-projects/x.md" in out
-    assert "40-projects/y.md" in out
+    assert "decisions/z.md" in out
+    assert "projects/x.md" in out
+    assert "projects/y.md" in out
 
 
 def test_search_module_exports_register_tools() -> None:
@@ -241,9 +241,9 @@ def _row(rid: int, **overrides: Any) -> dict[str, Any]:
         "id": rid,
         "doc_id": rid,
         "content": f"content {rid}",
-        "path": f"30-decisions/{rid}.md",
+        "path": f"decisions/{rid}.md",
         "source_type": "decision",
-        "scope": "30-decisions",
+        "scope": "decisions",
         "updated_at": None,
     }
     base.update(overrides)

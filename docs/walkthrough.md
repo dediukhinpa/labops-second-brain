@@ -139,7 +139,7 @@ and never notice that the argument is forgeable.
 
 The three services share one Postgres database and one filesystem
 vault. The vault is plain markdown organized into semantic folders —
-`30-decisions/`, `70-runbooks/`, `80-error-patterns/`, and so on.
+`decisions/`, `runbooks/`, `error-patterns/`, and so on.
 Markdown is the canonical store. The Postgres index is derived: if you
 blow it away, a reindex job rebuilds it from the vault. Your data is
 human-readable, grep-able, version-controllable in git, and survives
@@ -227,7 +227,7 @@ it asks a slower agent to summarize.
 Capture is dumb on purpose. The bot receives your message, writes the
 raw payload to `raw/YYYY-MM/{type}/{slug}.md` on disk, and
 simultaneously calls `memory.create_external_note` to mirror it into
-the shared vault under `50-external/`. Dual-writing buys you a
+the shared vault under `external/`. Dual-writing buys you a
 guarantee: if the VPS is down, the local copy survives; if the local
 disk dies, the shared copy survives. Either alone is a single point
 of failure, and outages always come on the day you most needed the

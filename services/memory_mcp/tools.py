@@ -457,7 +457,7 @@ def register_tools(
         agent: str | None = None,
         ctx: dict[str, object] | None = None,
     ) -> str:
-        """Create a decision note in 30-decisions/.
+        """Create a decision note in decisions/.
 
         Immutable by default -- use ``supersede_decision`` for business-level
         chains. Jaccard auto-supersession runs before the insert: when the
@@ -476,7 +476,7 @@ def register_tools(
         t0 = time.monotonic()
         pool: asyncpg.Pool = await get_pool_fn()  # type: ignore[misc]
         agent_ctx = await _authenticate_request(ctx, pool)
-        scope = "30-decisions"
+        scope = "decisions"
 
         if not check_write_scope(agent_ctx, scope):
             raise PermissionError(f"Agent '{agent_ctx.agent}' cannot write to {scope}")
@@ -900,11 +900,11 @@ def register_tools(
         agent: str | None = None,
         ctx: dict[str, object] | None = None,
     ) -> str:
-        """Create a runbook note in 70-runbooks/."""
+        """Create a runbook note in runbooks/."""
         t0 = time.monotonic()
         pool: asyncpg.Pool = await get_pool_fn()  # type: ignore[misc]
         agent_ctx = await _authenticate_request(ctx, pool)
-        scope = "70-runbooks"
+        scope = "runbooks"
 
         if not check_write_scope(agent_ctx, scope):
             raise PermissionError(f"Agent '{agent_ctx.agent}' cannot write to {scope}")
@@ -967,11 +967,11 @@ def register_tools(
         agent: str | None = None,
         ctx: dict[str, object] | None = None,
     ) -> str:
-        """Create an error pattern note in 80-error-patterns/."""
+        """Create an error pattern note in error-patterns/."""
         t0 = time.monotonic()
         pool: asyncpg.Pool = await get_pool_fn()  # type: ignore[misc]
         agent_ctx = await _authenticate_request(ctx, pool)
-        scope = "80-error-patterns"
+        scope = "error-patterns"
 
         if not check_write_scope(agent_ctx, scope):
             raise PermissionError(f"Agent '{agent_ctx.agent}' cannot write to {scope}")
@@ -1035,7 +1035,7 @@ def register_tools(
         agent: str | None = None,
         ctx: dict[str, object] | None = None,
     ) -> str:
-        """Create a personal note in 15-personal/.
+        """Create a personal note in personal/.
 
         Subject = the human: skills, experience, FIO, age, life situations.
         Orthogonal to the structural note types (decision/runbook/error).
@@ -1043,7 +1043,7 @@ def register_tools(
         t0 = time.monotonic()
         pool: asyncpg.Pool = await get_pool_fn()  # type: ignore[misc]
         agent_ctx = await _authenticate_request(ctx, pool)
-        scope = "15-personal"
+        scope = "personal"
 
         if not check_write_scope(agent_ctx, scope):
             raise PermissionError(f"Agent '{agent_ctx.agent}' cannot write to {scope}")
@@ -1102,7 +1102,7 @@ def register_tools(
         agent: str | None = None,
         ctx: dict[str, object] | None = None,
     ) -> str:
-        """Create a project note in 40-projects/.
+        """Create a project note in projects/.
 
         Subject = the business/project: source data, accounting, company
         structure, contracts, invoices, regulations, commercial offers.
@@ -1111,7 +1111,7 @@ def register_tools(
         t0 = time.monotonic()
         pool: asyncpg.Pool = await get_pool_fn()  # type: ignore[misc]
         agent_ctx = await _authenticate_request(ctx, pool)
-        scope = "40-projects"
+        scope = "projects"
 
         if not check_write_scope(agent_ctx, scope):
             raise PermissionError(f"Agent '{agent_ctx.agent}' cannot write to {scope}")
@@ -1171,11 +1171,11 @@ def register_tools(
         tags: list[str],
         ctx: dict[str, object] | None = None,
     ) -> str:
-        """Create an external note in 50-external/{source}/."""
+        """Create an external note in external/{source}/."""
         t0 = time.monotonic()
         pool: asyncpg.Pool = await get_pool_fn()  # type: ignore[misc]
         agent_ctx = await _authenticate_request(ctx, pool)
-        scope = "50-external"
+        scope = "external"
 
         if not check_write_scope(agent_ctx, scope):
             raise PermissionError(
@@ -1233,11 +1233,11 @@ def register_tools(
         body: str,
         ctx: dict[str, object] | None = None,
     ) -> str:
-        """Create a handoff note in 90-inbox/."""
+        """Create a handoff note in inbox/."""
         t0 = time.monotonic()
         pool: asyncpg.Pool = await get_pool_fn()  # type: ignore[misc]
         agent_ctx = await _authenticate_request(ctx, pool)
-        scope = "90-inbox"
+        scope = "inbox"
 
         if not check_write_scope(agent_ctx, scope):
             raise PermissionError(
@@ -1289,11 +1289,11 @@ def register_tools(
         body: str,
         ctx: dict[str, object] | None = None,
     ) -> str:
-        """Append an entry to today's daily log in 20-daily/."""
+        """Append an entry to today's daily log in daily/."""
         t0 = time.monotonic()
         pool: asyncpg.Pool = await get_pool_fn()  # type: ignore[misc]
         agent_ctx = await _authenticate_request(ctx, pool)
-        scope = "20-daily"
+        scope = "daily"
 
         if not check_write_scope(agent_ctx, scope):
             raise PermissionError(
@@ -1405,11 +1405,11 @@ def register_tools(
 
         scope = _scope_from_path(path)
         # Immutability guard: decisions/error-patterns are append-only, not editable
-        if scope == "30-decisions":
+        if scope == "decisions":
             raise PermissionError(
                 f"Decisions are immutable. Use supersede_decision(old_path={path!r}, ...) instead."
             )
-        if scope == "80-error-patterns":
+        if scope == "error-patterns":
             raise PermissionError(
                 f"Error-patterns are immutable. Create a new note via create_error_pattern_note instead."
             )
@@ -1472,7 +1472,7 @@ def register_tools(
         t0 = time.monotonic()
         pool: asyncpg.Pool = await get_pool_fn()  # type: ignore[misc]
         agent_ctx = await _authenticate_request(ctx, pool)
-        scope = "30-decisions"
+        scope = "decisions"
 
         if not check_write_scope(agent_ctx, scope):
             raise PermissionError(

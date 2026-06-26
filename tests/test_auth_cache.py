@@ -29,7 +29,7 @@ class _FakePool:
 
 _ROW = {
     "agent": "christopher",
-    "can_write_scopes": ["30-decisions"],
+    "can_write_scopes": ["decisions"],
     "can_read_scopes": ["*"],
 }
 
@@ -43,7 +43,7 @@ async def test_authenticate_caches_within_ttl():
     assert isinstance(c1, AgentContext)
     assert c1.agent == c2.agent == "christopher"
     assert c2.read_scopes == ["*"]
-    assert c2.write_scopes == ["30-decisions"]
+    assert c2.write_scopes == ["decisions"]
 
 
 async def test_authenticate_distinct_tokens_each_query():

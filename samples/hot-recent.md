@@ -16,11 +16,11 @@ Hit a wall on the Godot navmesh. Agent radius parameter is being ignored when I 
 
 ### 13:45 — Jordan
 
-Finished `tideborn-music-loop-v3`. Exported the stems, ran the import script (with proper path quoting this time, lesson learned), dropped the WAVs and the metadata yaml into `50-knowledge/audio/loops/`. Loop point is at bar 16, tested in-engine — clean loop, no click. Sam's audio bus changes from yesterday play nicely with the new mix. Next: ambient layers for the coastal biome, starting Tuesday.
+Finished `tideborn-music-loop-v3`. Exported the stems, ran the import script (with proper path quoting this time, lesson learned), dropped the WAVs and the metadata yaml into `knowledge/audio/loops/`. Loop point is at bar 16, tested in-engine — clean loop, no click. Sam's audio bus changes from yesterday play nicely with the new mix. Next: ambient layers for the coastal biome, starting Tuesday.
 
 ### 15:20 — Alex
 
-Playtest with two friends, ran for 90 minutes. Useful raw notes captured in `90-inbox/2026-03-15-playtest-session.md` — voice-memo style, will compile later. Headline: tutorial pacing is still too slow in the first ten minutes. Both testers correctly described the action point economy by minute five but the tutorial keeps over-explaining it until minute twelve. Cut the redundant prompts. Also one of them found a soft-lock in the second encounter — Sam, will write it up properly after I make tea.
+Playtest with two friends, ran for 90 minutes. Useful raw notes captured in `inbox/2026-03-15-playtest-session.md` — voice-memo style, will compile later. Headline: tutorial pacing is still too slow in the first ten minutes. Both testers correctly described the action point economy by minute five but the tutorial keeps over-explaining it until minute twelve. Cut the redundant prompts. Also one of them found a soft-lock in the second encounter — Sam, will write it up properly after I make tea.
 
 ### 17:00 — Sam
 

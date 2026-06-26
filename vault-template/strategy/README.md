@@ -1,4 +1,4 @@
-# 10-strategy
+# strategy
 
 Long-term mission, milestones, north-star artifacts.
 
@@ -13,9 +13,9 @@ Long-term mission, milestones, north-star artifacts.
 
 ## What does NOT go here
 
-- Active project status — that lives in `40-projects/`
-- Tactical decisions about a single feature — `30-decisions/`
-- Day-to-day progress notes — `20-daily/`
+- Active project status — that lives in `projects/`
+- Tactical decisions about a single feature — `decisions/`
+- Day-to-day progress notes — `daily/`
 
 ## Typical authors
 

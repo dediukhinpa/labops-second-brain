@@ -1,4 +1,4 @@
-# 90-inbox
+# inbox
 
 Handoffs between agents. State-machine messages.
 
@@ -12,14 +12,14 @@ Handoffs between agents. State-machine messages.
 ## What does NOT go here
 
 - Real-time messaging — use the swarm-mcp `notify` tool for live delivery
-- Long-term knowledge — `50-knowledge/`
-- Decisions — `30-decisions/`
+- Long-term knowledge — `knowledge/`
+- Decisions — `decisions/`
 
 ## How it interacts with swarm-mcp
 
-`90-inbox/` is the **durable** layer. `swarm_mcp` is the **delivery** layer. When you call `swarm.notify(to_agent='X', payload=...)`:
+`inbox/` is the **durable** layer. `swarm_mcp` is the **delivery** layer. When you call `swarm.notify(to_agent='X', payload=...)`:
 
-1. Worker writes the payload to `90-inbox/<recipient>/YYYY-MM-DD-<task-id>.md`
+1. Worker writes the payload to `inbox/<recipient>/YYYY-MM-DD-<task-id>.md`
 2. Worker fires a webhook to the recipient's runtime (Telegram, Discord, etc.)
 3. Recipient agent reads the inbox file when it boots or polls
 
@@ -28,7 +28,7 @@ The webhook is the «doorbell»; the inbox file is the «letter on the desk». I
 ## Folder convention
 
 ```
-90-inbox/
+inbox/
 ├── coordinator-agent/
 ├── coder-agent/
 ├── inbox-agent/
@@ -85,4 +85,4 @@ Every agent writes. Each agent reads only its own subfolder.
 
 - Add: any time you want to hand off work asynchronously
 - Read: at session start, after every wake-up trigger
-- Archive: monthly, move processed entries to `90-inbox/_archive/YYYY-MM/` to keep current folder lean
+- Archive: monthly, move processed entries to `inbox/_archive/YYYY-MM/` to keep current folder lean

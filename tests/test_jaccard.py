@@ -121,7 +121,7 @@ class TestFindSupersessionCandidates:
 
     def test_no_candidates_when_below_hint(self) -> None:
         new_tokens = tokenize("alpha beta gamma")
-        rows = [self._row("30-decisions/2026-01-01-other.md", "wholly different content")]
+        rows = [self._row("decisions/2026-01-01-other.md", "wholly different content")]
         auto, hint = find_supersession_candidates(
             new_tokens, rows, auto_threshold=0.85, hint_threshold=0.70
         )
@@ -130,7 +130,7 @@ class TestFindSupersessionCandidates:
 
     def test_auto_when_above_threshold(self) -> None:
         new_tokens = tokenize("alpha beta gamma delta epsilon")
-        rows = [self._row("30-decisions/x.md", "alpha beta gamma delta epsilon")]
+        rows = [self._row("decisions/x.md", "alpha beta gamma delta epsilon")]
         auto, hint = find_supersession_candidates(
             new_tokens, rows, auto_threshold=0.85, hint_threshold=0.70
         )
@@ -144,7 +144,7 @@ class TestFindSupersessionCandidates:
         existing_tokens = {"alpha", "beta", "gamma", "delta", "epsilon", "eta"}
         rows = [
             {
-                "path": "30-decisions/x.md",
+                "path": "decisions/x.md",
                 "body": " ".join(existing_tokens),
                 "frontmatter": {},
             }
@@ -159,9 +159,9 @@ class TestFindSupersessionCandidates:
     def test_sorted_desc_by_jaccard(self) -> None:
         new_tokens = tokenize("alpha beta gamma delta")
         rows = [
-            self._row("30-decisions/low.md", "alpha beta"),
-            self._row("30-decisions/high.md", "alpha beta gamma delta"),
-            self._row("30-decisions/mid.md", "alpha beta gamma"),
+            self._row("decisions/low.md", "alpha beta"),
+            self._row("decisions/high.md", "alpha beta gamma delta"),
+            self._row("decisions/mid.md", "alpha beta gamma"),
         ]
         auto, _hint = find_supersession_candidates(
             new_tokens, rows, auto_threshold=0.0, hint_threshold=0.0
@@ -178,7 +178,7 @@ class TestFindSupersessionCandidates:
     def test_auto_threshold_zero_disables_auto(self) -> None:
         """When auto_threshold=0, NOTHING goes to auto -- all qualifying go to hint."""
         new_tokens = tokenize("alpha beta gamma")
-        rows = [self._row("30-decisions/x.md", "alpha beta gamma")]
+        rows = [self._row("decisions/x.md", "alpha beta gamma")]
         auto, hint = find_supersession_candidates(
             new_tokens, rows, auto_threshold=0.0, hint_threshold=0.5
         )
@@ -193,7 +193,7 @@ class TestFindSupersessionCandidates:
         existing_tokens = {"a1", "a2", "a3", "a4"}
         rows = [
             {
-                "path": "30-decisions/x.md",
+                "path": "decisions/x.md",
                 "body": " ".join(existing_tokens),
                 "frontmatter": {},
             }
@@ -212,7 +212,7 @@ class TestFindSupersessionCandidates:
         existing_tokens = {"t1", "t2", "t3", "t4", "t5", "t6", "t7", "x1", "y1", "z1"}
         rows = [
             {
-                "path": "30-decisions/x.md",
+                "path": "decisions/x.md",
                 "body": " ".join(existing_tokens),
                 "frontmatter": {},
             }
@@ -232,7 +232,7 @@ class TestFindSupersessionCandidates:
         # intersection=2, union=5 -> 0.4 < 0.7
         rows = [
             {
-                "path": "30-decisions/x.md",
+                "path": "decisions/x.md",
                 "body": " ".join(existing_tokens),
                 "frontmatter": {},
             }
@@ -245,10 +245,10 @@ class TestFindSupersessionCandidates:
 
     def test_returns_candidate_dataclass(self) -> None:
         new_tokens = tokenize("alpha beta gamma delta")
-        rows = [self._row("30-decisions/x.md", "alpha beta gamma delta")]
+        rows = [self._row("decisions/x.md", "alpha beta gamma delta")]
         auto, _ = find_supersession_candidates(
             new_tokens, rows, auto_threshold=0.85, hint_threshold=0.70
         )
         assert isinstance(auto[0], SupersessionCandidate)
-        assert auto[0].path == "30-decisions/x.md"
+        assert auto[0].path == "decisions/x.md"
         assert auto[0].frontmatter == {}

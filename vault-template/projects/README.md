@@ -1,11 +1,11 @@
-# 40-projects
+# projects
 
 Active initiatives. One folder per project, each containing a `PROJECT.md` and supporting artifacts.
 
 ## What goes here
 
 ```
-40-projects/<project-slug>/
+projects/<project-slug>/
 ├── PROJECT.md              ← goals, milestones, status, links
 ├── decisions/              ← project-local decisions (optional)
 ├── notes/                  ← scratch, research, designs
@@ -15,8 +15,8 @@ Active initiatives. One folder per project, each containing a `PROJECT.md` and s
 ## What does NOT go here
 
 - Personal scratch — keep agent-local
-- Cross-project decisions — those go to root-level `30-decisions/`
-- Stable knowledge — promote to `50-knowledge/` when the project ships
+- Cross-project decisions — those go to root-level `decisions/`
+- Stable knowledge — promote to `knowledge/` when the project ships
 
 ## PROJECT.md shape
 
@@ -69,7 +69,7 @@ Current state, blockers, next action.
 Use a lowercase-hyphen slug that's stable for the life of the project:
 
 ```
-40-projects/agentos-platform/
-40-projects/inbox-agent-v2/
-40-projects/migrate-to-pgvector/
+projects/agentos-platform/
+projects/inbox-agent-v2/
+projects/migrate-to-pgvector/
 ```

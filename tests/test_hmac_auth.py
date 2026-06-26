@@ -79,7 +79,7 @@ def _hmac_row(
     """Build a fake agent_tokens row with computed hmac_secret_sha256."""
     return {
         "agent": agent,
-        "can_write_scopes": write_scopes or ["30-decisions"],
+        "can_write_scopes": write_scopes or ["decisions"],
         "can_read_scopes": read_scopes or ["*"],
         "hmac_secret_sha256": hashlib.sha256(secret.encode("utf-8")).hexdigest(),
     }
@@ -108,7 +108,7 @@ async def test_hmac_happy_path_3_mcps(monkeypatch: pytest.MonkeyPatch) -> None:
     pool = _FakePool(hmac_rows=[_hmac_row("iris", secret)])
     ctx = await authenticate_hmac(sig, str(ts), body, pool, 300)
     assert ctx.agent == "iris"
-    assert ctx.write_scopes == ["30-decisions"]
+    assert ctx.write_scopes == ["decisions"]
 
 
 @pytest.mark.asyncio
@@ -299,13 +299,13 @@ async def test_bearer_still_works_unchanged() -> None:
     pool.fetchrow = AsyncMock(
         return_value={
             "agent": "vega",
-            "can_write_scopes": ["50-external"],
+            "can_write_scopes": ["external"],
             "can_read_scopes": ["*"],
         }
     )
     ctx = await authenticate("hello-token", pool)
     assert ctx.agent == "vega"
-    assert ctx.write_scopes == ["50-external"]
+    assert ctx.write_scopes == ["external"]
 
 
 @pytest.mark.asyncio

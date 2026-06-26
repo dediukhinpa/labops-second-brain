@@ -1,4 +1,4 @@
-# 70-runbooks
+# runbooks
 
 How-to playbooks: deploy, rollback, incident response, recurring operations.
 
@@ -7,15 +7,15 @@ How-to playbooks: deploy, rollback, incident response, recurring operations.
 - Step-by-step procedures that another agent (or future-you) can follow blind
 - Deploy runbooks: per-service, per-environment
 - Rollback procedures with verification steps
-- Incident response checklists (general — specific incidents go to `80-error-patterns/`)
+- Incident response checklists (general — specific incidents go to `error-patterns/`)
 - Recurring chores: rotate credentials, refresh certificates, vacuum DB
 - Onboarding runbooks for new agents joining the team
 
 ## What does NOT go here
 
-- Decisions about how to deploy — `30-decisions/`
-- One-off incidents — `80-error-patterns/`
-- Background concepts — `50-knowledge/`
+- Decisions about how to deploy — `decisions/`
+- One-off incidents — `error-patterns/`
+- Background concepts — `knowledge/`
 
 ## What a good runbook looks like
 

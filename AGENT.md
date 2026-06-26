@@ -80,7 +80,7 @@ Use this to route the user. If they say "I want X", pick the row that matches an
 | "Just save my YouTube links and voice notes — searchable later" | A | Inbox-agent + recall is enough. No personal agents needed. |
 | "I want a daily digest of yesterday's forwards" | A | Inbox-agent ships the digest cron out of the box. |
 | "I forward links to a bot now, but next month I'll wire up an agent — set up the brain so I can plug an agent in later" | A | Brain is brought up. User can later run `agent-template/install.sh` themselves; you do not have to do it now. |
-| "I want a coding assistant that remembers what we decided last week" | B (1 agent) | Run `agent-template/install.sh` for `<coder-agent>`, recall scope `30-decisions, 50-knowledge`. |
+| "I want a coding assistant that remembers what we decided last week" | B (1 agent) | Run `agent-template/install.sh` for `<coder-agent>`, recall scope `decisions, knowledge`. |
 | "I'm building a team of agents — a coordinator, a coder, and a marketer — that share knowledge" | B (3 agents) | Run `agent-template/install.sh` three times, one per role. Each gets its own bearer + workspace + scopes. |
 | "I want a research agent that recalls but never writes" | B (1 agent, recall-only token) | Issue a token without `--scopes` write set; workspace still gets memory layers + hooks. |
 | "I want a Telegram bot that's also a Claude Code agent" | B (1 agent) + inbox-agent | Run agent-template for the bot persona, then point the inbox-agent webhook at it. Out of scope for the default install — note as a follow-up. |
@@ -149,13 +149,13 @@ If the user is undecided after reading this section, default to Path A and expli
 
 | Service | Port | Purpose | Scopes it writes |
 |---|---|---|---|
-| `memory_mcp` | 8767 | Write tools: create decision, runbook, error-pattern, external note, daily log entry | 20-daily, 30-decisions, 50-external, 50-knowledge, 70-runbooks, 80-error-patterns, 90-inbox |
+| `memory_mcp` | 8767 | Write tools: create decision, runbook, error-pattern, external note, daily log entry | daily, decisions, external, knowledge, runbooks, error-patterns, inbox |
 | `recall_mcp` | 8768 | Read tools: recall (hybrid search), recent, related, get-by-id, stats | none (read-only) |
 | `swarm_mcp` | 8766 | Inter-agent event bus: notify, ack, list-pending, broadcast | none (writes to `outbox` table only) |
 
 **Auth:** each agent gets a Bearer token. Token sha256 is stored in `agent_tokens.token_sha256`. Each request's `Authorization: Bearer <token>` header is captured by `AuthCaptureMiddleware` and the token resolves to an agent identity with scoped write permissions. No header → 401. No silent fallback. Ever. **In Path B, each personal agent workspace gets its own distinct Bearer** — never share tokens between agents.
 
-**Recall:** hybrid search combines (a) pgvector cosine over FastEmbed `multilingual-e5-large` (1024-dim) embeddings stored per chunk in `chunks.embedding` and (b) Postgres full-text search over `chunks.content_tsv` / `documents.body_tsv`. Results are fused with Reciprocal Rank Fusion (RRF), then re-ranked by temporal decay and a source_weights map (e.g. `80-error-patterns` × 3.0, `90-inbox` × 0.5).
+**Recall:** hybrid search combines (a) pgvector cosine over FastEmbed `multilingual-e5-large` (1024-dim) embeddings stored per chunk in `chunks.embedding` and (b) Postgres full-text search over `chunks.content_tsv` / `documents.body_tsv`. Results are fused with Reciprocal Rank Fusion (RRF), then re-ranked by temporal decay and a source_weights map (e.g. `error-patterns` × 3.0, `inbox` × 0.5).
 
 ---
 
@@ -246,9 +246,9 @@ Only if the user picked Path B, ask these on top:
     - **Agent id** (slug, lowercase, hyphenated — e.g. `coordinator-agent`, `coder-agent`, `marketer-agent`). This becomes the workspace directory name `~/.claude-lab/<agent-id>/.claude/` and the `agent` identifier in `agent_tokens`.
     - **Role** (1 line, e.g. "main coordinator and brainstorm partner", "Python/TypeScript coder for backend work", "content marketer for Telegram channel").
     - **Write scopes** (comma-separated subset of the 12 vault scopes). Defaults per role:
-        - `coordinator-agent`: `20-daily, 30-decisions, 50-external, 50-knowledge, 70-runbooks, 80-error-patterns, 90-inbox`
-        - `coder-agent`: `30-decisions, 50-knowledge, 70-runbooks, 80-error-patterns, 90-inbox`
-        - `marketer-agent`: `20-daily, 50-knowledge, 90-inbox`
+        - `coordinator-agent`: `daily, decisions, external, knowledge, runbooks, error-patterns, inbox`
+        - `coder-agent`: `decisions, knowledge, runbooks, error-patterns, inbox`
+        - `marketer-agent`: `daily, knowledge, inbox`
         - `researcher-agent` (recall-only): empty write scopes
     - **Read scopes**: default `*` (all). Only restrict if the user is explicit.
 
@@ -345,14 +345,14 @@ If smoke-test fails, do not move on. The most common cause is `AuthCaptureMiddle
 
 You need at minimum two tokens for Path A:
 
-- **coordinator token** — for the user's main Claude Code agent that recalls and writes decisions. Full scopes: `20-daily, 30-decisions, 50-external, 50-knowledge, 70-runbooks, 80-error-patterns, 90-inbox`.
-- **inbox-agent token** — restricted to the scopes inbox-agent writes: `30-decisions, 50-external, 50-knowledge, 90-inbox`.
+- **coordinator token** — for the user's main Claude Code agent that recalls and writes decisions. Full scopes: `daily, decisions, external, knowledge, runbooks, error-patterns, inbox`.
+- **inbox-agent token** — restricted to the scopes inbox-agent writes: `decisions, external, knowledge, inbox`.
 
 Issue them with:
 
 ```bash
-ssh <USER>@<VPS_IP> "cd /opt/second_brain && python scripts/issue-agent-token.py --agent coordinator-agent --scopes '20-daily,30-decisions,50-external,50-knowledge,70-runbooks,80-error-patterns,90-inbox'"
-ssh <USER>@<VPS_IP> "cd /opt/second_brain && python scripts/issue-agent-token.py --agent inbox-agent --scopes '30-decisions,50-external,50-knowledge,90-inbox'"
+ssh <USER>@<VPS_IP> "cd /opt/second_brain && python scripts/issue-agent-token.py --agent coordinator-agent --scopes 'daily,decisions,external,knowledge,runbooks,error-patterns,inbox'"
+ssh <USER>@<VPS_IP> "cd /opt/second_brain && python scripts/issue-agent-token.py --agent inbox-agent --scopes 'decisions,external,knowledge,inbox'"
 ```
 
 Each command prints the token ONCE to stdout. Capture both. Hand them to the user with the explicit instruction to save them in a password manager. Never write them into the repo, the `.env.example`, or any committed file.
@@ -438,7 +438,7 @@ This is the only step that proves the Path A system actually works.
 4. From a fresh Claude Code agent context configured with the coordinator-agent token (use `${INBOX_AGENT_HOME}/.claude/.mcp.json` as reference), call:
 
    ```
-   recall.recent(scope="50-external", limit=5)
+   recall.recent(scope="external", limit=5)
    ```
 
 5. The just-sent URL must appear in the results, with `agent: inbox-agent` and a recent `created_at` (within the last 60 seconds).
@@ -451,7 +451,7 @@ If the URL does NOT appear, debug in this order:
 2. Check `raw/` has the new file: `ls -la ${INBOX_AGENT_HOME}/raw/ | head`.
 3. Check the dual-write attempted: `grep memory ${INBOX_AGENT_HOME}/logs/save-to-raw.log | tail`. A successful write logs `memory-mcp create_external_note 200`. A failure logs the curl HTTP code and body.
 4. On the VPS: `journalctl -u second_brain-memory-mcp -n 200 --no-pager` and `journalctl -u second_brain-ingest-worker -n 200 --no-pager`.
-5. Verify in Postgres: `psql -U second_brain -d second_brain -c "SELECT path, agent, created_at FROM documents WHERE scope='50-external' ORDER BY created_at DESC LIMIT 5;"`.
+5. Verify in Postgres: `psql -U second_brain -d second_brain -c "SELECT path, agent, created_at FROM documents WHERE scope='external' ORDER BY created_at DESC LIMIT 5;"`.
 
 The fault is almost always (a) wrong bearer token in `${INBOX_AGENT_HOME}/.claude/.mcp.json`, (b) wrong VPS URL there, (c) firewall blocking outbound 443, or (d) `bot.py` not running. Address those before digging deeper.
 
@@ -593,13 +593,13 @@ claude --project ~/.claude-lab/<agent-id>/.claude
 1. The CLI opens without errors.
 2. The SessionStart hook (`hooks/session-start-hook.sh`) runs and writes a fresh top-of-handoff entry.
 3. The first turn loads CLAUDE.md, `core/rules.md`, `core/warm/decisions.md`, `core/hot/handoff.md` — confirm by asking the agent: "What is your role?". It should answer with the role you set in step 12.
-4. Ask the agent: "Recall recent entries from scope 50-external." The agent should call `recall.recent` against the brain and return results (at minimum, the URL forwarded in Path A step 10).
+4. Ask the agent: "Recall recent entries from scope external." The agent should call `recall.recent` against the brain and return results (at minimum, the URL forwarded in Path A step 10).
 
 If recall returns 0 results despite the brain having data:
 
 - Check `.mcp.json` Bearer is correct (re-read it; should be the value from step 14, not the placeholder).
 - Check the brain is reachable: `curl -sS -H "Authorization: Bearer <token>" https://<DOMAIN>/recall/mcp/` should return 406 with an MCP error body. 401 → wrong token. Connection refused → firewall.
-- Check the agent's bearer is for an agent whose scope set includes `50-external` for reads (default read scope `*` covers everything).
+- Check the agent's bearer is for an agent whose scope set includes `external` for reads (default read scope `*` covers everything).
 
 ### Step 18 (optional): Wire the agent into a Telegram bot
 
@@ -691,7 +691,7 @@ The deployment is complete when ALL of these are verifiable. Read each one and c
 - [ ] `psql -U second_brain -d second_brain -c "SELECT agent, array_length(can_write_scopes,1) FROM agent_tokens WHERE revoked_at IS NULL;"` shows at least two rows (`coordinator-agent`, `inbox-agent`) with the expected scope counts.
 - [ ] `curl -sS https://<DOMAIN>/recall/mcp` or `curl -sS http://<VPS_IP>:8768/` returns the recall service banner (200, "MCP service: recall").
 - [ ] The Telegram bot (`bot.py`) responds to `/start` from the allowlisted user_id within 2 seconds, and replies with a short ack to a forwarded URL.
-- [ ] A forwarded URL → bot ack ("Got it") → `recall.recent(scope='50-external')` returns the URL with `agent: inbox-agent`. End-to-end.
+- [ ] A forwarded URL → bot ack ("Got it") → `recall.recent(scope='external')` returns the URL with `agent: inbox-agent`. End-to-end.
 - [ ] `crontab -l` shows the two inbox-agent entries.
 - [ ] `ls ${INBOX_AGENT_HOME}/raw/` shows at least one captured raw file (the test forward from Step 10).
 - [ ] No secrets in any file you committed back. Run `bash scripts/sanitize-check.sh` from the repo root to confirm.
@@ -703,7 +703,7 @@ For each agent in the user's list:
 - [ ] Workspace exists: `ls ~/.claude-lab/<agent-id>/.claude/` shows `CLAUDE.md`, `core/`, `hooks/`, `scripts/`, `.mcp.json`.
 - [ ] `.mcp.json` has all three second_brain entries (memory / recall / swarm), each with that agent's Bearer (not the placeholder, not the inbox-agent token, not another agent's token).
 - [ ] `claude --project ~/.claude-lab/<agent-id>/.claude` opens without errors and reports the role you set.
-- [ ] From inside that agent, `recall.recent(scope='50-external')` returns results (at minimum, the URL forwarded in Path A step 10).
+- [ ] From inside that agent, `recall.recent(scope='external')` returns results (at minimum, the URL forwarded in Path A step 10).
 - [ ] `crontab -l | grep <agent-id>` shows three rotation entries (trim-hot, rotate-warm, compress-warm).
 - [ ] Per-agent token is in `agent_tokens` with the right scopes: `psql -U second_brain -d second_brain -c "SELECT agent, can_write_scopes FROM agent_tokens WHERE agent='<agent-id>' AND revoked_at IS NULL;"`.
 

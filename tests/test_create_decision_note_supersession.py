@@ -193,7 +193,7 @@ def _make_recorder(pool: DecisionFakePool, vault_root: str) -> tuple[ToolRecorde
     recorder = ToolRecorder()
     agent_ctx = AgentContext(
         agent="coder-agent",
-        write_scopes=["30-decisions"],
+        write_scopes=["decisions"],
         read_scopes=["*"],
     )
 
@@ -244,7 +244,7 @@ class TestCreateDecisionNoteSupersession:
         monkeypatch.delenv("SECOND_BRAIN_SUPERSEDE_HINT", raising=False)
         pool = _make_pool()
         pool.decision_rows = [
-            _row("30-decisions/2026-01-01-old.md", "wholly different content here"),
+            _row("decisions/2026-01-01-old.md", "wholly different content here"),
         ]
         recorder, agent_ctx = _make_recorder(pool, str(tmp_path))
         result = await _call_create(
@@ -272,13 +272,13 @@ class TestCreateDecisionNoteSupersession:
         # intersection=7, union=9 -> 0.778
         new_body = "alpha beta gamma delta epsilon zeta eta"
         old_body = "shared alpha beta gamma delta epsilon zeta theta"
-        pool.decision_rows = [_row("30-decisions/2026-01-01-old.md", old_body)]
+        pool.decision_rows = [_row("decisions/2026-01-01-old.md", old_body)]
         recorder, agent_ctx = _make_recorder(pool, str(tmp_path))
         result = await _call_create(recorder, agent_ctx, "shared", new_body)
         # Must be JSON with suggested_supersedes
         parsed = json.loads(result)
         assert "suggested_supersedes" in parsed
-        assert parsed["suggested_supersedes"][0]["path"] == "30-decisions/2026-01-01-old.md"
+        assert parsed["suggested_supersedes"][0]["path"] == "decisions/2026-01-01-old.md"
         assert 0.70 <= parsed["suggested_supersedes"][0]["jaccard"] < 0.85
         # No DB mutation on the old doc
         assert pool.in_tx_updates == []
@@ -299,11 +299,11 @@ class TestCreateDecisionNoteSupersession:
         pool = _make_pool()
         # identical body -> jaccard 1.0
         body = "alpha beta gamma delta epsilon zeta"
-        pool.decision_rows = [_row("30-decisions/2026-01-01-old.md", body)]
+        pool.decision_rows = [_row("decisions/2026-01-01-old.md", body)]
         recorder, agent_ctx = _make_recorder(pool, str(tmp_path))
         result = await _call_create(recorder, agent_ctx, "Title", body)
         assert isinstance(result, str)
-        assert result.startswith("created: 30-decisions/")
+        assert result.startswith("created: decisions/")
         # NOT JSON
         with pytest.raises(ValueError):
             json.loads(result)
@@ -313,7 +313,7 @@ class TestCreateDecisionNoteSupersession:
         assert len(pool.audit_supersede_calls) == 1
         assert (
             pool.audit_supersede_calls[0]["args_summary"]["old_path"]
-            == "30-decisions/2026-01-01-old.md"
+            == "decisions/2026-01-01-old.md"
         )
 
     @pytest.mark.asyncio
@@ -332,9 +332,9 @@ class TestCreateDecisionNoteSupersession:
         body = "alpha beta gamma delta epsilon zeta eta"
         pool.decision_rows = [
             _row(
-                "30-decisions/2026-01-01-old.md",
+                "decisions/2026-01-01-old.md",
                 body,
-                supersedes=["30-decisions/2025-12-01-ancient.md"],
+                supersedes=["decisions/2025-12-01-ancient.md"],
             )
         ]
         recorder, agent_ctx = _make_recorder(pool, str(tmp_path))
@@ -348,8 +348,8 @@ class TestCreateDecisionNoteSupersession:
         fm_block = text.split("---", 2)[1]
         fm = yaml.safe_load(fm_block)
         assert "supersedes" in fm
-        assert "30-decisions/2026-01-01-old.md" in fm["supersedes"]
-        assert "30-decisions/2025-12-01-ancient.md" in fm["supersedes"]
+        assert "decisions/2026-01-01-old.md" in fm["supersedes"]
+        assert "decisions/2025-12-01-ancient.md" in fm["supersedes"]
 
     @pytest.mark.asyncio
     async def test_auto_supersede_disabled_when_threshold_zero(
@@ -360,7 +360,7 @@ class TestCreateDecisionNoteSupersession:
         monkeypatch.setenv("SECOND_BRAIN_SUPERSEDE_HINT", "0.5")
         pool = _make_pool()
         body = "alpha beta gamma delta epsilon"
-        pool.decision_rows = [_row("30-decisions/2026-01-01-old.md", body)]
+        pool.decision_rows = [_row("decisions/2026-01-01-old.md", body)]
         recorder, agent_ctx = _make_recorder(pool, str(tmp_path))
         result = await _call_create(recorder, agent_ctx, "Title", body)
         # Auto path NOT taken
@@ -383,12 +383,12 @@ class TestCreateDecisionNoteSupersession:
         pool.decision_rows = []
         recorder, agent_ctx = _make_recorder(pool, str(tmp_path))
         result = await _call_create(recorder, agent_ctx, "Title", "alpha beta gamma")
-        # Query targets scope=30-decisions explicitly
+        # Query targets scope=decisions explicitly
         scope_queries = [
             c for c in pool.fetch_calls if "scope = $1" in c[0]
         ]
         assert scope_queries, "expected scope-bound fetch"
-        assert scope_queries[0][1][0] == "30-decisions"
+        assert scope_queries[0][1][0] == "decisions"
         # Plain string return -- no candidates matched
         assert result.startswith("created:")
 
@@ -427,7 +427,7 @@ class TestCreateDecisionNoteSupersession:
         pool = _make_pool()
         pool.fail_on_update = True
         body = "alpha beta gamma delta epsilon zeta"
-        pool.decision_rows = [_row("30-decisions/2026-01-01-old.md", body)]
+        pool.decision_rows = [_row("decisions/2026-01-01-old.md", body)]
         recorder, agent_ctx = _make_recorder(pool, str(tmp_path))
 
         with pytest.raises(RuntimeError, match="simulated DB error"):
@@ -457,7 +457,7 @@ class TestCreateDecisionNoteSupersession:
         pool = _make_pool()
         pool.fail_on_update = True
         body = "alpha beta gamma delta epsilon zeta"
-        pool.decision_rows = [_row("30-decisions/2026-01-01-old.md", body)]
+        pool.decision_rows = [_row("decisions/2026-01-01-old.md", body)]
         recorder, agent_ctx = _make_recorder(pool, str(tmp_path))
 
         with pytest.raises(RuntimeError, match="simulated DB error"):
@@ -473,7 +473,7 @@ class TestCreateDecisionNoteSupersession:
         # And so was the UPDATE that started running
         assert pool.in_tx_updates == []
         # No vault file was written (DB committed before file write)
-        new_files = list((tmp_path / "30-decisions").glob("*.md"))
+        new_files = list((tmp_path / "decisions").glob("*.md"))
         assert new_files == [], f"expected no vault writes; got {new_files}"
 
     @pytest.mark.asyncio
@@ -488,14 +488,14 @@ class TestCreateDecisionNoteSupersession:
         monkeypatch.delenv("SECOND_BRAIN_SUPERSEDE_HINT", raising=False)
         pool = _make_pool()
         body = "alpha beta gamma delta epsilon zeta eta theta"
-        pool.decision_rows = [_row("30-decisions/2026-01-01-old.md", body)]
+        pool.decision_rows = [_row("decisions/2026-01-01-old.md", body)]
         recorder, agent_ctx = _make_recorder(pool, str(tmp_path))
         result = await _call_create(recorder, agent_ctx, "Title", body)
-        assert result.startswith("created: 30-decisions/")
+        assert result.startswith("created: decisions/")
         assert len(pool.audit_supersede_calls) == 1
         summary = pool.audit_supersede_calls[0]["args_summary"]
-        assert summary["old_path"] == "30-decisions/2026-01-01-old.md"
-        assert summary["new_path"].startswith("30-decisions/")
+        assert summary["old_path"] == "decisions/2026-01-01-old.md"
+        assert summary["new_path"].startswith("decisions/")
         assert summary["new_path"].endswith(".md")
         # jaccard should be a float between 0 and 1, max 3 decimals
         assert isinstance(summary["jaccard"], float)
@@ -520,11 +520,11 @@ class TestCreateDecisionNoteSupersession:
         # tokenize(title+body) yields the same set for both docs.
         title_a = "shared"
         old_body_a = "shared alpha beta gamma delta epsilon"
-        pool_a.decision_rows = [_row("30-decisions/2026-01-01-a.md", old_body_a)]
+        pool_a.decision_rows = [_row("decisions/2026-01-01-a.md", old_body_a)]
         recorder_a, ctx_a = _make_recorder(pool_a, str(tmp_path / "a"))
         result_a = await _call_create(recorder_a, ctx_a, title_a, body_a)
         # H5: auto branch returns "created: <path>" string, not JSON
-        assert result_a.startswith("created: 30-decisions/")
+        assert result_a.startswith("created: decisions/")
         # The transactional UPDATE on the old doc proves the auto branch ran
         assert len(pool_a.in_tx_updates) == 1
 
@@ -533,7 +533,7 @@ class TestCreateDecisionNoteSupersession:
         new_b = "alpha beta gamma delta epsilon zeta eta"
         old_b = "alpha beta gamma delta epsilon zeta eta extra1 extra2 extra3"
         pool_b = _make_pool()
-        pool_b.decision_rows = [_row("30-decisions/2026-01-01-b.md", old_b)]
+        pool_b.decision_rows = [_row("decisions/2026-01-01-b.md", old_b)]
         recorder_b, ctx_b = _make_recorder(pool_b, str(tmp_path / "b"))
         # Use title that adds NO unique tokens (token "alpha" already in body)
         result_b = await _call_create(recorder_b, ctx_b, "alpha", new_b)
@@ -550,7 +550,7 @@ class TestCreateDecisionNoteSupersession:
         # intersection=2, union=4 -> 0.5 (title "topic" adds another disjoint
         # token; let's use "alpha" as title to avoid adding new tokens)
         pool_c = _make_pool()
-        pool_c.decision_rows = [_row("30-decisions/2026-01-01-c.md", old_c)]
+        pool_c.decision_rows = [_row("decisions/2026-01-01-c.md", old_c)]
         recorder_c, ctx_c = _make_recorder(pool_c, str(tmp_path / "c"))
         result_c = await _call_create(recorder_c, ctx_c, "alpha", new_c)
         assert isinstance(result_c, str)
@@ -626,11 +626,11 @@ class TestC4VaultRewrite:
         monkeypatch.delenv("SECOND_BRAIN_SUPERSEDE_HINT", raising=False)
         pool = _make_pool()
         body = "alpha beta gamma delta epsilon zeta eta"
-        old_rel = "30-decisions/2026-01-01-old.md"
+        old_rel = "decisions/2026-01-01-old.md"
         pool.decision_rows = [_row(old_rel, body)]
 
         # Write the original old markdown file on disk so the tool can read it.
-        old_dir = tmp_path / "30-decisions"
+        old_dir = tmp_path / "decisions"
         old_dir.mkdir(parents=True)
         old_abs = old_dir / "2026-01-01-old.md"
         old_abs.write_text(

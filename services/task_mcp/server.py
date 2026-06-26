@@ -151,7 +151,7 @@ async def _get_pool() -> asyncpg.Pool:
     return await get_pool(config)
 
 
-TASKS_WRITE_SCOPE = "10-tasks"
+TASKS_WRITE_SCOPE = "task-board"
 
 
 async def _resolve_caller(ctx: Any, pool: asyncpg.Pool) -> AgentContext:

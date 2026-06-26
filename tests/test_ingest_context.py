@@ -27,7 +27,7 @@ def test_to_passage_inputs_empty() -> None:
 def test_prefix_includes_source_agent_date_title_tags() -> None:
     fm = {"created": "2026-06-24T09:03:01Z", "tags": ["csharp", "ozon"]}
     p = build_context_prefix(
-        path="30-decisions/2026-06-24-c-net.md",
+        path="decisions/2026-06-24-c-net.md",
         source_type="decision",
         agent="polly",
         frontmatter=fm,
@@ -42,7 +42,7 @@ def test_prefix_includes_source_agent_date_title_tags() -> None:
 
 def test_title_falls_back_to_filename_without_h1() -> None:
     p = build_context_prefix(
-        path="80-error-patterns/2026-06-13-tmux-kill-mode.md",
+        path="error-patterns/2026-06-13-tmux-kill-mode.md",
         source_type="error-pattern",
         agent=None,
         frontmatter={},

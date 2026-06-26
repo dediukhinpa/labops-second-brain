@@ -1,4 +1,4 @@
-# 30-decisions
+# decisions
 
 Immutable decision notes with full context. This is the **most-trafficked** folder.
 
@@ -11,7 +11,7 @@ Immutable decision notes with full context. This is the **most-trafficked** fold
 ## What does NOT go here
 
 - Tactical implementation details — those go into runbooks
-- Bug fixes — `80-error-patterns/`
+- Bug fixes — `error-patterns/`
 - Pending proposals (only ship a decision file when the call is made)
 
 ## Why this folder exists
@@ -35,7 +35,7 @@ created: '2026-05-16T10:00:00Z'
 updated: '2026-05-16T10:00:00Z'
 agent: coordinator-agent
 tags: [postgres, indexing]
-related: ['30-decisions/2026-04-10-hnsw-default.md']
+related: ['decisions/2026-04-10-hnsw-default.md']
 superseded_by: null
 ---
 ```

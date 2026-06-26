@@ -1,4 +1,4 @@
-# 60-tasks
+# tasks
 
 Task-board snapshots and archived task histories.
 

@@ -90,7 +90,7 @@ sudo -u second_brain python /opt/second_brain/scripts/issue-agent-token.py \
 
 ```text
 # запись — агент вызывает memory-инструмент
-create_decision_note(title="Use pgvector for recall", body="...", scope="30-decisions")
+create_decision_note(title="Use pgvector for recall", body="...", scope="decisions")
 
 # запрос — агент вызывает recall
 recall(query="как мы храним эмбеддинги")
@@ -206,16 +206,16 @@ flowchart LR
 
 | Scope | Что хранит |
 |---|---|
-| `10-strategy` / `10-system` | стратегия, системные заметки |
-| `15-personal` | про человека: ФИО, навыки, опыт, жизненные ситуации |
-| `20-daily` / `20-metrics` | дневные логи, метрики |
-| `30-decisions` | архитектурные/продуктовые решения |
-| `40-projects` | бизнес: бухгалтерия, договора, регламенты, переписка, коммтайна |
-| `50-external` / `50-knowledge` | внешние источники, исследования, статьи |
-| `60-tasks` | задачи |
-| `70-runbooks` | воспроизводимые процессы |
-| `80-error-patterns` | баги и их фиксы |
-| `90-inbox` | входящее, не разобранное |
+| `strategy` / `system` | стратегия, системные заметки |
+| `personal` | про человека: ФИО, навыки, опыт, жизненные ситуации |
+| `daily` / `metrics` | дневные логи, метрики |
+| `decisions` | архитектурные/продуктовые решения |
+| `projects` | бизнес: бухгалтерия, договора, регламенты, переписка, коммтайна |
+| `external` / `knowledge` | внешние источники, исследования, статьи |
+| `tasks` | задачи |
+| `runbooks` | воспроизводимые процессы |
+| `error-patterns` | баги и их фиксы |
+| `inbox` | входящее, не разобранное |
 
 **RBAC:** у каждого агента — токен в `agent_tokens` с `can_read_scopes` / `can_write_scopes`. `*` = доступ к любому scope. Токены выдаёт `scripts/issue-agent-token.py` (raw-секрет печатается один раз, в БД — sha256).
 
@@ -269,15 +269,15 @@ flowchart LR
 
 | Инструмент | Scope по умолчанию | Что фиксирует |
 |---|---|---|
-| `create_decision_note` | `30-decisions` | архитектурные/продуктовые решения, API-контракты, правила |
-| `create_runbook_note` | `70-runbooks` | воспроизводимые процессы |
-| `create_error_pattern_note` | `80-error-patterns` | баг + фикс + как не повторить |
-| `create_external_note` | `50-external` | внешние источники/исследования (+ `source_url`) |
-| `create_personal_note` | `15-personal` | про человека |
-| `create_project_note` | `40-projects` | про бизнес/проект |
-| `append_daily_log` | `20-daily` | дневной прогресс |
+| `create_decision_note` | `decisions` | архитектурные/продуктовые решения, API-контракты, правила |
+| `create_runbook_note` | `runbooks` | воспроизводимые процессы |
+| `create_error_pattern_note` | `error-patterns` | баг + фикс + как не повторить |
+| `create_external_note` | `external` | внешние источники/исследования (+ `source_url`) |
+| `create_personal_note` | `personal` | про человека |
+| `create_project_note` | `projects` | про бизнес/проект |
+| `append_daily_log` | `daily` | дневной прогресс |
 | `create_handoff` | — | выгрузка перед компакцией/в конце сессии |
-| `supersede_decision` | `30-decisions` | устаревшее решение |
+| `supersede_decision` | `decisions` | устаревшее решение |
 
 Recall: `recall(...)`. Координация: `swarm_*`. Задачи: `task_*`.
 

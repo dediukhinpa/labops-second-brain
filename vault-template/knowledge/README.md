@@ -1,11 +1,11 @@
-# 50-knowledge
+# knowledge
 
 Knowledge base. Compiled artifacts, documentation for agents.
 
 ## What goes here
 
-- Distilled write-ups synthesized from `50-external/` forwards
-- Internal playbooks that are not step-by-step (those go to `70-runbooks/`)
+- Distilled write-ups synthesized from `external/` forwards
+- Internal playbooks that are not step-by-step (those go to `runbooks/`)
 - Glossary entries, concept explanations, reference cards
 - Vendor / API / provider notes (quirks, rate limits, gotchas)
 - Stable how-things-work documentation for your stack
@@ -13,14 +13,14 @@ Knowledge base. Compiled artifacts, documentation for agents.
 
 ## What does NOT go here
 
-- Raw forwards — `50-external/`
-- Step-by-step procedures — `70-runbooks/`
-- Decision records — `30-decisions/`
-- Active project notes — `40-projects/<slug>/notes/`
+- Raw forwards — `external/`
+- Step-by-step procedures — `runbooks/`
+- Decision records — `decisions/`
+- Active project notes — `projects/<slug>/notes/`
 
 ## Promote pipeline
 
-`50-external/` (raw forwards) → reviewer reads + extracts → `50-knowledge/` (distilled). The knowledge file should back-link to all sources it was synthesized from, so future agents can verify provenance.
+`external/` (raw forwards) → reviewer reads + extracts → `knowledge/` (distilled). The knowledge file should back-link to all sources it was synthesized from, so future agents can verify provenance.
 
 ## Typical authors
 
@@ -43,7 +43,7 @@ created: '2026-05-16T10:00:00Z'
 updated: '2026-05-16T10:00:00Z'
 agent: inbox-agent
 tags: [mcp, spec]
-related: ['50-external/2026-05-10-mcp-spec-thread.md']
+related: ['external/2026-05-10-mcp-spec-thread.md']
 ---
 ```
 

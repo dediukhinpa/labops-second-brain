@@ -2,7 +2,7 @@
 """issue-agent-token.py — generate a Bearer token and register it in `agent_tokens`.
 
 Usage:
-    issue-agent-token.py --agent <name> --scopes 'read,write,80-error-patterns'
+    issue-agent-token.py --agent <name> --scopes 'read,write,error-patterns'
     issue-agent-token.py --agent admin --scopes '*'
     issue-agent-token.py --agent <name> --revoke
     issue-agent-token.py --agent <name> --revoke-id <token_sha256_prefix>
@@ -145,7 +145,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument(
         "--scopes",
         default=None,
-        help="comma-separated scopes (e.g. 'read,write,80-error-patterns') or '*' for admin",
+        help="comma-separated scopes (e.g. 'read,write,error-patterns') or '*' for admin",
     )
     parser.add_argument(
         "--read-scopes",

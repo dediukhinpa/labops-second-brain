@@ -1,4 +1,4 @@
-"""Tests for create_personal_note / create_project_note + 15-personal scope.
+"""Tests for create_personal_note / create_project_note + personal scope.
 
 personal/project notes split data by SUBJECT (the human vs the business),
 orthogonal to the structural note types (decision/runbook/error/external).
@@ -74,10 +74,10 @@ async def _call_note(recorder, pool, ctx, tool_name, **kwargs):
 
 # --- scope membership ---
 def test_personal_scope_allowed() -> None:
-    assert "15-personal" in ALLOWED_SCOPES
+    assert "personal" in ALLOWED_SCOPES
 
 def test_projects_scope_allowed() -> None:
-    assert "40-projects" in ALLOWED_SCOPES
+    assert "projects" in ALLOWED_SCOPES
 
 
 # --- gating: both register in core (so all agents get them) ---
@@ -93,13 +93,13 @@ def test_project_note_in_core_surface() -> None:
 async def test_create_personal_note_writes_personal_scope(tmp_path: Path) -> None:
     pool, recorder = FakePool(), ToolRecorder()
     _register(tmp_path, recorder, pool)
-    ctx = AgentContext(agent="polly", write_scopes=["15-personal"], read_scopes=["*"])
+    ctx = AgentContext(agent="polly", write_scopes=["personal"], read_scopes=["*"])
     res = await _call_note(
         recorder, pool, ctx, "create_personal_note",
         title="Boss skill profile", body="Учит Python, 3 мес опыта.", tags=["skills"],
     )
-    assert res.startswith("created: 15-personal/")
-    files = list((tmp_path / "15-personal").glob("*.md"))
+    assert res.startswith("created: personal/")
+    files = list((tmp_path / "personal").glob("*.md"))
     assert files, "expected a personal note file on disk"
     content = files[0].read_text(encoding="utf-8")
     assert "type: personal" in content
@@ -110,8 +110,8 @@ async def test_create_personal_note_writes_personal_scope(tmp_path: Path) -> Non
 async def test_create_personal_note_rbac(tmp_path: Path) -> None:
     pool, recorder = FakePool(), ToolRecorder()
     _register(tmp_path, recorder, pool)
-    ctx = AgentContext(agent="x", write_scopes=["30-decisions"], read_scopes=["*"])
-    with pytest.raises(PermissionError, match="cannot write to 15-personal"):
+    ctx = AgentContext(agent="x", write_scopes=["decisions"], read_scopes=["*"])
+    with pytest.raises(PermissionError, match="cannot write to personal"):
         await _call_note(
             recorder, pool, ctx, "create_personal_note",
             title="t", body="b", tags=[],
@@ -123,13 +123,13 @@ async def test_create_personal_note_rbac(tmp_path: Path) -> None:
 async def test_create_project_note_writes_projects_scope(tmp_path: Path) -> None:
     pool, recorder = FakePool(), ToolRecorder()
     _register(tmp_path, recorder, pool)
-    ctx = AgentContext(agent="christopher", write_scopes=["40-projects"], read_scopes=["*"])
+    ctx = AgentContext(agent="christopher", write_scopes=["projects"], read_scopes=["*"])
     res = await _call_note(
         recorder, pool, ctx, "create_project_note",
         title="Договор с подрядчиком", body="Условия...", tags=["legal"],
     )
-    assert res.startswith("created: 40-projects/")
-    files = list((tmp_path / "40-projects").glob("*.md"))
+    assert res.startswith("created: projects/")
+    files = list((tmp_path / "projects").glob("*.md"))
     assert files, "expected a project note file on disk"
     content = files[0].read_text(encoding="utf-8")
     assert "type: project" in content
@@ -139,8 +139,8 @@ async def test_create_project_note_writes_projects_scope(tmp_path: Path) -> None
 async def test_create_project_note_rbac(tmp_path: Path) -> None:
     pool, recorder = FakePool(), ToolRecorder()
     _register(tmp_path, recorder, pool)
-    ctx = AgentContext(agent="x", write_scopes=["30-decisions"], read_scopes=["*"])
-    with pytest.raises(PermissionError, match="cannot write to 40-projects"):
+    ctx = AgentContext(agent="x", write_scopes=["decisions"], read_scopes=["*"])
+    with pytest.raises(PermissionError, match="cannot write to projects"):
         await _call_note(
             recorder, pool, ctx, "create_project_note",
             title="t", body="b", tags=[],

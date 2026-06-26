@@ -37,8 +37,8 @@ Your own annotations: agreement, disagreement, questions, links to related mater
 
 ## When `compiled: true`
 
-After this entry is synthesized into `50-knowledge/<topic>.md`, flip `compiled: true` in frontmatter and add a back-link below:
+After this entry is synthesized into `knowledge/<topic>.md`, flip `compiled: true` in frontmatter and add a back-link below:
 
 ```
-Compiled into: 50-knowledge/<topic>.md
+Compiled into: knowledge/<topic>.md
 ```

@@ -38,8 +38,8 @@ class TestPathGuard:
     """Tests for services.memory_mcp.path_guard.validate_path."""
 
     def test_valid_path(self, tmp_path: Path) -> None:
-        result = validate_path("30-decisions/my-note.md", str(tmp_path))
-        assert result == (tmp_path / "30-decisions" / "my-note.md").resolve()
+        result = validate_path("decisions/my-note.md", str(tmp_path))
+        assert result == (tmp_path / "decisions" / "my-note.md").resolve()
 
     def test_all_scopes_accepted(self, tmp_path: Path) -> None:
         for scope in ALLOWED_SCOPES:
@@ -55,11 +55,11 @@ class TestPathGuard:
 
     def test_traversal_blocked(self, tmp_path: Path) -> None:
         with pytest.raises(ValueError, match="traversal"):
-            validate_path("30-decisions/../etc/passwd", str(tmp_path))
+            validate_path("decisions/../etc/passwd", str(tmp_path))
 
     def test_tilde_blocked(self, tmp_path: Path) -> None:
         with pytest.raises(ValueError, match="Home expansion"):
-            validate_path("30-decisions/~root", str(tmp_path))
+            validate_path("decisions/~root", str(tmp_path))
 
     def test_absolute_path_blocked(self, tmp_path: Path) -> None:
         with pytest.raises(ValueError, match="Absolute paths"):
@@ -70,13 +70,13 @@ class TestPathGuard:
             validate_path("99-secret/note.md", str(tmp_path))
 
     def test_nested_path(self, tmp_path: Path) -> None:
-        result = validate_path("50-external/twitter/2026-01-01-post.md", str(tmp_path))
-        expected = (tmp_path / "50-external" / "twitter" / "2026-01-01-post.md").resolve()
+        result = validate_path("external/twitter/2026-01-01-post.md", str(tmp_path))
+        expected = (tmp_path / "external" / "twitter" / "2026-01-01-post.md").resolve()
         assert result == expected
 
     def test_scope_only_no_file(self, tmp_path: Path) -> None:
-        result = validate_path("30-decisions", str(tmp_path))
-        assert result == (tmp_path / "30-decisions").resolve()
+        result = validate_path("decisions", str(tmp_path))
+        assert result == (tmp_path / "decisions").resolve()
 
 
 # -----------------------------------------------------------------------
@@ -208,13 +208,13 @@ class TestAuth:
 
         pool.fetchrow = AsyncMock(return_value={
             "agent": "coder-agent",
-            "can_write_scopes": ["30-decisions", "70-runbooks"],
+            "can_write_scopes": ["decisions", "runbooks"],
             "can_read_scopes": ["*"],
         })
 
         ctx = await authenticate(token, pool)
         assert ctx.agent == "coder-agent"
-        assert "30-decisions" in ctx.write_scopes
+        assert "decisions" in ctx.write_scopes
         assert "*" in ctx.read_scopes
 
         call_args = pool.fetchrow.call_args
@@ -243,21 +243,21 @@ class TestAuth:
 
     def test_check_write_scope_wildcard(self) -> None:
         ctx = AgentContext(agent="admin", write_scopes=["*"], read_scopes=[])
-        assert check_write_scope(ctx, "30-decisions") is True
+        assert check_write_scope(ctx, "decisions") is True
         assert check_write_scope(ctx, "anything") is True
 
     def test_check_write_scope_specific(self) -> None:
         ctx = AgentContext(
             agent="limited",
-            write_scopes=["30-decisions"],
+            write_scopes=["decisions"],
             read_scopes=[],
         )
-        assert check_write_scope(ctx, "30-decisions") is True
-        assert check_write_scope(ctx, "70-runbooks") is False
+        assert check_write_scope(ctx, "decisions") is True
+        assert check_write_scope(ctx, "runbooks") is False
 
     def test_check_write_scope_empty(self) -> None:
         ctx = AgentContext(agent="readonly", write_scopes=[], read_scopes=["*"])
-        assert check_write_scope(ctx, "30-decisions") is False
+        assert check_write_scope(ctx, "decisions") is False
 
 
 # -----------------------------------------------------------------------
@@ -798,7 +798,7 @@ class TestSlotTools:
     async def test_slot_create_requires_slots_write_scope(self) -> None:
         pool = FakePool()
         recorder, agent_ctx = _register_slot_tools(
-            pool, write_scopes=["30-decisions"]
+            pool, write_scopes=["decisions"]
         )
 
         with patch(

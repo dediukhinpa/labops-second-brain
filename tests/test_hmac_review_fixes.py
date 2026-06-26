@@ -76,7 +76,7 @@ def _hmac_row(
 ) -> dict[str, Any]:
     return {
         "agent": agent,
-        "can_write_scopes": write_scopes or ["30-decisions"],
+        "can_write_scopes": write_scopes or ["decisions"],
         "can_read_scopes": read_scopes if read_scopes is not None else ["*"],
         "hmac_secret_sha256": hashlib.sha256(secret.encode("utf-8")).hexdigest(),
     }
@@ -113,7 +113,7 @@ async def test_audit_uses_authenticated_agent_not_param(
     av = HmacAuthValue(signature=sig, timestamp=str(ts), body=body)
 
     pool = _FakePool(
-        hmac_rows=[_hmac_row("iris", secret, write_scopes=["30-decisions"])]
+        hmac_rows=[_hmac_row("iris", secret, write_scopes=["decisions"])]
     )
 
     tok = _REQUEST_AUTH.set(av)
@@ -233,18 +233,18 @@ async def test_resolve_request_identity_threads_kill_switch(
 
 
 def test_restrict_read_scopes_intersects_with_token() -> None:
-    """C3: token with scopes=['30-decisions'] cannot request '70-runbooks'."""
-    ctx = AgentContext(agent="iris", write_scopes=[], read_scopes=["30-decisions"])
+    """C3: token with scopes=['decisions'] cannot request 'runbooks'."""
+    ctx = AgentContext(agent="iris", write_scopes=[], read_scopes=["decisions"])
     # Allowed.
-    assert restrict_read_scopes(ctx, ["30-decisions"]) == ["30-decisions"]
+    assert restrict_read_scopes(ctx, ["decisions"]) == ["decisions"]
     # Forbidden.
     with pytest.raises(PermissionError, match="cannot read"):
-        restrict_read_scopes(ctx, ["70-runbooks"])
+        restrict_read_scopes(ctx, ["runbooks"])
     # Mixed → intersection only.
     out = restrict_read_scopes(
-        ctx, ["30-decisions", "70-runbooks"]
+        ctx, ["decisions", "runbooks"]
     )
-    assert out == ["30-decisions"]
+    assert out == ["decisions"]
 
 
 def test_recall_rejects_star_for_non_wildcard_token() -> None:
@@ -257,21 +257,21 @@ def test_recall_rejects_star_for_non_wildcard_token() -> None:
     restricted = AgentContext(
         agent="iris",
         write_scopes=[],
-        read_scopes=["30-decisions", "70-runbooks"],
+        read_scopes=["decisions", "runbooks"],
     )
     out = restrict_read_scopes(restricted, ["*"])
-    assert out == ["30-decisions", "70-runbooks"]
+    assert out == ["decisions", "runbooks"]
     # None has the same effect for a restricted token.
-    assert restrict_read_scopes(restricted, None) == ["30-decisions", "70-runbooks"]
+    assert restrict_read_scopes(restricted, None) == ["decisions", "runbooks"]
 
 
 def test_check_read_scope_wildcard_and_explicit() -> None:
     """C3: check_read_scope honors wildcard and explicit scope membership."""
     wild = AgentContext(agent="nova", write_scopes=[], read_scopes=["*"])
     assert check_read_scope(wild, "anything") is True
-    only = AgentContext(agent="iris", write_scopes=[], read_scopes=["30-decisions"])
-    assert check_read_scope(only, "30-decisions") is True
-    assert check_read_scope(only, "70-runbooks") is False
+    only = AgentContext(agent="iris", write_scopes=[], read_scopes=["decisions"])
+    assert check_read_scope(only, "decisions") is True
+    assert check_read_scope(only, "runbooks") is False
 
 
 @pytest.mark.asyncio
@@ -287,7 +287,7 @@ async def test_recall_restricts_to_read_scopes_via_bearer(
 
     # Stub auth to a restricted token.
     restricted = AgentContext(
-        agent="iris", write_scopes=[], read_scopes=["30-decisions"]
+        agent="iris", write_scopes=[], read_scopes=["decisions"]
     )
 
     async def _fake_resolve(_var, _pool, **_kw):
@@ -316,9 +316,9 @@ async def test_recall_restricts_to_read_scopes_via_bearer(
     )
     recall_fn = captured[0]  # first registered tool is `recall`
 
-    # Restricted token cannot request 70-runbooks.
+    # Restricted token cannot request runbooks.
     with pytest.raises(PermissionError, match="cannot read"):
-        await recall_fn(query="anything", limit=5, scopes=["70-runbooks"])
+        await recall_fn(query="anything", limit=5, scopes=["runbooks"])
 
 
 @pytest.mark.asyncio
@@ -332,7 +332,7 @@ async def test_get_authorizes_target_doc_scope(
     from services.recall_mcp import search as rmod
 
     restricted = AgentContext(
-        agent="iris", write_scopes=[], read_scopes=["30-decisions"]
+        agent="iris", write_scopes=[], read_scopes=["decisions"]
     )
 
     async def _fake_resolve(_var, _pool, **_kw):
@@ -342,12 +342,12 @@ async def test_get_authorizes_target_doc_scope(
 
     pool = _FakePool(
         doc_row={
-            "path": "70-runbooks/x.md",
+            "path": "runbooks/x.md",
             "frontmatter": {},
             "body": "secret body",
             "source_type": "runbook",
             "agent": "nova",
-            "scope": "70-runbooks",
+            "scope": "runbooks",
             "created_at": None,
             "updated_at": None,
         }
@@ -374,7 +374,7 @@ async def test_get_authorizes_target_doc_scope(
     # Order of registration: recall, recent, related, get, stats, reindex_check.
     get_fn = captured[3]
     with pytest.raises(PermissionError, match="cannot read scope"):
-        await get_fn(path="70-runbooks/x.md")
+        await get_fn(path="runbooks/x.md")
 
 
 @pytest.mark.asyncio
@@ -385,7 +385,7 @@ async def test_get_allows_target_scope_when_in_read_scopes(
     from services.recall_mcp import search as rmod
 
     ctx = AgentContext(
-        agent="iris", write_scopes=[], read_scopes=["30-decisions"]
+        agent="iris", write_scopes=[], read_scopes=["decisions"]
     )
 
     async def _fake_resolve(_var, _pool, **_kw):
@@ -395,12 +395,12 @@ async def test_get_allows_target_scope_when_in_read_scopes(
 
     pool = _FakePool(
         doc_row={
-            "path": "30-decisions/x.md",
+            "path": "decisions/x.md",
             "frontmatter": {},
             "body": "allowed body",
             "source_type": "decision",
             "agent": "iris",
-            "scope": "30-decisions",
+            "scope": "decisions",
             "created_at": None,
             "updated_at": None,
         }
@@ -425,7 +425,7 @@ async def test_get_allows_target_scope_when_in_read_scopes(
         tool_set="all",
     )
     get_fn = captured[3]
-    result = await get_fn(path="30-decisions/x.md")
+    result = await get_fn(path="decisions/x.md")
     assert result is not None
     assert result["body"] == "allowed body"
 
@@ -473,7 +473,7 @@ async def test_memory_create_decision_note_real_handler_via_hmac(
         async def fetch(self, query, *args):
             # HMAC candidate fetch
             if "hmac_secret_sha256" in query:
-                return [_hmac_row("iris", secret, write_scopes=["30-decisions"])]
+                return [_hmac_row("iris", secret, write_scopes=["decisions"])]
             # No supersession candidates
             return list(self._candidates)
 
@@ -686,7 +686,7 @@ async def test_tampered_signature_blocks_before_domain_write(
         async def fetch(self, query, *args):
             if "hmac_secret_sha256" in query:
                 self.fetch_calls += 1
-                return [_hmac_row("iris", secret, write_scopes=["30-decisions"])]
+                return [_hmac_row("iris", secret, write_scopes=["decisions"])]
             raise AssertionError(
                 "fetch() called after auth failure — domain write occurred"
             )
@@ -734,8 +734,8 @@ async def test_tampered_signature_blocks_before_domain_write(
         tmod._REQUEST_AUTH.reset(tok)
 
     # Vault must be untouched.
-    assert not (tmp_path / "30-decisions").exists() or not any(
-        (tmp_path / "30-decisions").iterdir()
+    assert not (tmp_path / "decisions").exists() or not any(
+        (tmp_path / "decisions").iterdir()
     )
     # Only the HMAC candidate fetch happened — no domain reads/writes.
     assert pool.fetch_calls == 1

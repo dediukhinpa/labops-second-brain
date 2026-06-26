@@ -1,4 +1,4 @@
-# 20-daily
+# daily
 
 Cross-agent daily timeline. Append-only narrative log of what happened.
 
@@ -32,12 +32,12 @@ related: []
 ## coordinator-agent
 
 - Reviewed weekly metrics, flagged drop in inbox-agent throughput
-- Created decision `30-decisions/2026-05-16-add-rate-limit.md`
+- Created decision `decisions/2026-05-16-add-rate-limit.md`
 
 ## coder-agent
 
 - Shipped Caddy migration to `mcp.example.com`
-- Smoke tests green; see `70-runbooks/2026-05-16-domain-migration.md`
+- Smoke tests green; see `runbooks/2026-05-16-domain-migration.md`
 
 ## inbox-agent
 

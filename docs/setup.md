@@ -157,11 +157,11 @@ On the VPS:
 cd /opt/second_brain
 sudo -u second_brain python scripts/issue-agent-token.py \
   --agent coordinator-agent \
-  --scopes '20-daily,30-decisions,50-external,50-knowledge,70-runbooks,80-error-patterns,90-inbox'
+  --scopes 'daily,decisions,external,knowledge,runbooks,error-patterns,inbox'
 
 sudo -u second_brain python scripts/issue-agent-token.py \
   --agent inbox-agent \
-  --scopes '30-decisions,50-external,50-knowledge,90-inbox'
+  --scopes 'decisions,external,knowledge,inbox'
 ```
 
 Each command prints the token once. Copy both to your password manager immediately.
@@ -326,7 +326,7 @@ On your phone or desktop Telegram:
 3. From your Claude Code agent (configured with the coordinator-agent token in `.claude/.mcp.json`), call:
 
    ```
-   recall.recent(scope="50-external", limit=5)
+   recall.recent(scope="external", limit=5)
    ```
 
 4. The URL must appear with `agent: inbox-agent` and a recent `created_at`.
@@ -390,9 +390,9 @@ sudo -u second_brain python /opt/second_brain/scripts/issue-agent-token.py \
 
 Default scope sets per role:
 
-- `coordinator-agent`: `20-daily,30-decisions,50-external,50-knowledge,70-runbooks,80-error-patterns,90-inbox`
-- `coder-agent`: `30-decisions,50-knowledge,70-runbooks,80-error-patterns,90-inbox`
-- `marketer-agent`: `20-daily,50-knowledge,90-inbox`
+- `coordinator-agent`: `daily,decisions,external,knowledge,runbooks,error-patterns,inbox`
+- `coder-agent`: `decisions,knowledge,runbooks,error-patterns,inbox`
+- `marketer-agent`: `daily,knowledge,inbox`
 - `researcher-agent` (recall-only): `--scopes ''` (empty — recall always works, but no writes)
 
 The script prints the token **once**. Save it to your password manager. **Do not reuse tokens across agents** — each one has its own identity row for audit purposes.
@@ -454,7 +454,7 @@ Expected behaviour:
 1. The CLI opens cleanly.
 2. The SessionStart hook runs (you can confirm via `tail ~/.claude-lab/<agent-id>/.claude/logs/session-start.log`).
 3. Ask the agent: "What is your role?" — it should respond with the role you set in step 11.
-4. Ask the agent: "Recall recent entries from scope 50-external." — it should call `second_brain-recall.recent` and return results (at minimum, the URL you forwarded in step 10 of Path A).
+4. Ask the agent: "Recall recent entries from scope external." — it should call `second_brain-recall.recent` and return results (at minimum, the URL you forwarded in step 10 of Path A).
 
 If recall returns 0 results despite the brain having data:
 

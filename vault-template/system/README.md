@@ -1,4 +1,4 @@
-# 10-system
+# system
 
 System configs, infra notes, environment topology.
 
@@ -10,13 +10,13 @@ System configs, infra notes, environment topology.
 - Service catalog: which systemd units exist on which host
 - Credentials INDEX (never the secrets themselves — only pointers to where they live)
 - Backup strategy: what is backed up, where, retention
-- Disaster recovery procedures (high level — detailed steps in `70-runbooks/`)
+- Disaster recovery procedures (high level — detailed steps in `runbooks/`)
 
 ## What does NOT go here
 
 - Actual secrets, tokens, passwords — those go in `${INSTALL_DIR}/secrets/` (mode 0600) and a password manager
-- Incident write-ups — `80-error-patterns/`
-- One-off operational decisions — `30-decisions/`
+- Incident write-ups — `error-patterns/`
+- One-off operational decisions — `decisions/`
 
 ## Typical authors
 

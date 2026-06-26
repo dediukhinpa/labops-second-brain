@@ -1,4 +1,4 @@
-# 80-error-patterns
+# error-patterns
 
 Incidents + fixes. **Weighted 3.0× in recall** — this folder is the team's institutional muscle memory.
 
@@ -12,9 +12,9 @@ Incidents + fixes. **Weighted 3.0× in recall** — this folder is the team's in
 
 ## What does NOT go here
 
-- Step-by-step procedures — those go to `70-runbooks/`
-- Decisions made in response — `30-decisions/`
-- General knowledge — `50-knowledge/`
+- Step-by-step procedures — those go to `runbooks/`
+- Decisions made in response — `decisions/`
+- General knowledge — `knowledge/`
 
 ## Why weight 3.0×
 
@@ -39,7 +39,7 @@ created: '2026-05-16T10:00:00Z'
 updated: '2026-05-16T10:00:00Z'
 agent: coder-agent
 tags: [mcp, auth, asgi]
-related: ['30-decisions/2026-05-16-drop-fallback-token.md']
+related: ['decisions/2026-05-16-drop-fallback-token.md']
 weight: 3.0
 severity: high
 ---

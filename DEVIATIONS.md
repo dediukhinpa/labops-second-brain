@@ -405,3 +405,26 @@ Net: +19. Removed: 8 dead `_extract_token` tests. Added:
 * +1 modified (test_hmac_constant_time_no_agent_ordering_leak,
   exact-count assertion).
 
+
+## Vault scopes: numbered → semantic names
+
+Vault scopes used Johnny-Decimal-style numeric prefixes (`30-decisions`,
+`90-inbox`). The numbers were opaque to the system (RBAC / recall / ingest treat a
+scope as an opaque string) and applied inconsistently — duplicate prefixes
+(`10-strategy`/`10-system`), a board scope `10-tasks` clashing with a folder
+`60-tasks`, and `15-personal` used in code but absent from `vault-template/`.
+
+Scopes are now plain semantic names: `strategy, system, personal, daily, metrics,
+decisions, projects, external, knowledge, tasks, runbooks, error-patterns, inbox`
+plus the board-only RBAC scope `task-board` (was `10-tasks`) and the meta scopes
+`_templates` / `slots`.
+
+* Canonical set + aliases: `services/shared/scopes.py` (`normalize_scope`,
+  `scope_equivalents`). The numbered names remain accepted at runtime — RBAC
+  (`auth.check_*_scope`, `restrict_read_scopes`), the path guard, and the recall
+  scope filter all normalise, so existing tokens and on-disk paths keep working.
+* Persisted values are made canonical by `migrations/007_scope_rename.sql`
+  (`documents.scope`, `documents.path`, `agent_tokens.can_*_scopes`). Idempotent;
+  safe to run with services live. After it runs the alias layer is a no-op.
+* `vault-template/` folders renamed; `personal/` added (closes the code↔template
+  drift). New unit test `tests/test_scopes.py` (6 checks; collection now 430).
