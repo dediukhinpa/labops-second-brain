@@ -1,0 +1,31 @@
+<svg width="50" height="52" viewBox="0 0 50 52" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <defs>
+    <linearGradient id="flaskGrad" x1="6" y1="4" x2="44" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8B5CF6"/>
+      <stop offset="1" stop-color="#B07FE8"/>
+    </linearGradient>
+  </defs>
+  <!-- Liquid fill -->
+  <path d="M18.2 30 Q26 27.4 33.8 30 L39.5 42 Q41 46 37 46 H15 Q11 46 12.5 42 Z" fill="url(#flaskGrad)" opacity="0.92"/>
+  <!-- Liquid surface highlight -->
+  <path d="M18.6 30 Q26 27.6 33.4 30" stroke="#ffffff" stroke-width="1.3" stroke-linecap="round" opacity="0.55"/>
+  <!-- Flask outline -->
+  <path d="M20 7 H32 M22.5 7 V21 L12.5 42 Q11 46 15 46 H37 Q41 46 39.5 42 L29.5 21 V7" stroke="url(#flaskGrad)" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+  <!-- Measurement ticks -->
+  <g stroke="url(#flaskGrad)" stroke-width="1.6" stroke-linecap="round">
+    <path d="M16.8 26 H19.4"/>
+    <path d="M14.4 31 H17"/>
+    <path d="M12 36 H14.6"/>
+  </g>
+  <!-- Bubbles -->
+  <g fill="#ffffff" opacity="0.85">
+    <circle cx="23" cy="39" r="1.4"/>
+    <circle cx="29.5" cy="42" r="1"/>
+    <circle cx="26" cy="44" r="0.8"/>
+  </g>
+  <!-- Dashed line to molecule -->
+  <path d="M31.5 9 L41 5" stroke="url(#flaskGrad)" stroke-width="1.3" stroke-dasharray="2 2" stroke-linecap="round" opacity="0.75"/>
+  <!-- Molecule circle -->
+  <circle cx="44" cy="4.2" r="2.4" fill="#ffffff" stroke="url(#flaskGrad)" stroke-width="1.4"/>
+  <path d="M44 3 V5.4 M42.8 4.2 H45.2" stroke="url(#flaskGrad)" stroke-width="0.9" stroke-linecap="round"/>
+</svg>

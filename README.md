@@ -1,4 +1,23 @@
-# labops-second-brain
+<p align="center">
+  <img src="assets/labops-logo.svg" alt="LabOps.ai" width="96">
+</p>
+
+<h1 align="center">labops-second-brain</h1>
+
+<p align="center"><em>операционка с AI изнутри профессии</em></p>
+
+<p align="center">
+  <a href="https://labopsai.pro"><img src="https://img.shields.io/badge/%F0%9F%8C%90%20labopsai.pro-6E56CF?style=for-the-badge" alt="labopsai.pro"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-Proprietary-CC2B2B?style=for-the-badge" alt="License: Proprietary"></a>
+  <img src="https://img.shields.io/badge/Built%20by-LabOps.ai-111111?style=for-the-badge" alt="Built by LabOps.ai">
+</p>
+
+<p align="center">
+  <b>Система labops:</b>
+  <a href="https://github.com/dediukhinpa/labops-tg-plugin">tg-plugin</a> ·
+  <b>second-brain</b> ·
+  <a href="https://github.com/dediukhinpa/labops-agent-architecture">agent-architecture</a>
+</p>
 
 > **Общий мозг команды Claude Code-агентов.** Self-hosted на одном VPS: Postgres 16 + pgvector, набор MCP-серверов (память, гибридный recall, координация роя, задачи) и фоновые воркеры. Markdown-vault как единый источник правды + семантический поиск поверх него. Часть архитектуры **labops** (см. [`labops-tg-plugin`](#связанные-репозитории) и [`labops-agent-architecture`](#связанные-репозитории)).
 
@@ -289,4 +308,4 @@ python -m pytest tests/ -q
 
 ## Лицензия
 
-Apache 2.0 — см. [LICENSE](LICENSE).
+Проприетарная (Proprietary) — © 2026 LabOps.ai. Все права защищены. См. [LICENSE](LICENSE).
