@@ -32,5 +32,5 @@ secret-scan guards to catch accidental commits.
 
 ## Supported versions
 
-Security fixes target the latest commit on the default branch (`master`). There are
+Security fixes target the latest commit on the default branch (`main`). There are
 no separately maintained release branches at this time.
