@@ -297,8 +297,9 @@ sudo bash scripts/install.sh
 Idempotent steps: platform check → apt (Python 3.11, Postgres 16 + pgvector, Caddy) → system user `second_brain` → `/opt/second_brain` + venv → role/DB + `vector` extension → secrets (0600) → migrations → preload the embedding model (`multilingual-e5-large`, ~1.3 GB) → render and install the systemd units → `systemctl enable --now` → **smoke-test** → print the admin token.
 
 **Dependency on the other repos:**
-- If **agents already exist** on the machine ([`labops-agent-architecture`](#part-of-labops) is installed) — the installer additionally registers their tokens (`issue-agent-token.py`) without overwriting existing ones.
-- If the brain is installed **first** — agent tokens are issued later, when the agents are installed.
+- The canonical install order is `labops-agent-architecture` → `labops-tg-plugin` → `labops-second-brain`: `labops-agent-architecture`'s `install.sh` clones this repo to `~/labops-second-brain` and runs `scripts/install.sh` for you (with a confirmation prompt, since it's a root-level provisioning step).
+- If this repo (or any of the three `labops-*` repos) is private, cloning it standalone (or letting `labops-agent-architecture` clone it) on a machine with no `gh` CLI and no SSH key configured requires a `GITHUB_TOKEN` env var (fine-grained PAT, `Contents: Read` on this repo, issued from the repo-owner GitHub account).
+- If **agents already exist** on the machine (`labops-agent-architecture` is installed) — the installer additionally registers their tokens (`issue-agent-token.py`) without overwriting existing ones.
 
 The install is considered successful only when the **smoke-test** at the end is green.
 

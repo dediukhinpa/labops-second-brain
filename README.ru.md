@@ -297,8 +297,9 @@ sudo bash scripts/install.sh
 Идемпотентные шаги: проверка платформы → apt (Python 3.11, Postgres 16 + pgvector, Caddy) → системный пользователь `second_brain` → `/opt/second_brain` + venv → роль/БД + расширение `vector` → секреты (0600) → миграции → предзагрузка модели эмбеддингов (`multilingual-e5-large`, ~1.3 ГБ) → рендер и установка systemd-юнитов → `systemctl enable --now` → **smoke-test** → печать admin-токена.
 
 **Зависимость от других репо:**
+- Канонический порядок установки: `labops-agent-architecture` → `labops-tg-plugin` → `labops-second-brain`: `install.sh` из `labops-agent-architecture` клонирует этот репо в `~/labops-second-brain` и сам запускает `scripts/install.sh` (с запросом подтверждения, так как это root-уровень подготовки сервера).
+- Если этот репо (или любой из трёх `labops-*`) приватный — при клонировании вручную (или через `labops-agent-architecture`) на машине без `gh` CLI и без SSH-ключа потребуется переменная `GITHUB_TOKEN` (fine-grained PAT, права `Contents: Read` на этот репо, выдаётся от аккаунта владельца репо на GitHub).
 - Если на машине **уже есть агенты** (поставлен [`labops-agent-architecture`](#часть-labops)) — установщик до-регистрирует их токены (`issue-agent-token.py`), не перетирая существующие.
-- Если мозг ставится **первым** — токены агентам выдаются позже, при установке агентов.
 
 Установка считается успешной только при зелёном **smoke-test** в конце.
 
