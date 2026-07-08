@@ -52,10 +52,18 @@ A single agent remembers its own session. A team of agents does not: knowledge g
 > [!TIP]
 > If you have no time to read — this is the necessary and sufficient set.
 
-**1. Run the installer** on a clean Ubuntu 22.04+ host as root. It installs Postgres 16 + pgvector from `apt.postgresql.org` for you:
+**1. Run the installer** on a clean Ubuntu 22.04+ host as root. It installs Postgres 16 + pgvector from `apt.postgresql.org` for you. Pick one:
 
 ```bash
+# a) manually:
 sudo bash scripts/install.sh
+
+# b) or hand it to a Claude Code agent (it follows AGENT.md and asks you to
+#    confirm destructive steps — root-level provisioning, systemd units, etc.):
+cd labops-second-brain && claude
+#   in the session, paste:
+#   "Прочитай и выполни инструкции из AGENT.md — разверни Second Brain,
+#    Path A (VPS + inbox-agent). Подтверждай со мной каждый деструктивный шаг."
 ```
 
 **2. Fill in only the required variables** in `.env` (everything else is generated / optional — see the Quick Start block at the top of [`.env.example`](.env.example)):
@@ -297,7 +305,7 @@ sudo bash scripts/install.sh
 Idempotent steps: platform check → apt (Python 3.11, Postgres 16 + pgvector, Caddy) → system user `second_brain` → `/opt/second_brain` + venv → role/DB + `vector` extension → secrets (0600) → migrations → preload the embedding model (`multilingual-e5-large`, ~1.3 GB) → render and install the systemd units → `systemctl enable --now` → **smoke-test** → print the admin token.
 
 **Dependency on the other repos:**
-- The canonical install order is `labops-agent-architecture` → `labops-tg-plugin` → `labops-second-brain`: `labops-agent-architecture`'s `install.sh` clones this repo to `~/labops-second-brain` and runs `scripts/install.sh` for you (with a confirmation prompt, since it's a root-level provisioning step).
+- The canonical install order is `labops-agent-architecture` → `labops-tg-plugin` → `labops-second-brain` — but these are three **separate** `install.sh` scripts, each run by the operator. `labops-agent-architecture`'s `install.sh` only **clones** this repo to `~/labops-second-brain`; it does **not** run `scripts/install.sh` for you. You install this repo yourself, either manually (`sudo bash scripts/install.sh`) or by handing it to a Claude Code agent with the `AGENT.md` prompt — see step 1 above.
 - If this repo (or any of the three `labops-*` repos) is private, cloning it standalone (or letting `labops-agent-architecture` clone it) on a machine with no `gh` CLI and no SSH key configured requires a `GITHUB_TOKEN` env var (fine-grained PAT, `Contents: Read` on this repo, issued from the repo-owner GitHub account).
 - If **agents already exist** on the machine (`labops-agent-architecture` is installed) — the installer additionally registers their tokens (`issue-agent-token.py`) without overwriting existing ones.
 
