@@ -113,6 +113,7 @@ Plain markdown on a filesystem, mounted at `${VAULT_ROOT}` (default `/opt/second
 |---|---|
 | `strategy/` | Long-horizon plans, OKRs, north-star definitions |
 | `system/` | How the system itself is configured (your own ops notes) |
+| `personal/` | Notes about the person: name, skills, experience, life situations |
 | `daily/` | One file per day, append-only |
 | `metrics/` | Numeric snapshots (subscriber counts, MRR, conversion rates) |
 | `decisions/` | One file per architectural or product decision |

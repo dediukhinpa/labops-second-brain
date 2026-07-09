@@ -10,6 +10,7 @@ Folders use plain semantic names (no numeric prefixes). Each folder has a single
 |---|---|---|
 | `strategy/` | Long-term mission, milestones, north-star artifacts | owner, coordinator-agent |
 | `system/` | System configs, infra notes, environment topology | coder-agent, reviewer-agent |
+| `personal/` | Notes about the person: name, skills, experience, life situations | inbox-agent, coordinator-agent |
 | `daily/` | Cross-agent daily timeline (append-only log) | every agent |
 | `metrics/` | Monitoring exports, KPI snapshots, dashboards | inbox-agent, coordinator-agent |
 | `decisions/` | Immutable decision notes with full context | every agent (most trafficked) |

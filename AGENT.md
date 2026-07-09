@@ -147,7 +147,7 @@ If the user is undecided after reading this section, default to Path A and expli
 
 | Service | Port | Purpose | Scopes it writes |
 |---|---|---|---|
-| `memory_mcp` | 5001 | Write tools: create decision, error-pattern, external note, daily log entry | daily, decisions, external, knowledge, error-patterns, inbox |
+| `memory_mcp` | 5001 | Write tools: create decision, error-pattern, personal note, project note, external note, daily log entry | daily, decisions, external, knowledge, error-patterns, personal, projects, inbox |
 | `memory_router_mcp` | 5002 | Read tools: recall (hybrid search), recent, related, get-by-id, stats | none (read-only) |
 | `agent_router_mcp` | 5000 | Inter-agent event bus: notify, ack, list-pending, broadcast | none (writes to `outbox` table only) |
 
