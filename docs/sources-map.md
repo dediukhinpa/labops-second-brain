@@ -122,16 +122,16 @@ msg = client.messages.create(model="claude-sonnet-4-5", max_tokens=512,
 | Proxy     | [Caddy 2](https://caddyserver.com/docs/)     | [Nginx](https://nginx.org/en/docs/) + [Certbot](https://eff-certbot.readthedocs.io/) | Free | Automatic HTTPS via Let's Encrypt. |
 | Proxy     | [Caddy 2](https://caddyserver.com/docs/)     | [Traefik](https://doc.traefik.io/traefik/)                           | Free | Strong if you live in Docker.      |
 
-Caddy is the right default because TLS certificates renew themselves with zero
-configuration and the config file syntax fits on a postcard. Nginx is the
-incumbent and has the broadest tutorial coverage on the public internet, but
-you'll write more lines of config and run Certbot separately. Traefik shines
-inside a Docker Swarm or Kubernetes cluster where service discovery matters;
-for a single VM running a handful of services, it's overkill.
+A reverse proxy is **not installed by `install.sh`** — the three MCP services bind to `127.0.0.1` only by default, which is all a colocated agent needs. If you specifically need to expose second_brain to the public internet via a domain (remote agents that cannot use Tailscale), you set up the proxy yourself as a manual, self-managed step. The rationale below applies to that case.
+
+Caddy is a reasonable choice for that manual step because TLS certificates renew themselves with zero configuration and the config file syntax fits on a postcard. Nginx is the incumbent with the broadest tutorial coverage, but you'll write more lines of config and run Certbot separately. Traefik shines inside a Docker Swarm or Kubernetes cluster; for a single VM it's overkill.
+
+One important constraint: **disable proxy-level response buffering** — the `streamable-http` MCP transport requires that. In Caddy use `flush_interval -1`; in nginx use `proxy_buffering off`. Also use DNS-only (no orange cloud) if the domain is on Cloudflare — the proxy buffers SSE.
 
 ```caddy
 brain.example.com {
-    reverse_proxy 127.0.0.1:8000
+    reverse_proxy 127.0.0.1:5001  # example for memory_mcp; repeat per service
+    flush_interval -1
 }
 ```
 
@@ -275,7 +275,7 @@ than the difference.
 | Database         | Postgres 16 + pgvector            |
 | Embeddings       | FastEmbed (`bge-small-en-v1.5`)   |
 | LLM              | Anthropic Claude API              |
-| Reverse proxy    | Caddy                             |
+| Reverse proxy    | Caddy (manual, only if you need public external access) |
 | Supervisor       | systemd                           |
 | Backup           | restic to Backblaze B2            |
 | Telegram         | Bot API via aiogram first; add Telethon later if you want passive ingestion |
@@ -287,7 +287,4 @@ answer in two years. Start here. Replace components only when you can describe
 the specific pain that pushed you out — "Postgres is slow" is not a reason;
 "we have 50M vectors and pgvector recall is 60% at p95 200ms" is.
 
-The fastest path from zero to working: provision the VM, install Postgres,
-install Caddy, point a domain at the VM, get an Anthropic API key, clone this
-repo, run the setup script. Skip every optional extra. Add complexity only
-when the system tells you it needs it.
+The fastest path from zero to working: provision the VM, get an Anthropic API key, clone this repo, run the setup script. The MCP services bind to `127.0.0.1` by default — no reverse proxy or domain needed to start. Add Caddy (or another proxy) only if you later need to reach the brain from outside the VPS without Tailscale. Skip every optional extra. Add complexity only when the system tells you it needs it.

@@ -9,7 +9,7 @@ What this system protects, what it does not, and how to keep an unintentional mi
 **What is protected:**
 
 - All traffic to MCP services is Bearer-authenticated. A request without a valid `Authorization: Bearer <token>` header returns 401. A token whose scopes do not include the target write folder returns 403.
-- Caddy + Let's Encrypt provides TLS for all public-facing traffic. Bearer tokens never traverse plain HTTP in normal operation.
+- MCP services bind `127.0.0.1` only by default — nothing is public-facing. If you add your own reverse proxy for external access, TLS is on you to configure (see docs/architecture.md for the note on external HTTPS access). Bearer tokens should never traverse plain HTTP on a public network.
 - Postgres is reachable only on localhost (`pg_hba.conf` default in Ubuntu's `postgresql-16` package). Services authenticate to it with a password.
 - The vault is filesystem-owned by the `second_brain` system user, mode 750. Only `second_brain` and root can read.
 
@@ -92,25 +92,14 @@ grep -l 'MCP-FALLBACK-TOKEN\|FALLBACK-AGENT' services/
 
 ## Network exposure
 
-There are two supported topologies. Pick one.
+There are two recommended topologies. Pick one.
 
-### Option A: public domain with Caddy + TLS
+### Option A: colocated or Tailscale-only (default, recommended)
 
-```
-internet ---> :443 Caddy ---> :5001/8/6 (localhost) MCP services
-```
-
-- UFW rules: `ufw allow 80/tcp` (ACME challenge), `ufw allow 443/tcp`, `ufw default deny incoming`.
-- MCP services bind `127.0.0.1` only (`MCP_HOST=127.0.0.1`).
-- Postgres binds `127.0.0.1` only (default).
-- SSH on 22 is the only other open port. Restrict to your IP or a jumphost if possible.
-
-This is the recommended default. TLS + Bearer is layered defense — neither alone is sufficient; both together raise the cost of attack significantly.
-
-### Option B: Tailscale-only, no public exposure
+The default install binds all MCP services to `127.0.0.1` only. Nothing is public-facing. Agents on the same VPS reach the brain directly. Agents on a different machine connect over Tailscale:
 
 ```
-your devices on tailnet ---> 100.x.y.z:5001/8/6 MCP services (Tailscale IP only)
+your devices on tailnet ---> 100.x.y.z:5001/5002/5000 MCP services (Tailscale IP only)
 ```
 
 - No port 80/443 exposed publicly.
@@ -118,11 +107,26 @@ your devices on tailnet ---> 100.x.y.z:5001/8/6 MCP services (Tailscale IP only)
 - UFW default deny incoming, allow only from `100.0.0.0/8`.
 - Bearer auth still required — Tailscale auth ≠ MCP auth, they layer.
 
-Tailscale-only is appropriate when (a) you do not have a domain or do not want public TLS, (b) you accept that any agent must be on the tailnet to reach the brain, (c) you trust Tailscale's coordination server in your threat model.
+Tailscale-only is appropriate when (a) you do not need a public domain, (b) you accept that any agent must be on the tailnet to reach the brain, (c) you trust Tailscale's coordination server in your threat model.
+
+### Option B: public domain with a self-managed reverse proxy + TLS
+
+If you need the brain reachable from the public internet (e.g. external agents that cannot use Tailscale), you set up a reverse proxy yourself — this is **not** installed or configured by this repo's `install.sh`. See the note in docs/architecture.md for context. Caddy is a reasonable choice (automatic TLS via Let's Encrypt), but any reverse proxy works as long as you:
+
+```
+internet ---> :443 <your-proxy> ---> :5001/5002/5000 (127.0.0.1) MCP services
+```
+
+- UFW rules: `ufw allow 80/tcp` (ACME challenge, if using Let's Encrypt), `ufw allow 443/tcp`, `ufw default deny incoming`.
+- MCP services remain bound to `127.0.0.1` — the proxy is the public face.
+- Postgres binds `127.0.0.1` only (default).
+- SSH on 22 is the only other open port. Restrict to your IP or a jumphost if possible.
+- TLS + Bearer is layered defense — neither alone is sufficient; both together raise the cost of attack significantly.
+- **Important:** disable proxy-level response buffering for SSE/streaming. In Caddy use `flush_interval -1`; in nginx use `proxy_buffering off`. Without this the `streamable-http` transport breaks.
 
 ### What NOT to do
 
-- **Do NOT bind MCP services to `0.0.0.0` without a firewall.** Even with Bearer auth, exposing 5001/8/6 to the internet means anyone can hammer the auth endpoint indefinitely. UFW + firewall rules are not optional.
+- **Do NOT bind MCP services to `0.0.0.0` without a firewall.** Even with Bearer auth, exposing 5001/5002/5000 to the internet means anyone can hammer the auth endpoint indefinitely. UFW + firewall rules are not optional.
 - **Do NOT put the brain behind Cloudflare proxied DNS** for the MCP endpoints. Cloudflare's proxy buffers SSE / streaming, breaking the `streamable-http` transport. Use DNS-only (`proxied=false`) for MCP subdomains.
 - **Do NOT expose Postgres on the public network.** Even with a password, this is a `DROP TABLE` risk if the password leaks. Postgres → localhost only.
 
@@ -183,7 +187,7 @@ Recall calls are NOT in `audit_log` by default (read-only, high volume). If you 
 
 ## Updating after a security advisory
 
-If a CVE lands in one of the dependencies (FastMCP, uvicorn, asyncpg, FastEmbed, pgvector, Caddy, Postgres):
+If a CVE lands in one of the dependencies (FastMCP, uvicorn, asyncpg, FastEmbed, pgvector, Postgres):
 
 1. Read the advisory. Determine which service is affected.
 2. Pin the patched version in `requirements.txt`.

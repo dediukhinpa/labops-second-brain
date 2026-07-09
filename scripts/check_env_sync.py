@@ -40,7 +40,7 @@ Bash local-variable suppression (Iter 2):
 
 Ignore markers in ``.env.example`` (Iter 2):
   Some documented variables live only in non-code locations (markdown docs,
-  Caddyfile templates, transitive deps like uvicorn's ``LOG_LEVEL``). Mark
+  reverse-proxy configs, transitive deps like uvicorn's ``LOG_LEVEL``). Mark
   these with a comment on the preceding line:
 
       # check_env_sync: ignore -- transitive dep (uvicorn)

@@ -300,7 +300,7 @@ Recall: `recall(...)`. Координация: `agent_router_*`. Задачи: `
 sudo bash scripts/install.sh
 ```
 
-Идемпотентные шаги: проверка платформы → apt (Python 3.11, Postgres 16 + pgvector, Caddy) → системный пользователь `second_brain` → `/opt/second_brain` + venv → роль/БД + расширение `vector` → секреты (0600) → миграции → предзагрузка модели эмбеддингов (`multilingual-e5-large`, ~1.3 ГБ) → рендер и установка systemd-юнитов → `systemctl enable --now` → **smoke-test** → печать admin-токена.
+Идемпотентные шаги: проверка платформы → apt (Python 3.11, Postgres 16 + pgvector) → системный пользователь `second_brain` → `/opt/second_brain` + venv → роль/БД + расширение `vector` → секреты (0600) → миграции → предзагрузка модели эмбеддингов (`multilingual-e5-large`, ~1.3 ГБ) → рендер и установка systemd-юнитов → `systemctl enable --now` → **smoke-test** → печать admin-токена.
 
 **Зависимость от других репо:**
 - Канонический порядок установки: `labops-agent-architecture` → `labops-tg-plugin` → `labops-second-brain` — но это три **отдельных** скрипта `install.sh`, каждый запускает оператор. `install.sh` из `labops-agent-architecture` только **клонирует** этот репо в `~/labops-second-brain` — `scripts/install.sh` он за вас НЕ запускает. Ставите этот репо сами: либо вручную (`sudo bash scripts/install.sh`), либо отдав Claude Code агенту с промптом из `AGENT.md` — см. шаг 1 выше.
@@ -342,7 +342,6 @@ sudo SKIP_SMOKE_GATE=1 bash scripts/install.sh
 | `MCP_MEMORY_PORT` / `MCP_MEMORY_ROUTER_PORT` / `MCP_AGENT_ROUTER_PORT` / `MCP_TASK_PORT` | порты серверов (5001/5002/5000/5003) |
 | `SERVICE_USER` | системный пользователь (`second_brain`) |
 | `INSTALL_DIR` | каталог установки (`/opt/second_brain`) |
-| `DOMAIN` / `ACME_EMAIL` | для Caddy + TLS (опционально) |
 | `WEBHOOK_BEARER_FILE` / `WEBHOOK_HMAC_SECRET_FILE` | секреты inter-agent auth |
 | `SECOND_BRAIN_TOOLS` | tool-gating (`core` по умолчанию) |
 

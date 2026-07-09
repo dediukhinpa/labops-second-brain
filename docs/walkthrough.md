@@ -262,9 +262,12 @@ extension, holding the search index and metadata tables. You will
 have **three MCP services** — memory, recall, swarm — each a small
 Python process listening on its own port. An **ingest worker**
 processes the embedding queue: when memory writes a note, the worker
-generates the embedding and indexes it. A **reverse proxy** (Caddy is
-the recommended default) gives all three services one TLS-protected
-hostname. If you want the inbox pattern, an **optional Telegram bot**
+generates the embedding and indexes it. Each service binds
+`127.0.0.1` on its own port by default — nothing public-facing. If
+you need external access, you front the services yourself with a
+reverse proxy + TLS (not installed by this repo; see
+docs/architecture.md). If you want the inbox pattern, an **optional
+Telegram bot**
 runs as a separate process on the same VPS.
 
 On your local machine you will have **Claude Code** with a workspace
@@ -300,9 +303,8 @@ Your agent, running inside Claude Code, calls
 `recall.recall(query="why did we switch from REST to gRPC?")`. Under
 the hood, Claude Code sends an MCP `tools/call` request over a
 streamable-HTTP transport to
-`https://mcp.your-domain.example/memory_router/mcp`, with the agent's bearer
-token in the `Authorization` header. Caddy terminates TLS and routes
-the request to the local recall process on its private port.
+`http://<vps-ip>:5002/mcp` (the memory_router service's direct port),
+with the agent's bearer token in the `Authorization` header.
 
 Recall does four things in sequence. First, it resolves the bearer to
 an agent identity at the API boundary (the same middleware that

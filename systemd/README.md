@@ -61,7 +61,7 @@ After install:
 ```bash
 systemctl status second_brain-memory-mcp second_brain-memory_router-mcp second_brain-agent_router-mcp second_brain-ingest-worker
 journalctl -u second_brain-memory-mcp -n 50 --no-pager
-ss -tlnp | grep -E '876[678]'
+ss -tlnp | grep -E '500[0-3]'
 ```
 
 You should see three sockets listening on 5000 / 5001 / 5002, all owned by `python` processes under the `second_brain` user.

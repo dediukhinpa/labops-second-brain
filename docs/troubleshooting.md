@@ -50,22 +50,6 @@ Common causes:
 
 ---
 
-## Q: Caddy can't get a TLS certificate
-
-**Symptoms:** Caddy logs show `acme: error: 403` or `challenge failed`.
-
-**Fix in this order:**
-
-1. **DNS:** does `dig +short mcp.example.com` return the VPS IP? If not, the A record hasn't propagated yet, or it points elsewhere. Wait 5–15 minutes after creating the record.
-2. **Port 80:** Let's Encrypt's HTTP-01 challenge requires port 80 open. `sudo ufw status` should show `80/tcp ALLOW`. Add: `sudo ufw allow 80/tcp`.
-3. **Existing service on port 80:** `sudo ss -tlnp | grep ':80 '`. If something else is on 80 (apache, nginx, another caddy), stop it.
-4. **Cloudflare or proxy in front?** If the domain is on Cloudflare with the orange cloud (proxied), Let's Encrypt may fail. Set the record to "DNS only" (grey cloud) for the MCP subdomain. MCP also needs DNS-only because the proxy buffers SSE.
-5. **Rate limits:** Let's Encrypt has rate limits per registered domain. If you retried many times with the same domain, you may be temporarily blocked. Wait an hour.
-
-After fixing, `sudo systemctl reload caddy` and watch logs.
-
----
-
 ## Q: inbox-agent bot doesn't respond to messages
 
 **Symptoms:** you forward a message to the bot, nothing happens.
@@ -270,7 +254,7 @@ Hard-deleting markdown is supported but irreversible. Always back up before prun
 2. The most common crashes:
    - Postgres connection refused — Postgres not up yet (`systemctl status postgresql`) or password wrong.
    - Module import error — venv corrupted or `requirements.txt` not installed. Reinstall: `sudo -u second_brain /opt/second_brain/.venv/bin/pip install -r /opt/second_brain/requirements.txt`.
-   - Port already in use — another process grabbed 5001/8/6. `sudo ss -tlnp | grep 876` and kill it.
+   - Port already in use — another process grabbed ports 5000–5003. `sudo ss -tlnp | grep -E '500[0-3]'` and kill it.
 3. To stop the auto-restart while debugging: `sudo systemctl stop second_brain-<svc>-mcp`, then run the service manually: `sudo -u second_brain /opt/second_brain/.venv/bin/python -m services.<svc>.server` — you will see errors in your terminal directly.
 
 ---

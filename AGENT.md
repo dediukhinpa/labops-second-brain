@@ -126,11 +126,9 @@ If the user is undecided after reading this section, default to Path A and expli
               +---------------------------------v---------------+
               |              VPS (Ubuntu 22.04)                 |
               |                                                 |
-              |   Caddy (TLS, optional)                         |
-              |     |                                           |
-              |     +-- /memory/mcp  --> memory_mcp  :5001      |
-              |     +-- /memory_router/mcp  --> memory_router_mcp  :5002      |
-              |     +-- /agent_router/mcp   --> agent_router_mcp   :5000      |
+              |   memory_mcp         :5001  (127.0.0.1 only)   |
+              |   memory_router_mcp  :5002  (127.0.0.1 only)   |
+              |   agent_router_mcp   :5000  (127.0.0.1 only)   |
               |                                                 |
               |   ingest-worker (systemd)                       |
               |     watches embedding_jobs --> embeds chunks    |
@@ -210,22 +208,18 @@ Before you start deploying, collect every piece of information you cannot derive
    - Path to private key (default `~/.ssh/id_ed25519`)
    - Confirm Ubuntu 22.04 LTS (you will verify, but ask anyway)
 
-3. **Domain name (optional)**
-   - If they have a domain pointing to the VPS (A record), Caddy will issue TLS. They give you a `mcp.example.com` style hostname.
-   - If they do not have a domain, the system will work over Tailscale or plain SSH tunnels. Confirm which.
-
-4. **Telegram bot token (for inbox-agent)**
+3. **Telegram bot token (for inbox-agent)**
    - The inbox-agent needs its own bot. If they do not have one, walk them through `@BotFather` → `/newbot` → choose name → choose username → copy token.
    - Recommend `Privacy ON` for the bot — it will only see messages directed at it.
 
-5. **Telegram user_id**
+4. **Telegram user_id**
    - For digest delivery and allowlist. They can get it from `@userinfobot`.
 
-6. **Local install directory** for inbox-agent
+5. **Local install directory** for inbox-agent
    - Default: `~/.claude-lab/inbox-agent`
    - Confirm or override.
 
-7. **Which optional skills to enable**
+6. **Which optional skills to enable**
    - Groq (Whisper transcription of voice notes) — needs `GROQ_API_KEY`
    - HikerAPI (Instagram caption extraction) — needs `HIKERAPI_KEY`
    - TranscriptAPI (YouTube transcripts) — needs `TRANSCRIPTAPI_KEY`
@@ -233,16 +227,16 @@ Before you start deploying, collect every piece of information you cannot derive
    - Perplexity (web research) — needs `PERPLEXITY_API_KEY`
    - All are optional. Default: ask per skill, install only the ones they want.
 
-8. **API keys for enabled skills**
+7. **API keys for enabled skills**
    - For each skill they enabled, ask for the key. Tell them keys will be written to `${INBOX_AGENT_HOME}/.env` with `chmod 600` and never logged.
 
 ### 5.2 Path B additional asks
 
 Only if the user picked Path B, ask these on top:
 
-9. **Owner name** — the human-readable name you put in each workspace's `core/USER.md` as `Address as`. Default: the user's first name.
+8. **Owner name** — the human-readable name you put in each workspace's `core/USER.md` as `Address as`. Default: the user's first name.
 
-10. **List of personal agents to create.** For each one, ask:
+9. **List of personal agents to create.** For each one, ask:
     - **Agent id** (slug, lowercase, hyphenated — e.g. `coordinator-agent`, `coder-agent`, `marketer-agent`). This becomes the workspace directory name `~/.claude-lab/<agent-id>/.claude/` and the `agent` identifier in `agent_tokens`.
     - **Role** (1 line, e.g. "main coordinator and brainstorm partner", "Python/TypeScript coder for backend work", "content marketer for Telegram channel").
     - **Write scopes** (comma-separated subset of the 12 vault scopes). Defaults per role:
@@ -252,7 +246,7 @@ Only if the user picked Path B, ask these on top:
         - `researcher-agent` (recall-only): empty write scopes
     - **Read scopes**: default `*` (all). Only restrict if the user is explicit.
 
-11. **Model** the workspace runs under. Default `claude-sonnet-4.6` for most roles, `claude-opus-4.7` for coordinator. This is recorded in `CLAUDE.md` for context, not technically enforced (the user chooses at runtime).
+10. **Model** the workspace runs under. Default `claude-sonnet-4.6` for most roles, `claude-opus-4.7` for coordinator. This is recorded in `CLAUDE.md` for context, not technically enforced (the user chooses at runtime).
 
 If the user says "just give me the defaults" → create one `coordinator-agent` workspace with coordinator scopes and `claude-opus-4.7` model. Tell them they can add more agents later with `bash agent-template/install.sh`.
 
@@ -300,13 +294,12 @@ ssh <USER>@<VPS_IP> "cd /opt/second_brain && sudo bash scripts/install.sh"
 
 This is idempotent and takes 10–15 minutes. It will:
 
-- `apt update` and install Python 3.11, Postgres 16, pgvector, Caddy
+- `apt update` and install Python 3.11, Postgres 16, pgvector
 - create a system user `second_brain`
 - create the Postgres database `second_brain` and user `second_brain` with a generated password
 - run migrations from `migrations/`
 - set up a Python venv and `pip install` requirements
 - install systemd unit files from templates in `systemd/`
-- install Caddyfile from `caddy/Caddyfile.template` (only if domain given)
 - generate the first admin agent token and print it ONCE
 - start all 4 services (`second_brain-memory-mcp`, `second_brain-memory_router-mcp`, `second_brain-agent_router-mcp`, `second_brain-ingest-worker`)
 
@@ -488,7 +481,7 @@ The script is **interactive**. It will prompt for:
 - **agent id** → enter `<agent-id>`
 - **role description** → enter `<role>`
 - **owner name** → enter `<owner-name>`
-- **MCP host** → enter the user's brain URL: `https://<DOMAIN>` if Caddy is up, otherwise `http://<VPS_IP>:5001` for memory, etc. (the template generates all 3 entries from one host base).
+- **MCP host** → enter the VPS IP address: `<VPS_IP>`. The template fills in the direct port for each service: `http://<VPS_IP>:5001/mcp` (memory), `http://<VPS_IP>:5002/mcp` (memory_router), `http://<VPS_IP>:5000/mcp` (agent_router). If you later add your own reverse proxy for external HTTPS access, update `.mcp.json` manually (see docs/architecture.md for the note on external access).
 - **agent bearer token** → leave **blank** for now. You will fill it in step 15.
 - **model** → enter `<model>`
 - **install dir** → default `~/.claude-lab/<agent-id>`; confirm.
@@ -544,15 +537,15 @@ For each agent, edit `~/.claude-lab/<agent-id>/.claude/.mcp.json` and replace th
 {
   "mcpServers": {
     "second_brain-memory": {
-      "url": "https://<DOMAIN>/memory/mcp",
+      "url": "http://<VPS_IP>:5001/mcp",
       "headers": { "Authorization": "Bearer <ACTUAL_TOKEN>" }
     },
     "second_brain-memory_router": {
-      "url": "https://<DOMAIN>/memory_router/mcp",
+      "url": "http://<VPS_IP>:5002/mcp",
       "headers": { "Authorization": "Bearer <ACTUAL_TOKEN>" }
     },
     "second_brain-agent_router": {
-      "url": "https://<DOMAIN>/agent_router/mcp",
+      "url": "http://<VPS_IP>:5000/mcp",
       "headers": { "Authorization": "Bearer <ACTUAL_TOKEN>" }
     }
   }
@@ -598,7 +591,7 @@ claude --project ~/.claude-lab/<agent-id>/.claude
 If recall returns 0 results despite the brain having data:
 
 - Check `.mcp.json` Bearer is correct (re-read it; should be the value from step 14, not the placeholder).
-- Check the brain is reachable: `curl -sS -H "Authorization: Bearer <token>" https://<DOMAIN>/memory_router/mcp/` should return 406 with an MCP error body. 401 → wrong token. Connection refused → firewall.
+- Check the brain is reachable: `curl -sS -H "Authorization: Bearer <token>" http://<VPS_IP>:5002/mcp` should return 406 with an MCP error body. 401 → wrong token. Connection refused → firewall or the services are bound to 127.0.0.1 and you are connecting remotely without a tunnel.
 - Check the agent's bearer is for an agent whose scope set includes `external` for reads (default read scope `*` covers everything).
 
 ### Step 18 (optional): Wire the agent into a Telegram bot
@@ -622,9 +615,9 @@ These operations require an explicit "yes, proceed" from the user before you run
 - Any `sudo` outside `scripts/install.sh`, `scripts/install-vps.sh`, and `agent-template/install.sh`. The install scripts contain all expected privilege escalation. Anything else is a surprise.
 - `rm -rf` anywhere. If you need to clean up a partial install (including a half-created workspace), ask first.
 - Schema changes to the second_brain database beyond what `migrations/` applies. No ad-hoc `ALTER TABLE`. If a migration is needed, write a new file `migrations/00X_<name>.sql` and propose it to the user first.
-- Exposing services on a public IP without TLS. The default is Caddy + Let's Encrypt OR Tailscale-only. Plain HTTP on 0.0.0.0 is forbidden.
+- Exposing services on a public IP without TLS. By default, all MCP services bind `127.0.0.1` only — nothing is public-facing. If the operator needs remote access, the supported options are Tailscale (private network, no public TLS required) or a self-managed reverse proxy with TLS (operator's responsibility — see docs/architecture.md). Plain HTTP on `0.0.0.0` is forbidden regardless of approach.
 - Pushing anything to any public GitHub repository. The user controls publication. Even `git remote add` should be confirmed.
-- Modifying anything in `/etc/` outside `install.sh`'s documented changes (systemd units in `/etc/systemd/system/second_brain-*.service`, Caddyfile at `/etc/caddy/Caddyfile`). No editing `/etc/postgresql/`, `/etc/ssh/`, `/etc/sudoers`, etc.
+- Modifying anything in `/etc/` outside `install.sh`'s documented changes (systemd units in `/etc/systemd/system/second_brain-*.service`). No editing `/etc/postgresql/`, `/etc/ssh/`, `/etc/sudoers`, etc.
 - Restarting `second_brain-*` services in production-like conditions (i.e. when the user has been using the system for more than a day). The user may be relying on them.
 - Deleting or rotating an agent token without first checking the user is not actively using it.
 - **Deleting an existing personal agent workspace.** `rm -rf ~/.claude-lab/<agent-id>` removes the agent's local memory (HOT, WARM, COLD layers, learnings). Confirm first that the user wants this and that they have a backup if the workspace had useful history.
@@ -653,7 +646,7 @@ These are non-negotiable. There is no scenario where bypassing them is correct.
 
 There is a strict order to error handling. Do not skip steps.
 
-1. **First — read `docs/troubleshooting.md`.** It catalogs the most common failures (401s, embedding pipeline stalls, Caddy TLS issues, bot not responding, agent-template install quirks) with the exact fix for each.
+1. **First — read `docs/troubleshooting.md`.** It catalogs the most common failures (401s, embedding pipeline stalls, bot not responding, agent-template install quirks) with the exact fix for each.
 
 2. **Second — pull service logs.** For systemd services on the VPS:
 
@@ -663,7 +656,6 @@ There is a strict order to error handling. Do not skip steps.
    ssh <USER>@<VPS_IP> "journalctl -u second_brain-agent_router-mcp -n 200 --no-pager"
    ssh <USER>@<VPS_IP> "journalctl -u second_brain-ingest-worker -n 200 --no-pager"
    ssh <USER>@<VPS_IP> "journalctl -u postgresql -n 200 --no-pager"
-   ssh <USER>@<VPS_IP> "journalctl -u caddy -n 200 --no-pager"
    ```
 
    For the local inbox-agent: `tail -100 ${INBOX_AGENT_HOME}/logs/*.log`.
@@ -689,7 +681,7 @@ The deployment is complete when ALL of these are verifiable. Read each one and c
 
 - [ ] `systemctl is-active second_brain-memory-mcp second_brain-memory_router-mcp second_brain-agent_router-mcp second_brain-ingest-worker` returns `active` for all four.
 - [ ] `psql -U second_brain -d second_brain -c "SELECT agent, array_length(can_write_scopes,1) FROM agent_tokens WHERE revoked_at IS NULL;"` shows at least two rows (`coordinator-agent`, `inbox-agent`) with the expected scope counts.
-- [ ] `curl -sS https://<DOMAIN>/memory_router/mcp` or `curl -sS http://<VPS_IP>:5002/` returns the recall service banner (200, "MCP service: recall").
+- [ ] `curl -sS http://<VPS_IP>:5002/mcp` (from the VPS itself, or from a Tailscale/tunnel-connected host) returns the recall service banner. Add an `Authorization: Bearer <token>` header — a 406 with MCP error body confirms the upstream is live and auth is wired.
 - [ ] The Telegram bot (`bot.py`) responds to `/start` from the allowlisted user_id within 2 seconds, and replies with a short ack to a forwarded URL.
 - [ ] A forwarded URL → bot ack ("Got it") → `recall.recent(scope='external')` returns the URL with `agent: inbox-agent`. End-to-end.
 - [ ] `crontab -l` shows the two inbox-agent entries.
@@ -731,7 +723,7 @@ Once all are checked, tell the user: "Deployment complete. The brain is running 
 
 **For changing recall behaviour** (source weights, decay constants): read `docs/architecture.md` section "Recall — source weights and temporal decay" and edit `services/memory_router_mcp/source_weights.py`. Restart `second_brain-memory_router-mcp` after changes.
 
-**For security operations** (revoking tokens, rotating Postgres password, regenerating Caddy certs): read `docs/security.md`.
+**For security operations** (revoking tokens, rotating Postgres password): read `docs/security.md`.
 
 **For troubleshooting Path B specifically** (agent-template install quirks, missing recall results from a new workspace, memory rotation cron not running): read `docs/troubleshooting.md` — the agent-template FAQ entries are grouped at the end.
 

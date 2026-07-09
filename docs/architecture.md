@@ -11,14 +11,13 @@ Three MCP services on a VPS, a local Telegram bot on your workstation, a markdow
 ```
                               local                      VPS
                   +---------------------+   +-----------------------------+
-                  |  inbox-agent        |   |  Caddy (TLS, optional)      |
-  Telegram -----> |  Telegram bot       |-->|     /memory/mcp -> :5001    |
-  forwards        |  dual-write hook    |   |     /memory_router/mcp -> :5002    |
-                  |  cron: compile,     |   |     /agent_router/mcp  -> :5000    |
-                  |        daily-digest |   |                             |
-                  |  raw/  (local fs)   |   |  memory_mcp   memory_router_mcp    |
-                  +---------------------+   |  agent_router_mcp    ingest-worker |
-                                            |                             |
+                  |  inbox-agent        |   |  memory_mcp         :5001   |
+  Telegram -----> |  Telegram bot       |-->|  memory_router_mcp  :5002   |
+  forwards        |  dual-write hook    |   |  agent_router_mcp   :5000   |
+                  |  cron: compile,     |   |                             |
+                  |        daily-digest |   |  memory_mcp   memory_router_mcp    |
+                  |  raw/  (local fs)   |   |  agent_router_mcp    ingest-worker |
+                  +---------------------+   |                             |
                                             |  Postgres 16 + pgvector     |
                                             |    agent_tokens             |
                                             |    audit_log                |
@@ -32,6 +31,14 @@ Three MCP services on a VPS, a local Telegram bot on your workstation, a markdow
 ```
 
 Markdown stays canonical. Everything else is rebuildable from markdown + the auth table.
+
+> **External HTTPS access.** `install.sh` does not install or manage a reverse
+> proxy — each MCP service is reachable only on `127.0.0.1:<port>` by default,
+> which is all a colocated agent needs. If you want to reach second_brain from
+> outside the VPS (remote agents, a different machine) without Tailscale, you
+> need to front the three ports yourself with a reverse proxy of your choice
+> (Caddy, nginx, etc.) and TLS — that setup is on you, and out of scope for
+> this repo.
 
 ---
 

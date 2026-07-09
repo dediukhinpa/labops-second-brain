@@ -3,7 +3,7 @@
 #
 # Usage:
 #   bash scripts/smoke-test.sh                    # uses localhost ports
-#   MCP_BASE=https://mcp.example.com bash ...     # uses domain (Caddy path routing)
+#   MCP_BASE=https://mcp.example.com bash ...     # uses domain (path routing behind your own reverse proxy)
 #
 # Reads admin token from $INSTALL_DIR/secrets/admin.token if present,
 # else $ADMIN_TOKEN env var. Token is masked in all output.

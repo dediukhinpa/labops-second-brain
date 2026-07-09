@@ -34,20 +34,22 @@ This document covers both paths.
 ## 1. Architecture
 
 ```
-+-----------------+   HTTPS    +---------------------+    UNIX    +-----------+
-|  Hermes client  | ---------> |  Caddy (TLS, :443)  | ---------> |  MCP svc  |
-|  (mcp_servers:) |  per-req   |  reverse proxy      |  127.x     |  :5001    |
-|                 |  signature |                     | passthr.   |  :5002    |
-+-----------------+            +---------------------+            |  :5000    |
-                                                                  +-----+-----+
-                                                                        |
-                                                                        v
-                                                                +---------------+
-                                                                |   Postgres    |
-                                                                | agent_tokens  |
-                                                                +---------------+
-                                     hmac_secret_sha256 (only the digest lives here)
++-----------------+   HTTP(S)   [optional proxy]   +-----------+
+|  Hermes client  | ---------> - - - - - - - - -> |  MCP svc  |
+|  (mcp_servers:) |  per-req                       |  :5001    |
+|                 |  signature  (if you've added    |  :5002    |
++-----------------+             a reverse proxy,    |  :5000    |
+                                it sits here but    +-----+-----+
+                                is not required)          |
+                                                          v
+                                                  +---------------+
+                                                  |   Postgres    |
+                                                  | agent_tokens  |
+                                                  +---------------+
+                               hmac_secret_sha256 (only the digest lives here)
 ```
+
+By default, Hermes connects directly to the MCP service on its port (e.g. `http://<VPS_IP>:5001/mcp`). If you have placed your own reverse proxy in front for external HTTPS access, Hermes can point at the proxy URL instead — the MCP service is unaware of the intermediary.
 
 * The **raw HMAC secret never enters Postgres**. Only
   `sha256(raw_secret_string)` is stored in `agent_tokens.hmac_secret_sha256`.
@@ -387,7 +389,7 @@ the server log.)
 | Symptom                                       | Likely cause                                                                                                                                  |
 |-----------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------|
 | `401` on every signed request                 | Timestamp outside tolerance — check clock skew (`ntpdate`, `chronyc tracking`). Raise `HMAC_TIMESTAMP_TOLERANCE_SECONDS` only as last resort. |
-| `401` only on some requests                   | Body re-serialization by an HTTP middleware between Hermes and Caddy. Sign and post identical bytes; do not let proxies rewrite the body.    |
+| `401` only on some requests                   | Body re-serialization by an HTTP middleware between Hermes and any reverse proxy you have placed in front. Sign and post identical bytes; do not let proxies rewrite the body. |
 | `401` immediately after rotation              | Env not reloaded — restart `second_brain-{memory,memory_router,agent_router}-mcp`.                                                                                |
 | Doctor reports `hmac_secret_health [FAIL]`    | DB and env disagree on the secret hash — re-run `issue-hmac-secret.py --rotate` and update env, or restore the previous env value.           |
 | Doctor reports `[WARN] N agent(s) missing`    | Agent has HMAC in DB but no entry in `SECOND_BRAIN_HMAC_SECRETS_JSON`. Add the entry or revoke the HMAC column.                                     |

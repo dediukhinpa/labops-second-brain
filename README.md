@@ -300,7 +300,7 @@ Requirements: **Ubuntu 22.04**, root/sudo. No Docker — native (apt + venv + sy
 sudo bash scripts/install.sh
 ```
 
-Idempotent steps: platform check → apt (Python 3.11, Postgres 16 + pgvector, Caddy) → system user `second_brain` → `/opt/second_brain` + venv → role/DB + `vector` extension → secrets (0600) → migrations → preload the embedding model (`multilingual-e5-large`, ~1.3 GB) → render and install the systemd units → `systemctl enable --now` → **smoke-test** → print the admin token.
+Idempotent steps: platform check → apt (Python 3.11, Postgres 16 + pgvector) → system user `second_brain` → `/opt/second_brain` + venv → role/DB + `vector` extension → secrets (0600) → migrations → preload the embedding model (`multilingual-e5-large`, ~1.3 GB) → render and install the systemd units → `systemctl enable --now` → **smoke-test** → print the admin token.
 
 **Dependency on the other repos:**
 - The canonical install order is `labops-agent-architecture` → `labops-tg-plugin` → `labops-second-brain` — but these are three **separate** `install.sh` scripts, each run by the operator. `labops-agent-architecture`'s `install.sh` only **clones** this repo to `~/labops-second-brain`; it does **not** run `scripts/install.sh` for you. You install this repo yourself, either manually (`sudo bash scripts/install.sh`) or by handing it to a Claude Code agent with the `AGENT.md` prompt — see step 1 above.
@@ -342,7 +342,6 @@ The full reference is [`.env.example`](.env.example). The essentials:
 | `MCP_MEMORY_PORT` / `MCP_MEMORY_ROUTER_PORT` / `MCP_AGENT_ROUTER_PORT` / `MCP_TASK_PORT` | server ports (5001/5002/5000/5003) |
 | `SERVICE_USER` | system user (`second_brain`) |
 | `INSTALL_DIR` | install directory (`/opt/second_brain`) |
-| `DOMAIN` / `ACME_EMAIL` | for Caddy + TLS (optional) |
 | `WEBHOOK_BEARER_FILE` / `WEBHOOK_HMAC_SECRET_FILE` | inter-agent auth secrets |
 | `SECOND_BRAIN_TOOLS` | tool-gating (`core` by default) |
 

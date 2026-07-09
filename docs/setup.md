@@ -65,7 +65,7 @@ sudo bash scripts/install.sh
 
 The script is idempotent and takes 10–15 minutes. Watch the output. It will:
 
-1. `apt update` and install `python3.11` (from the deadsnakes PPA), `postgresql-16`, `postgresql-16-pgvector`, `caddy`.
+1. `apt update` and install `python3.11` (from the deadsnakes PPA), `postgresql-16`, `postgresql-16-pgvector`.
 2. Create system user `second_brain` and group `second_brain`.
 3. Create Postgres role `second_brain` with a generated password.
 4. Create Postgres database `second_brain` owned by `second_brain`.
@@ -75,8 +75,7 @@ The script is idempotent and takes 10–15 minutes. Watch the output. It will:
 8. Create a Python virtualenv at `/opt/second_brain/.venv/` and `pip install -r requirements.txt`.
 9. Install systemd unit files from `systemd/*.service.template` into `/etc/systemd/system/`, substituting `${INSTALL_DIR}` etc.
 10. `systemctl daemon-reload && systemctl enable --now second_brain-memory-mcp second_brain-memory_router-mcp second_brain-agent_router-mcp second_brain-ingest-worker`.
-11. If you passed a domain via `--domain mcp.example.com`, install `caddy/Caddyfile.template` to `/etc/caddy/Caddyfile`, substitute the domain, `systemctl reload caddy`.
-12. Generate an initial **admin agent token**. **This is printed once.** Capture it now.
+11. Generate an initial **admin agent token**. **This is printed once.** Capture it now.
 
 Expected last lines of output:
 
@@ -113,7 +112,7 @@ journalctl -u <service-name> -n 100 --no-pager
 The most common causes:
 
 - **Postgres not ready when service started** — `systemctl restart <service>` once Postgres is up.
-- **Port already in use** — another service grabbed 5000/7/8. Find it: `ss -tlnp | grep 876`. Kill or reconfigure.
+- **Port already in use** — another service grabbed ports 5000–5003. Find it: `ss -tlnp | grep -E '500[0-3]'`. Kill or reconfigure.
 - **Permission denied on vault** — the `second_brain` user must own `${VAULT_ROOT}`. `chown -R second_brain:second_brain /opt/second_brain/vault`.
 
 ---
@@ -168,70 +167,11 @@ Each command prints the token once. Copy both to your password manager immediate
 
 To add more agents later (e.g. `coder-agent`, `reviewer-agent`, a research bot), re-run with the appropriate scopes.
 
----
-
-## Step 6: TLS via Caddy (optional but recommended)
-
-If you have a domain (e.g. `mcp.example.com`) with an A record pointing at `<VPS_IP>`, Caddy will issue a Let's Encrypt cert automatically.
-
-Edit `/etc/caddy/Caddyfile` if `install.sh` did not substitute correctly:
-
-```
-mcp.example.com {
-    handle_path /memory/* {
-        reverse_proxy 127.0.0.1:5001 {
-            flush_interval -1
-            header_up Host {upstream_hostport}
-        }
-    }
-    handle_path /memory_router/* {
-        reverse_proxy 127.0.0.1:5002 {
-            flush_interval -1
-            header_up Host {upstream_hostport}
-        }
-    }
-    handle_path /agent_router/* {
-        reverse_proxy 127.0.0.1:5000 {
-            flush_interval -1
-            header_up Host {upstream_hostport}
-        }
-    }
-    log {
-        output file /var/log/caddy/mcp.access.log {
-            roll_size 50mb
-            roll_keep 7
-        }
-        format json
-    }
-}
-```
-
-`flush_interval -1` disables buffering — required for SSE / streamable-http transport.
-
-Reload:
-
-```bash
-sudo systemctl reload caddy
-journalctl -u caddy -n 50 --no-pager
-```
-
-You should see Caddy obtain a cert (look for `certificate obtained successfully`). If it fails:
-
-- DNS A record propagated? `dig mcp.example.com`.
-- Port 80 open? `sudo ufw status`. Caddy needs 80 for HTTP-01 ACME challenge, plus 443 for HTTPS.
-- See `docs/troubleshooting.md` Q: "Caddy can't get TLS cert".
-
-Test from outside:
-
-```bash
-curl -sS https://mcp.example.com/memory_router/
-```
-
-Should return the recall service banner.
+> **External HTTPS access.** `install.sh` does not install or configure a reverse proxy. The MCP services are reachable only on `127.0.0.1:<port>` by default. If you need to reach the brain from outside the VPS (a remote agent, a different machine) without Tailscale, front the three ports with a reverse proxy of your choice and TLS — see the note in `docs/architecture.md` for details. That setup is entirely on you.
 
 ---
 
-## Step 7: install inbox-agent locally
+## Step 6: install inbox-agent locally
 
 On your local workstation (not the VPS):
 
@@ -353,7 +293,7 @@ The script is interactive. It will ask:
 - **agent id** — slug, lowercase, hyphenated (e.g. `coordinator-agent`, `coder-agent`). Becomes the workspace directory name and the `agent` row in `agent_tokens`.
 - **role description** — 1 line. E.g. "main coordinator and brainstorm partner".
 - **owner name** — your name. Goes into `core/USER.md` of the new workspace.
-- **MCP host** — your brain URL. `https://mcp.example.com` if Caddy is up, otherwise `http://<VPS_IP>:5001` for memory plus the matching ports for recall/swarm (the script renders all three).
+- **MCP host** — the VPS IP address. The template fills in the direct port for each of the three services: `http://<VPS_IP>:5001/mcp` (memory), `http://<VPS_IP>:5002/mcp` (memory_router), `http://<VPS_IP>:5000/mcp` (agent_router). If you later add your own reverse proxy for external HTTPS access, update `.mcp.json` manually — see docs/architecture.md.
 - **agent bearer token** — leave blank for now. You will fill it in step 13.
 - **model** — `claude-sonnet-4.6` for most roles, `claude-opus-4.7` for a coordinator.
 - **install dir** — default `~/.claude-lab/<agent-id>`. Confirm.
@@ -407,15 +347,15 @@ Open `~/.claude-lab/<agent-id>/.claude/.mcp.json` and replace the `<AGENT_BEARER
 {
   "mcpServers": {
     "second_brain-memory": {
-      "url": "https://mcp.example.com/memory/mcp",
+      "url": "http://<VPS_IP>:5001/mcp",
       "headers": { "Authorization": "Bearer <actual-token>" }
     },
     "second_brain-memory_router": {
-      "url": "https://mcp.example.com/memory_router/mcp",
+      "url": "http://<VPS_IP>:5002/mcp",
       "headers": { "Authorization": "Bearer <actual-token>" }
     },
     "second_brain-agent_router": {
-      "url": "https://mcp.example.com/agent_router/mcp",
+      "url": "http://<VPS_IP>:5000/mcp",
       "headers": { "Authorization": "Bearer <actual-token>" }
     }
   }
@@ -459,7 +399,7 @@ Expected behaviour:
 If recall returns 0 results despite the brain having data:
 
 - Re-check the Bearer in `.mcp.json` — it must be the token issued in step 12, not the placeholder, not the inbox-agent's, not another agent's.
-- Test the brain directly: `curl -sS -H "Authorization: Bearer <token>" https://mcp.example.com/memory_router/mcp/`. Expect 406 with an MCP error body (live upstream). 401 → wrong token. Connection refused → firewall.
+- Test the brain directly: `curl -sS -H "Authorization: Bearer <token>" http://<VPS_IP>:5002/mcp` (from the VPS itself or via Tailscale/tunnel). Expect 406 with an MCP error body (live upstream). 401 → wrong token. Connection refused → firewall or services bound to 127.0.0.1 and you are connecting remotely without a tunnel.
 - Check the token is alive: `psql -U second_brain -d second_brain -c "SELECT agent, can_write_scopes, revoked_at FROM agent_tokens WHERE agent='<agent-id>';"`. `revoked_at` should be `NULL`.
 
 Repeat steps 11–14 for every additional agent the user wants. Each one is independent — a failure in one workspace does not affect the others.

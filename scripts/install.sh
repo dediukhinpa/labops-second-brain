@@ -76,12 +76,9 @@ fi
 : "${MCP_MEMORY_ROUTER_PORT:=5002}"
 : "${MCP_AGENT_ROUTER_PORT:=5000}"
 : "${VAULT_ROOT:=$INSTALL_DIR/vault}"
-: "${DOMAIN:=}"
-: "${ACME_EMAIL:=}"
 
 log "INSTALL_DIR=$INSTALL_DIR SERVICE_USER=$SERVICE_USER"
 log "PG_DATABASE=$PG_DATABASE PG_USER=$PG_USER"
-log "DOMAIN=${DOMAIN:-<unset, skip caddy>}"
 
 # Peer-auth coupling guard.
 # A unix-socket PG_HOST (path starting with "/") combined with an empty
@@ -131,21 +128,9 @@ if [ ! -f /etc/apt/sources.list.d/pgdg.list ]; then
   apt-get update -y
 fi
 
-# Caddy stable from cloudsmith (Ubuntu universe has very old Caddy v2.4).
-if [ ! -f /etc/apt/sources.list.d/caddy-stable.list ]; then
-  log "adding caddy stable apt repo"
-  apt-get install -y debian-keyring debian-archive-keyring apt-transport-https curl
-  curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
-    | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-  echo "deb [signed-by=/usr/share/keyrings/caddy-stable-archive-keyring.gpg] https://dl.cloudsmith.io/public/caddy/stable/deb/debian any-version main" \
-    > /etc/apt/sources.list.d/caddy-stable.list
-  apt-get update -y
-fi
-
 apt-get install -y --no-install-recommends \
   python3.11 python3.11-venv python3.11-dev \
   postgresql-16 postgresql-16-pgvector \
-  caddy \
   git curl jq ca-certificates gettext-base build-essential libpq-dev
 
 log "apt install done"
@@ -451,35 +436,10 @@ done
 systemctl daemon-reload
 
 # ---------------------------------------------------------------------------
-# 13. Caddy (optional, only if DOMAIN set)
+# 13. Start services (memory-mcp, memory_router-mcp, agent_router-mcp, agent_router-worker, ingest-worker)
 # ---------------------------------------------------------------------------
 
-note "13. caddy"
-
-if [ -n "$DOMAIN" ] && [ -n "$ACME_EMAIL" ]; then
-  mkdir -p /etc/caddy/Caddyfile.d
-  DOMAIN="$DOMAIN" ACME_EMAIL="$ACME_EMAIL" \
-    envsubst < "$INSTALL_DIR/caddy/Caddyfile.template" \
-    > /etc/caddy/Caddyfile.d/second_brain.caddy
-  log "rendered /etc/caddy/Caddyfile.d/second_brain.caddy"
-
-  # Ensure main Caddyfile imports the .d directory
-  if [ -f /etc/caddy/Caddyfile ] && ! grep -q 'Caddyfile.d/' /etc/caddy/Caddyfile; then
-    echo 'import Caddyfile.d/*.caddy' >> /etc/caddy/Caddyfile
-    log "added 'import Caddyfile.d/*.caddy' to /etc/caddy/Caddyfile"
-  fi
-
-  systemctl reload caddy || systemctl restart caddy
-  log "caddy reloaded"
-else
-  log "DOMAIN or ACME_EMAIL unset — skipping Caddy (use Tailscale-only setup)"
-fi
-
-# ---------------------------------------------------------------------------
-# 14. Start services (memory-mcp, memory_router-mcp, agent_router-mcp, agent_router-worker, ingest-worker)
-# ---------------------------------------------------------------------------
-
-note "14. start services"
+note "13. start services"
 
 systemctl enable --now \
   second_brain-memory-mcp \
@@ -497,10 +457,10 @@ systemctl --no-pager status \
   second_brain-ingest-worker || true
 
 # ---------------------------------------------------------------------------
-# 15. Smoke test
+# 14. Smoke test
 # ---------------------------------------------------------------------------
 
-note "15. smoke test"
+note "14. smoke test"
 
 if [ -x "$INSTALL_DIR/scripts/smoke-test.sh" ]; then
   if MCP_MEMORY_PORT="$MCP_MEMORY_PORT" MCP_MEMORY_ROUTER_PORT="$MCP_MEMORY_ROUTER_PORT" \
@@ -519,10 +479,10 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 16. Done
+# 15. Done
 # ---------------------------------------------------------------------------
 
-note "16. done"
+note "15. done"
 
 cat <<EOF
 
@@ -539,9 +499,9 @@ fi
 cat <<EOF
 
 Next steps:
-  1. Verify services are listening:  ss -tlnp | grep -E '876[678]'
+  1. Verify services are listening:  ss -tlnp | grep -E '500[0-3]'
   2. Issue per-agent tokens:         $INSTALL_DIR/.venv/bin/python $INSTALL_DIR/scripts/issue-agent-token.py --agent <name> --scopes 'read,write'
-  3. Point your local agents at:     http(s)://<host>/{memory,memory_router,agent_router}/mcp
+  3. Point your local agents at:     http://<host>:$MCP_MEMORY_PORT/mcp (memory), :$MCP_MEMORY_ROUTER_PORT/mcp (memory_router), :$MCP_AGENT_ROUTER_PORT/mcp (agent_router)
   4. Set up the inbox-agent locally: bash $INSTALL_DIR/scripts/install-local.sh
   5. Review $ETC_DIR/secrets.env and add provider API keys you want available.
 
