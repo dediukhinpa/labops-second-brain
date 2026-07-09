@@ -69,7 +69,7 @@ cd labops-second-brain && claude
 **2. Заполнить только обязательные переменные** в `.env` (остальное генерируется/опционально — см. блок Quick Start в начале [`.env.example`](.env.example)):
 
 - `PG_HOST` — хост БД (по умолчанию unix-сокет `/var/run/postgresql` → peer-auth, пароль не нужен), `PG_DATABASE`, `PG_USER`;
-- `MCP_MEMORY_PORT` / `MCP_RECALL_PORT` / `MCP_SWARM_PORT` — порты серверов (дефолты `8767` / `8768` / `8766`);
+- `MCP_MEMORY_PORT` / `MCP_MEMORY_ROUTER_PORT` / `MCP_AGENT_ROUTER_PORT` — порты серверов (дефолты `5001` / `5002` / `5000`);
 - `PG_PASSWORD` нужен **только** при TCP-хосте; при peer-auth оставьте пустым.
 
 Установка считается успешной только при зелёном **smoke-test** в конце (если он падает — см. [Troubleshooting](#troubleshooting)).
@@ -89,9 +89,9 @@ sudo -u second_brain python /opt/second_brain/scripts/issue-agent-token.py \
 // ~/.claude/.mcp.json на хосте агента
 {
   "mcpServers": {
-    "second_brain-memory": { "url": "http://<VPS>:8767/mcp", "headers": { "Authorization": "Bearer <token>" } },
-    "second_brain-memory_router": { "url": "http://<VPS>:8768/mcp", "headers": { "Authorization": "Bearer <token>" } },
-    "second_brain-agent_router":  { "url": "http://<VPS>:8766/mcp", "headers": { "Authorization": "Bearer <token>" } }
+    "second_brain-memory": { "url": "http://<VPS>:5001/mcp", "headers": { "Authorization": "Bearer <token>" } },
+    "second_brain-memory_router": { "url": "http://<VPS>:5002/mcp", "headers": { "Authorization": "Bearer <token>" } },
+    "second_brain-agent_router":  { "url": "http://<VPS>:5000/mcp", "headers": { "Authorization": "Bearer <token>" } }
   }
 }
 ```
@@ -107,7 +107,7 @@ recall(query="как мы храним эмбеддинги")
 Проверить мозг напрямую, без агента:
 
 ```bash
-curl -sS -H "Authorization: Bearer <token>" http://<VPS>:8768/mcp/
+curl -sS -H "Authorization: Bearer <token>" http://<VPS>:5002/mcp/
 # ожидается 406 с телом MCP-ошибки (живой upstream). 401 → неверный токен. Connection refused → файрвол.
 ```
 
@@ -147,10 +147,10 @@ flowchart LR
     end
 
     subgraph brain["labops-second-brain (один VPS)"]
-        MEM["memory-mcp :8767<br/>запись заметок в vault"]
-        REC["memory_router-mcp :8768<br/>гибридный поиск"]
-        SW["agent_router-mcp :8766<br/>маршрутизация агентов"]
-        TASK["task-mcp :8769<br/>задачи/доска"]
+        MEM["memory-mcp :5001<br/>запись заметок в vault"]
+        REC["memory_router-mcp :5002<br/>гибридный поиск"]
+        SW["agent_router-mcp :5000<br/>маршрутизация агентов"]
+        TASK["task-mcp :5003<br/>задачи/доска"]
         IW["ingest-worker<br/>чанкинг + эмбеддинги"]
         SWW["agent_router-worker<br/>доставка webhooks"]
         PG[("Postgres 16 + pgvector<br/>documents · embeddings ·<br/>agent_tokens · audit ·<br/>swarm_outbox · tasks")]
@@ -183,10 +183,10 @@ flowchart LR
 
 | Сервер | Порт | Назначение | systemd |
 |---|---|---|---|
-| `memory-mcp` | **8767** | запись заметок в vault (decision/runbook/error/external/personal/project), дедуп по sha256 | `memory-mcp.service` |
-| `memory_router-mcp` | **8768** | гибридный поиск (semantic + lexical + rerank), кросс-линки | `memory_router-mcp.service` |
-| `agent_router-mcp` | **8766** | координация роя: outbox, inter-agent сообщения | `agent_router-mcp.service` |
-| `task-mcp` | **8769** | задачи, доска, supervisor агентов | `task-mcp.service` |
+| `memory-mcp` | **5001** | запись заметок в vault (decision/error/external/personal/project), дедуп по sha256 | `memory-mcp.service` |
+| `memory_router-mcp` | **5002** | гибридный поиск (semantic + lexical + rerank), кросс-линки | `memory_router-mcp.service` |
+| `agent_router-mcp` | **5000** | координация роя: outbox, inter-agent сообщения | `agent_router-mcp.service` |
+| `task-mcp` | **5003** | задачи, доска, supervisor агентов | `task-mcp.service` |
 | `ingest-worker` | — | чанкинг + эмбеддинги (watermark по изменениям) | `ingest-worker.service` |
 |  `agent_router-worker` | — | доставка webhooks (5 ретраев, exp backoff) | `agent_router-worker.service` |
 
@@ -208,7 +208,7 @@ flowchart LR
 
 ## Scopes и RBAC
 
-Числовые префиксы (`10-`, `30-`, `90-`…) — это просто **папки верхнего уровня в vault**, по которым раскладывается знание (стратегия, решения, входящее и т.д.); цифры задают порядок и группировку, не приоритет. Каждый scope — отдельная «полка», и доступ к чтению/записи выдаётся по списку этих полок. Новичку проще всего выдать себе токен со `scopes='*'` (доступ ко всем полкам — удобно для админки и тестов) и сузить права позже, когда станет ясно, кому что нужно.
+Scope — это просто **папки верхнего уровня в vault**, по которым раскладывается знание (стратегия, решения, входящее и т.д.). Каждый scope — отдельная «полка», и доступ к чтению/записи выдаётся по списку этих полок. Новичку проще всего выдать себе токен со `scopes='*'` (доступ ко всем полкам — удобно для админки и тестов) и сузить права позже, когда станет ясно, кому что нужно.
 
 **Scope** = первая папка пути в vault. Разрешённый список — `services/memory_mcp/path_guard.py` (`ALLOWED_SCOPES`):
 
@@ -219,9 +219,8 @@ flowchart LR
 | `daily` / `metrics` | дневные логи, метрики |
 | `decisions` | архитектурные/продуктовые решения |
 | `projects` | бизнес: бухгалтерия, договора, регламенты, переписка, коммтайна |
-| `external` / `knowledge` | внешние источники, исследования, статьи |
+| `external` / `knowledge` | внешние источники, исследования, статьи, воспроизводимые процессы |
 | `tasks` | задачи |
-| `runbooks` | воспроизводимые процессы |
 | `error-patterns` | баги и их фиксы |
 | `inbox` | входящее, не разобранное |
 
@@ -278,7 +277,6 @@ flowchart LR
 | Инструмент | Scope по умолчанию | Что фиксирует |
 |---|---|---|
 | `create_decision_note` | `decisions` | архитектурные/продуктовые решения, API-контракты, правила |
-| `create_runbook_note` | `runbooks` | воспроизводимые процессы |
 | `create_error_pattern_note` | `error-patterns` | баг + фикс + как не повторить |
 | `create_external_note` | `external` | внешние источники/исследования (+ `source_url`) |
 | `create_personal_note` | `personal` | про человека |
@@ -341,7 +339,7 @@ sudo SKIP_SMOKE_GATE=1 bash scripts/install.sh
 
 | Переменная | Назначение |
 |---|---|
-| `MCP_MEMORY_PORT` / `MCP_RECALL_PORT` / `MCP_SWARM_PORT` / `MCP_TASK_PORT` | порты серверов (8767/8768/8766/8769) |
+| `MCP_MEMORY_PORT` / `MCP_MEMORY_ROUTER_PORT` / `MCP_AGENT_ROUTER_PORT` / `MCP_TASK_PORT` | порты серверов (5001/5002/5000/5003) |
 | `SERVICE_USER` | системный пользователь (`second_brain`) |
 | `INSTALL_DIR` | каталог установки (`/opt/second_brain`) |
 | `DOMAIN` / `ACME_EMAIL` | для Caddy + TLS (опционально) |

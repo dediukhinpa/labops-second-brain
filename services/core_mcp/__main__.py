@@ -1,12 +1,12 @@
 """Combined second_brain MCP process.
 
-Runs the three light, model-free MCP servers — memory (8767), swarm (8766),
-task (8769) — in ONE process / event loop instead of three. They already share
+Runs the three light, model-free MCP servers — memory (5001), swarm (5000),
+task (5003) — in ONE process / event loop instead of three. They already share
 the asyncpg pool (the ``get_pool`` singleton in ``services.shared.db``), so a
 single process simply drops two redundant Python interpreters + import sets
 (~170 MB RAM on the 8 GB box).
 
-recall (8768) deliberately stays a SEPARATE service: it loads the e5 + reranker
+recall (5002) deliberately stays a SEPARATE service: it loads the e5 + reranker
 models (~2.2 GB) and must be isolated so a write-path fault here can never
 OOM-kill the search hot path.
 

@@ -2,7 +2,7 @@
 
 Pointer index. One-line entries that link to longer files. Read this first to know what exists, then fetch the specific file you need.
 
-Some paths below (anything under `projects/`, `runbooks/`, or `playtests/`) refer to files outside this samples folder — they are illustrative, showing how a real vault cross-links.
+Some paths below (anything under `projects/`, `knowledge/`, or `playtests/`) refer to files outside this samples folder — they are illustrative, showing how a real vault cross-links.
 
 - [Combat redesign decision](decisions.md#2025-08-12-switch-combat-prototype-from-real-time-to-turn-based) — turn-based pivot, the why and how.
 - *Godot migration log* — six-week port, three blockers, what we would do again. (See decisions.md.)

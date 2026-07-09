@@ -24,9 +24,9 @@ fi
 
 : "${INSTALL_DIR:=/opt/second_brain}"
 : "${MCP_BASE:=}"
-: "${MCP_MEMORY_PORT:=8767}"
-: "${MCP_MEMORY_ROUTER_PORT:=8768}"
-: "${MCP_AGENT_ROUTER_PORT:=8766}"
+: "${MCP_MEMORY_PORT:=5001}"
+: "${MCP_MEMORY_ROUTER_PORT:=5002}"
+: "${MCP_AGENT_ROUTER_PORT:=5000}"
 : "${ADMIN_TOKEN:=}"
 
 # Load admin token from file if not set

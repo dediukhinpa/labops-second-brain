@@ -128,9 +128,9 @@ If the user is undecided after reading this section, default to Path A and expli
               |                                                 |
               |   Caddy (TLS, optional)                         |
               |     |                                           |
-              |     +-- /memory/mcp  --> memory_mcp  :8767      |
-              |     +-- /memory_router/mcp  --> memory_router_mcp  :8768      |
-              |     +-- /agent_router/mcp   --> agent_router_mcp   :8766      |
+              |     +-- /memory/mcp  --> memory_mcp  :5001      |
+              |     +-- /memory_router/mcp  --> memory_router_mcp  :5002      |
+              |     +-- /agent_router/mcp   --> agent_router_mcp   :5000      |
               |                                                 |
               |   ingest-worker (systemd)                       |
               |     watches embedding_jobs --> embeds chunks    |
@@ -149,9 +149,9 @@ If the user is undecided after reading this section, default to Path A and expli
 
 | Service | Port | Purpose | Scopes it writes |
 |---|---|---|---|
-| `memory_mcp` | 8767 | Write tools: create decision, runbook, error-pattern, external note, daily log entry | daily, decisions, external, knowledge, runbooks, error-patterns, inbox |
-| `memory_router_mcp` | 8768 | Read tools: recall (hybrid search), recent, related, get-by-id, stats | none (read-only) |
-| `agent_router_mcp` | 8766 | Inter-agent event bus: notify, ack, list-pending, broadcast | none (writes to `outbox` table only) |
+| `memory_mcp` | 5001 | Write tools: create decision, error-pattern, external note, daily log entry | daily, decisions, external, knowledge, error-patterns, inbox |
+| `memory_router_mcp` | 5002 | Read tools: recall (hybrid search), recent, related, get-by-id, stats | none (read-only) |
+| `agent_router_mcp` | 5000 | Inter-agent event bus: notify, ack, list-pending, broadcast | none (writes to `outbox` table only) |
 
 **Auth:** each agent gets a Bearer token. Token sha256 is stored in `agent_tokens.token_sha256`. Each request's `Authorization: Bearer <token>` header is captured by `AuthCaptureMiddleware` and the token resolves to an agent identity with scoped write permissions. No header → 401. No silent fallback. Ever. **In Path B, each personal agent workspace gets its own distinct Bearer** — never share tokens between agents.
 
@@ -246,8 +246,8 @@ Only if the user picked Path B, ask these on top:
     - **Agent id** (slug, lowercase, hyphenated — e.g. `coordinator-agent`, `coder-agent`, `marketer-agent`). This becomes the workspace directory name `~/.claude-lab/<agent-id>/.claude/` and the `agent` identifier in `agent_tokens`.
     - **Role** (1 line, e.g. "main coordinator and brainstorm partner", "Python/TypeScript coder for backend work", "content marketer for Telegram channel").
     - **Write scopes** (comma-separated subset of the 12 vault scopes). Defaults per role:
-        - `coordinator-agent`: `daily, decisions, external, knowledge, runbooks, error-patterns, inbox`
-        - `coder-agent`: `decisions, knowledge, runbooks, error-patterns, inbox`
+        - `coordinator-agent`: `daily, decisions, external, knowledge, error-patterns, inbox`
+        - `coder-agent`: `decisions, knowledge, error-patterns, inbox`
         - `marketer-agent`: `daily, knowledge, inbox`
         - `researcher-agent` (recall-only): empty write scopes
     - **Read scopes**: default `*` (all). Only restrict if the user is explicit.
@@ -345,13 +345,13 @@ If smoke-test fails, do not move on. The most common cause is `AuthCaptureMiddle
 
 You need at minimum two tokens for Path A:
 
-- **coordinator token** — for the user's main Claude Code agent that recalls and writes decisions. Full scopes: `daily, decisions, external, knowledge, runbooks, error-patterns, inbox`.
+- **coordinator token** — for the user's main Claude Code agent that recalls and writes decisions. Full scopes: `daily, decisions, external, knowledge, error-patterns, inbox`.
 - **inbox-agent token** — restricted to the scopes inbox-agent writes: `decisions, external, knowledge, inbox`.
 
 Issue them with:
 
 ```bash
-ssh <USER>@<VPS_IP> "cd /opt/second_brain && python scripts/issue-agent-token.py --agent coordinator-agent --scopes 'daily,decisions,external,knowledge,runbooks,error-patterns,inbox'"
+ssh <USER>@<VPS_IP> "cd /opt/second_brain && python scripts/issue-agent-token.py --agent coordinator-agent --scopes 'daily,decisions,external,knowledge,error-patterns,inbox'"
 ssh <USER>@<VPS_IP> "cd /opt/second_brain && python scripts/issue-agent-token.py --agent inbox-agent --scopes 'decisions,external,knowledge,inbox'"
 ```
 
@@ -488,7 +488,7 @@ The script is **interactive**. It will prompt for:
 - **agent id** → enter `<agent-id>`
 - **role description** → enter `<role>`
 - **owner name** → enter `<owner-name>`
-- **MCP host** → enter the user's brain URL: `https://<DOMAIN>` if Caddy is up, otherwise `http://<VPS_IP>:8767` for memory, etc. (the template generates all 3 entries from one host base).
+- **MCP host** → enter the user's brain URL: `https://<DOMAIN>` if Caddy is up, otherwise `http://<VPS_IP>:5001` for memory, etc. (the template generates all 3 entries from one host base).
 - **agent bearer token** → leave **blank** for now. You will fill it in step 15.
 - **model** → enter `<model>`
 - **install dir** → default `~/.claude-lab/<agent-id>`; confirm.
@@ -689,7 +689,7 @@ The deployment is complete when ALL of these are verifiable. Read each one and c
 
 - [ ] `systemctl is-active second_brain-memory-mcp second_brain-memory_router-mcp second_brain-agent_router-mcp second_brain-ingest-worker` returns `active` for all four.
 - [ ] `psql -U second_brain -d second_brain -c "SELECT agent, array_length(can_write_scopes,1) FROM agent_tokens WHERE revoked_at IS NULL;"` shows at least two rows (`coordinator-agent`, `inbox-agent`) with the expected scope counts.
-- [ ] `curl -sS https://<DOMAIN>/memory_router/mcp` or `curl -sS http://<VPS_IP>:8768/` returns the recall service banner (200, "MCP service: recall").
+- [ ] `curl -sS https://<DOMAIN>/memory_router/mcp` or `curl -sS http://<VPS_IP>:5002/` returns the recall service banner (200, "MCP service: recall").
 - [ ] The Telegram bot (`bot.py`) responds to `/start` from the allowlisted user_id within 2 seconds, and replies with a short ack to a forwarded URL.
 - [ ] A forwarded URL → bot ack ("Got it") → `recall.recent(scope='external')` returns the URL with `agent: inbox-agent`. End-to-end.
 - [ ] `crontab -l` shows the two inbox-agent entries.

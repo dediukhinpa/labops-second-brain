@@ -4,9 +4,9 @@ Four service unit templates that `scripts/install.sh` renders and installs to `/
 
 | Template | Installed name | Purpose |
 |---|---|---|
-| `memory-mcp.service.template` | `second_brain-memory-mcp.service` | Write-side MCP (port 8767) |
-| `memory_router-mcp.service.template` | `second_brain-memory_router-mcp.service` | Read-side MCP (port 8768) |
-| `agent_router-mcp.service.template` | `second_brain-agent_router-mcp.service` | Inter-agent event bus (port 8766) |
+| `memory-mcp.service.template` | `second_brain-memory-mcp.service` | Write-side MCP (port 5001) |
+| `memory_router-mcp.service.template` | `second_brain-memory_router-mcp.service` | Read-side MCP (port 5002) |
+| `agent_router-mcp.service.template` | `second_brain-agent_router-mcp.service` | Inter-agent event bus (port 5000) |
 | `ingest-worker.service.template` | `second_brain-ingest-worker.service` | Vault file indexer |
 
 ## Placeholders
@@ -64,7 +64,7 @@ journalctl -u second_brain-memory-mcp -n 50 --no-pager
 ss -tlnp | grep -E '876[678]'
 ```
 
-You should see three sockets listening on 8766 / 8767 / 8768, all owned by `python` processes under the `second_brain` user.
+You should see three sockets listening on 5000 / 5001 / 5002, all owned by `python` processes under the `second_brain` user.
 
 ## Troubleshooting
 

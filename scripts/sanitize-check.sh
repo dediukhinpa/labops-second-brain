@@ -39,16 +39,16 @@ fi
 
 # -----------------------------------------------------------------------------
 # Legacy env-var name check — catches re-introduction of pre-canonical names.
-# Canonical names: PG_DATABASE, PG_PASSWORD, MCP_MEMORY_PORT, MCP_RECALL_PORT,
-# MCP_SWARM_PORT, VAULT_ROOT.
+# Canonical names: PG_DATABASE, PG_PASSWORD, MCP_MEMORY_PORT, MCP_MEMORY_ROUTER_PORT,
+# MCP_AGENT_ROUTER_PORT, VAULT_ROOT.
 # -----------------------------------------------------------------------------
 
 # The rule definition itself contains the names it forbids; build it from
 # components so the file is allowed to mention them.
 _LEG1="PG_DB"
 _LEG2="MCP_PORT_MEMORY"
-_LEG3="MCP_PORT_RECALL"
-_LEG4="MCP_PORT_SWARM"
+_LEG3="MCP_PORT_MEMORY_ROUTER"
+_LEG4="MCP_PORT_AGENT_ROUTER"
 _LEG5="VAULT_DIR"
 LEGACY_ENV="\\b(${_LEG1}|${_LEG2}|${_LEG3}|${_LEG4}|${_LEG5})\\b"
 
@@ -64,7 +64,7 @@ legacy_matches="$(printf '%s' "$legacy_matches" | grep -v '^\./\.env\.example.*#
 
 if [ -n "$legacy_matches" ]; then
   printf 'sanitize-check FAILED — legacy env-var names present:\n\n%s\n\n' "$legacy_matches" >&2
-  printf 'Canonical names: PG_DATABASE, MCP_MEMORY_PORT, MCP_RECALL_PORT, MCP_SWARM_PORT, VAULT_ROOT\n' >&2
+  printf 'Canonical names: PG_DATABASE, MCP_MEMORY_PORT, MCP_MEMORY_ROUTER_PORT, MCP_AGENT_ROUTER_PORT, VAULT_ROOT\n' >&2
   exit 1
 fi
 

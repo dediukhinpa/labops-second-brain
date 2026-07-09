@@ -102,8 +102,8 @@ After fixing, `sudo systemctl reload caddy` and watch logs.
 **Diagnosis chain:**
 
 1. **Did the dual-write attempt succeed?** `tail -200 ${INBOX_AGENT_HOME}/logs/save-to-raw.log`. The hook logs the HTTP status returned by `memory_mcp.create_external_note`. A `200` means brain accepted it. A `401`/`403`/`5xx` means the brain rejected it — read the body to see why.
-2. **Is the `.mcp.json` Bearer correct?** `cat ${INBOX_AGENT_HOME}/.claude/.mcp.json | jq '.mcpServers["second_brain-memory"]'`. Confirm the URL matches your VPS (`https://mcp.<your-domain>/memory/mcp` or `http://<tailscale-ip>:8767/mcp`) and the bearer header is non-empty. If you see literal `${MCP_HOST}` / `${AGENT_TOKEN}` placeholders, re-run `bash scripts/install-local.sh` — `envsubst` did not substitute.
-3. **VPS reachability:** `curl -sS -H "Authorization: Bearer $(jq -r '.mcpServers["second_brain-memory"].headers.Authorization' ${INBOX_AGENT_HOME}/.claude/.mcp.json | cut -d' ' -f2)" https://mcp.<your-domain>/memory_router/mcp/` (or the Tailscale equivalent). Expect 406 with an MCP error body — that proves the upstream is alive and your token works. 401 → wrong token. Connection refused → firewall blocks 443 (or 8767 on Tailscale).
+2. **Is the `.mcp.json` Bearer correct?** `cat ${INBOX_AGENT_HOME}/.claude/.mcp.json | jq '.mcpServers["second_brain-memory"]'`. Confirm the URL matches your VPS (`https://mcp.<your-domain>/memory/mcp` or `http://<tailscale-ip>:5001/mcp`) and the bearer header is non-empty. If you see literal `${MCP_HOST}` / `${AGENT_TOKEN}` placeholders, re-run `bash scripts/install-local.sh` — `envsubst` did not substitute.
+3. **VPS reachability:** `curl -sS -H "Authorization: Bearer $(jq -r '.mcpServers["second_brain-memory"].headers.Authorization' ${INBOX_AGENT_HOME}/.claude/.mcp.json | cut -d' ' -f2)" https://mcp.<your-domain>/memory_router/mcp/` (or the Tailscale equivalent). Expect 406 with an MCP error body — that proves the upstream is alive and your token works. 401 → wrong token. Connection refused → firewall blocks 443 (or 5001 on Tailscale).
 4. **Did the embedding job run?** On the VPS: `psql -U second_brain -d second_brain -c "SELECT id, status, created_at FROM embedding_jobs ORDER BY id DESC LIMIT 5;"`. A `pending` job that hasn't moved in minutes means the ingest worker is stuck — see "ingest-worker is not embedding new files" above.
 5. **Scope check.** `recall.recent` filters by scope. The hook writes scope `external` by default — if your `classifier.yaml` rerouted the URL to `knowledge` or `inbox`, change the recall call accordingly.
 
@@ -270,7 +270,7 @@ Hard-deleting markdown is supported but irreversible. Always back up before prun
 2. The most common crashes:
    - Postgres connection refused — Postgres not up yet (`systemctl status postgresql`) or password wrong.
    - Module import error — venv corrupted or `requirements.txt` not installed. Reinstall: `sudo -u second_brain /opt/second_brain/.venv/bin/pip install -r /opt/second_brain/requirements.txt`.
-   - Port already in use — another process grabbed 8767/8/6. `sudo ss -tlnp | grep 876` and kill it.
+   - Port already in use — another process grabbed 5001/8/6. `sudo ss -tlnp | grep 876` and kill it.
 3. To stop the auto-restart while debugging: `sudo systemctl stop second_brain-<svc>-mcp`, then run the service manually: `sudo -u second_brain /opt/second_brain/.venv/bin/python -m services.<svc>.server` — you will see errors in your terminal directly.
 
 ---

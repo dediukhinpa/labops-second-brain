@@ -148,9 +148,9 @@ def test_request_auth_set_and_reset_round_trip() -> None:
 
 def test_find_wikilinks_basic() -> None:
     """Wikilink extractor returns deduplicated targets."""
-    text = "See [[decisions/a.md]] and [[decisions/a.md]] and [[runbooks/b.md]]."
+    text = "See [[decisions/a.md]] and [[decisions/a.md]] and [[external/b.md]]."
     out = find_wikilinks(text)
-    assert out == ["decisions/a.md", "runbooks/b.md"]
+    assert out == ["decisions/a.md", "external/b.md"]
 
 
 def test_find_wikilinks_with_related_frontmatter() -> None:
@@ -503,12 +503,12 @@ def test_recall_cache_key_includes_source_types_sorted(
         recall_a, cache, _ = _capture_recall_tool()
         asyncio.run(
             recall_a(
-                "hello", limit=5, scopes=["*"], source_types=["decision", "runbook"]
+                "hello", limit=5, scopes=["*"], source_types=["decision", "external"]
             )
         )
         asyncio.run(
             recall_a(
-                "hello", limit=5, scopes=["*"], source_types=["runbook", "decision"]
+                "hello", limit=5, scopes=["*"], source_types=["external", "decision"]
             )
         )
         asyncio.run(
@@ -529,7 +529,7 @@ def test_recall_cache_key_includes_source_types_sorted(
     assert keys[0] != keys[3]
     # None must be encoded as the 5th element.
     assert keys[3][4] is None
-    assert keys[0][4] == ("decision", "runbook")
+    assert keys[0][4] == ("decision", "external")
 
 
 def test_recall_public_signature_unchanged() -> None:

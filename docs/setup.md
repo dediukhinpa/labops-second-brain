@@ -113,7 +113,7 @@ journalctl -u <service-name> -n 100 --no-pager
 The most common causes:
 
 - **Postgres not ready when service started** — `systemctl restart <service>` once Postgres is up.
-- **Port already in use** — another service grabbed 8766/7/8. Find it: `ss -tlnp | grep 876`. Kill or reconfigure.
+- **Port already in use** — another service grabbed 5000/7/8. Find it: `ss -tlnp | grep 876`. Kill or reconfigure.
 - **Permission denied on vault** — the `second_brain` user must own `${VAULT_ROOT}`. `chown -R second_brain:second_brain /opt/second_brain/vault`.
 
 ---
@@ -157,7 +157,7 @@ On the VPS:
 cd /opt/second_brain
 sudo -u second_brain python scripts/issue-agent-token.py \
   --agent coordinator-agent \
-  --scopes 'daily,decisions,external,knowledge,runbooks,error-patterns,inbox'
+  --scopes 'daily,decisions,external,knowledge,error-patterns,inbox'
 
 sudo -u second_brain python scripts/issue-agent-token.py \
   --agent inbox-agent \
@@ -179,19 +179,19 @@ Edit `/etc/caddy/Caddyfile` if `install.sh` did not substitute correctly:
 ```
 mcp.example.com {
     handle_path /memory/* {
-        reverse_proxy 127.0.0.1:8767 {
+        reverse_proxy 127.0.0.1:5001 {
             flush_interval -1
             header_up Host {upstream_hostport}
         }
     }
     handle_path /memory_router/* {
-        reverse_proxy 127.0.0.1:8768 {
+        reverse_proxy 127.0.0.1:5002 {
             flush_interval -1
             header_up Host {upstream_hostport}
         }
     }
     handle_path /agent_router/* {
-        reverse_proxy 127.0.0.1:8766 {
+        reverse_proxy 127.0.0.1:5000 {
             flush_interval -1
             header_up Host {upstream_hostport}
         }
@@ -353,7 +353,7 @@ The script is interactive. It will ask:
 - **agent id** — slug, lowercase, hyphenated (e.g. `coordinator-agent`, `coder-agent`). Becomes the workspace directory name and the `agent` row in `agent_tokens`.
 - **role description** — 1 line. E.g. "main coordinator and brainstorm partner".
 - **owner name** — your name. Goes into `core/USER.md` of the new workspace.
-- **MCP host** — your brain URL. `https://mcp.example.com` if Caddy is up, otherwise `http://<VPS_IP>:8767` for memory plus the matching ports for recall/swarm (the script renders all three).
+- **MCP host** — your brain URL. `https://mcp.example.com` if Caddy is up, otherwise `http://<VPS_IP>:5001` for memory plus the matching ports for recall/swarm (the script renders all three).
 - **agent bearer token** — leave blank for now. You will fill it in step 13.
 - **model** — `claude-sonnet-4.6` for most roles, `claude-opus-4.7` for a coordinator.
 - **install dir** — default `~/.claude-lab/<agent-id>`. Confirm.
@@ -390,8 +390,8 @@ sudo -u second_brain python /opt/second_brain/scripts/issue-agent-token.py \
 
 Default scope sets per role:
 
-- `coordinator-agent`: `daily,decisions,external,knowledge,runbooks,error-patterns,inbox`
-- `coder-agent`: `decisions,knowledge,runbooks,error-patterns,inbox`
+- `coordinator-agent`: `daily,decisions,external,knowledge,error-patterns,inbox`
+- `coder-agent`: `decisions,knowledge,error-patterns,inbox`
 - `marketer-agent`: `daily,knowledge,inbox`
 - `researcher-agent` (recall-only): `--scopes ''` (empty — recall always works, but no writes)
 

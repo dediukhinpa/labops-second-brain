@@ -12,7 +12,7 @@ Incidents + fixes. **Weighted 3.0× in recall** — this folder is the team's in
 
 ## What does NOT go here
 
-- Step-by-step procedures — those go to `runbooks/`
+- Step-by-step procedures — those go to `knowledge/`
 - Decisions made in response — `decisions/`
 - General knowledge — `knowledge/`
 

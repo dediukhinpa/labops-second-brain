@@ -34,10 +34,10 @@ VERIFY_BEARER="${VERIFY_BEARER:-}"
 # (memory/agent_router/task live in one core process, memory_router is separate). Edit the
 # ports here only if you changed them at install time.
 MCP_ENDPOINTS=(
-  "second_brain-core-mcp:8767:/mcp"    # memory
-  "second_brain-core-mcp:8766:/mcp"    # agent_router
-  "second_brain-core-mcp:8769:/mcp"    # task
-  "second_brain-memory_router-mcp:8768:/mcp"  # memory_router
+  "second_brain-core-mcp:5001:/mcp"    # memory
+  "second_brain-core-mcp:5000:/mcp"    # agent_router
+  "second_brain-core-mcp:5003:/mcp"    # task
+  "second_brain-memory_router-mcp:5002:/mcp"  # memory_router
 )
 WORKER_UNITS=( second_brain-ingest-worker second_brain-agent_router-worker )
 REQUIRED_SECRET_KEYS=( PG_HOST PG_PORT PG_DATABASE PG_USER PG_PASSWORD \

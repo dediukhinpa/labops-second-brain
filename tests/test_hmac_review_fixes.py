@@ -140,7 +140,7 @@ async def test_audit_uses_authenticated_agent_not_param(
 
 
 def test_c1_decision_tools_use_authenticated_agent_for_audit() -> None:
-    """C1 static guard: the 3 patched tools (decision/runbook/error-pattern)
+    """C1 static guard: the patched tools (decision/error-pattern/personal/project)
     must assign ``resolved_agent = agent_ctx.agent`` (NOT
     ``agent or agent_ctx.agent``).
     """
@@ -153,7 +153,7 @@ def test_c1_decision_tools_use_authenticated_agent_for_audit() -> None:
         "C1: vulnerable spoof pattern resurfaced in tools.py"
     )
     # And the post-fix pattern must appear at least 3 times (one per
-    # fixed tool: decision, runbook, error_pattern).
+    # fixed tool: decision, error_pattern, personal/project).
     safe = src.count("resolved_agent = agent_ctx.agent")
     assert safe >= 3, f"C1: expected >=3 safe assignments, found {safe}"
     # declared_author must appear so the spoofed param is not silently dropped.
@@ -233,16 +233,16 @@ async def test_resolve_request_identity_threads_kill_switch(
 
 
 def test_restrict_read_scopes_intersects_with_token() -> None:
-    """C3: token with scopes=['decisions'] cannot request 'runbooks'."""
+    """C3: token with scopes=['decisions'] cannot request 'external'."""
     ctx = AgentContext(agent="iris", write_scopes=[], read_scopes=["decisions"])
     # Allowed.
     assert restrict_read_scopes(ctx, ["decisions"]) == ["decisions"]
     # Forbidden.
     with pytest.raises(PermissionError, match="cannot read"):
-        restrict_read_scopes(ctx, ["runbooks"])
+        restrict_read_scopes(ctx, ["external"])
     # Mixed → intersection only.
     out = restrict_read_scopes(
-        ctx, ["decisions", "runbooks"]
+        ctx, ["decisions", "external"]
     )
     assert out == ["decisions"]
 
@@ -257,12 +257,12 @@ def test_recall_rejects_star_for_non_wildcard_token() -> None:
     restricted = AgentContext(
         agent="iris",
         write_scopes=[],
-        read_scopes=["decisions", "runbooks"],
+        read_scopes=["decisions", "external"],
     )
     out = restrict_read_scopes(restricted, ["*"])
-    assert out == ["decisions", "runbooks"]
+    assert out == ["decisions", "external"]
     # None has the same effect for a restricted token.
-    assert restrict_read_scopes(restricted, None) == ["decisions", "runbooks"]
+    assert restrict_read_scopes(restricted, None) == ["decisions", "external"]
 
 
 def test_check_read_scope_wildcard_and_explicit() -> None:
@@ -271,7 +271,7 @@ def test_check_read_scope_wildcard_and_explicit() -> None:
     assert check_read_scope(wild, "anything") is True
     only = AgentContext(agent="iris", write_scopes=[], read_scopes=["decisions"])
     assert check_read_scope(only, "decisions") is True
-    assert check_read_scope(only, "runbooks") is False
+    assert check_read_scope(only, "external") is False
 
 
 @pytest.mark.asyncio
@@ -316,9 +316,9 @@ async def test_recall_restricts_to_read_scopes_via_bearer(
     )
     recall_fn = captured[0]  # first registered tool is `recall`
 
-    # Restricted token cannot request runbooks.
+    # Restricted token cannot request external.
     with pytest.raises(PermissionError, match="cannot read"):
-        await recall_fn(query="anything", limit=5, scopes=["runbooks"])
+        await recall_fn(query="anything", limit=5, scopes=["external"])
 
 
 @pytest.mark.asyncio
@@ -342,12 +342,12 @@ async def test_get_authorizes_target_doc_scope(
 
     pool = _FakePool(
         doc_row={
-            "path": "runbooks/x.md",
+            "path": "external/x.md",
             "frontmatter": {},
             "body": "secret body",
-            "source_type": "runbook",
+            "source_type": "external",
             "agent": "nova",
-            "scope": "runbooks",
+            "scope": "external",
             "created_at": None,
             "updated_at": None,
         }
@@ -374,7 +374,7 @@ async def test_get_authorizes_target_doc_scope(
     # Order of registration: recall, recent, related, get, stats, reindex_check.
     get_fn = captured[3]
     with pytest.raises(PermissionError, match="cannot read scope"):
-        await get_fn(path="runbooks/x.md")
+        await get_fn(path="external/x.md")
 
 
 @pytest.mark.asyncio

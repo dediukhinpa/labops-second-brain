@@ -16,7 +16,7 @@ mcp.{$DOMAIN} {
 
     @memory path /memory/*
     handle @memory {
-        reverse_proxy 127.0.0.1:8767 {
+        reverse_proxy 127.0.0.1:5001 {
             flush_interval -1
             header_up Host {upstream_hostport}
         }
@@ -24,7 +24,7 @@ mcp.{$DOMAIN} {
 
     @memory_router path /memory_router/*
     handle @memory_router {
-        reverse_proxy 127.0.0.1:8768 {
+        reverse_proxy 127.0.0.1:5002 {
             flush_interval -1
             header_up Host {upstream_hostport}
         }
@@ -32,7 +32,7 @@ mcp.{$DOMAIN} {
 
     @agent_router path /agent_router/*
     handle @agent_router {
-        reverse_proxy 127.0.0.1:8766 {
+        reverse_proxy 127.0.0.1:5000 {
             flush_interval -1
             header_up Host {upstream_hostport}
         }

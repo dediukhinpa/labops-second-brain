@@ -39,9 +39,9 @@ The scopes argument restricts which vault folders the agent can write into. A `r
 
 | Agent role | Suggested scopes |
 |---|---|
-| Coordinator (full agent) | `daily, decisions, external, knowledge, runbooks, error-patterns, inbox` |
+| Coordinator (full agent) | `daily, decisions, external, knowledge, error-patterns, inbox` |
 | Inbox-agent (Telegram bot) | `decisions, external, knowledge, inbox` |
-| Coder agent (writes runbooks, error-patterns) | `decisions, runbooks, error-patterns, inbox` |
+| Coder agent (writes knowledge, error-patterns) | `decisions, knowledge, error-patterns, inbox` |
 | Reviewer agent | `decisions, error-patterns, inbox` |
 | Read-only research agent | (empty — recall works without write scopes) |
 
@@ -97,7 +97,7 @@ There are two supported topologies. Pick one.
 ### Option A: public domain with Caddy + TLS
 
 ```
-internet ---> :443 Caddy ---> :8767/8/6 (localhost) MCP services
+internet ---> :443 Caddy ---> :5001/8/6 (localhost) MCP services
 ```
 
 - UFW rules: `ufw allow 80/tcp` (ACME challenge), `ufw allow 443/tcp`, `ufw default deny incoming`.
@@ -110,7 +110,7 @@ This is the recommended default. TLS + Bearer is layered defense — neither alo
 ### Option B: Tailscale-only, no public exposure
 
 ```
-your devices on tailnet ---> 100.x.y.z:8767/8/6 MCP services (Tailscale IP only)
+your devices on tailnet ---> 100.x.y.z:5001/8/6 MCP services (Tailscale IP only)
 ```
 
 - No port 80/443 exposed publicly.
@@ -122,7 +122,7 @@ Tailscale-only is appropriate when (a) you do not have a domain or do not want p
 
 ### What NOT to do
 
-- **Do NOT bind MCP services to `0.0.0.0` without a firewall.** Even with Bearer auth, exposing 8767/8/6 to the internet means anyone can hammer the auth endpoint indefinitely. UFW + firewall rules are not optional.
+- **Do NOT bind MCP services to `0.0.0.0` without a firewall.** Even with Bearer auth, exposing 5001/8/6 to the internet means anyone can hammer the auth endpoint indefinitely. UFW + firewall rules are not optional.
 - **Do NOT put the brain behind Cloudflare proxied DNS** for the MCP endpoints. Cloudflare's proxy buffers SSE / streaming, breaking the `streamable-http` transport. Use DNS-only (`proxied=false`) for MCP subdomains.
 - **Do NOT expose Postgres on the public network.** Even with a password, this is a `DROP TABLE` risk if the password leaks. Postgres → localhost only.
 

@@ -10,7 +10,7 @@ Immutable decision notes with full context. This is the **most-trafficked** fold
 
 ## What does NOT go here
 
-- Tactical implementation details — those go into runbooks
+- Tactical implementation details — those go into `knowledge/`
 - Bug fixes — `error-patterns/`
 - Pending proposals (only ship a decision file when the call is made)
 

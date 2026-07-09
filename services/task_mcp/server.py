@@ -1,4 +1,4 @@
-"""FastMCP server for task-mcp (task board CRUD for agent swarm), port 8769."""
+"""FastMCP server for task-mcp (task board CRUD for agent swarm), port 5003."""
 import logging
 import os
 import sys
@@ -34,7 +34,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-DEFAULT_PORT = 8769
+DEFAULT_PORT = 5003
 
 # Per-request auth captured by ASGI middleware. Holds a Bearer string,
 # a HmacAuthValue, or None. Workaround for FastMCP stateless HTTP not

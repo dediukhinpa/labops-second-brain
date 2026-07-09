@@ -82,7 +82,6 @@ def test_memory_core_tools_policy() -> None:
 
     # Other memory tools should be hidden in core.
     for name in [
-        "create_runbook_note",
         "create_external_note",
         "update_index",
         "update_document",
@@ -105,7 +104,6 @@ def test_memory_all_tools_policy_includes_slots() -> None:
         "slot_append",
         "slot_replace",
         "slot_delete",
-        "create_runbook_note",
         "update_document",
     ]:
         assert should_register_tool("memory_mcp", name, "all") is True

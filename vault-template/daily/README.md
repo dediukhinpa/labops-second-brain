@@ -7,7 +7,7 @@ Cross-agent daily timeline. Append-only narrative log of what happened.
 - One file per day: `YYYY-MM-DD.md`
 - Each agent appends their notable events under a `## <agent-name>` heading
 - Brief: what was done, what blocked, what's next
-- Cross-references to decisions, runbooks, error patterns created that day
+- Cross-references to decisions, knowledge notes, error patterns created that day
 
 ## What does NOT go here
 
@@ -37,7 +37,7 @@ related: []
 ## coder-agent
 
 - Shipped Caddy migration to `mcp.example.com`
-- Smoke tests green; see `runbooks/2026-05-16-domain-migration.md`
+- Smoke tests green; see `knowledge/2026-05-16-domain-migration.md`
 
 ## inbox-agent
 

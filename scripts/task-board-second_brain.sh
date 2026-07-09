@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# task-board-second_brain.sh -- CLI wrapper for second_brain task-mcp (port 8769).
+# task-board-second_brain.sh -- CLI wrapper for second_brain task-mcp (port 5003).
 # Drop-in replacement for orgbus-based task-board.sh.
 #
 # Usage:
@@ -18,7 +18,7 @@ set -euo pipefail
 #   task-board-second_brain.sh heartbeat [--status online]
 
 TASK_MCP_HOST="${TASK_MCP_HOST:-127.0.0.1}"
-TASK_MCP_PORT="${TASK_MCP_PORT:-8769}"
+TASK_MCP_PORT="${TASK_MCP_PORT:-5003}"
 TASK_MCP_URL="http://${TASK_MCP_HOST}:${TASK_MCP_PORT}/mcp"
 
 if [[ -z "${SECOND_BRAIN_TOKEN:-}" ]]; then
@@ -175,7 +175,7 @@ Commands:
 Environment:
   SECOND_BRAIN_TOKEN        Bearer token (or ~/.secrets/second_brain-token file)
   TASK_MCP_HOST       MCP host (default: 127.0.0.1)
-  TASK_MCP_PORT       MCP port (default: 8769)
+  TASK_MCP_PORT       MCP port (default: 5003)
 EOF
     exit 0
 }

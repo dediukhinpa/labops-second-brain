@@ -142,7 +142,7 @@ def check_write_scope(agent_ctx: AgentContext, scope: str) -> bool:
 
     Args:
         agent_ctx: Authenticated agent context.
-        scope: Scope string (e.g. 'decisions', 'runbooks').
+        scope: Scope string (e.g. 'decisions', 'external').
 
     Returns:
         True if agent has write access to scope.

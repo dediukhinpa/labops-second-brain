@@ -723,7 +723,7 @@ class TestC1ConfigDisableSentinel:
         cfg = Config(
             pg_host="/tmp/socket",
             pg_password="placeholder",
-            mcp_port=8767,
+            mcp_port=5001,
             supersede_auto_threshold=0.0,
             supersede_hint_threshold=0.70,
         )
@@ -737,7 +737,7 @@ class TestC1ConfigDisableSentinel:
         monkeypatch.setenv("SECOND_BRAIN_SUPERSEDE_AUTO", "0")
         monkeypatch.setenv("SECOND_BRAIN_SUPERSEDE_HINT", "0.70")
         monkeypatch.setenv("PG_PASSWORD", "placeholder")
-        monkeypatch.setenv("MCP_PORT", "8767")
+        monkeypatch.setenv("MCP_PORT", "5001")
         cfg = Config()
         assert cfg.supersede_auto_threshold == 0.0
         assert cfg.supersede_hint_threshold == 0.70
@@ -751,12 +751,12 @@ class TestC1ConfigDisableSentinel:
         from services.shared.config import Config
 
         monkeypatch.setenv("PG_PASSWORD", "placeholder")
-        monkeypatch.setenv("MCP_PORT", "8767")
+        monkeypatch.setenv("MCP_PORT", "5001")
         with _pytest.raises(RuntimeError, match="SECOND_BRAIN_SUPERSEDE_HINT"):
             Config(
                 pg_host="/tmp/socket",
                 pg_password="placeholder",
-                mcp_port=8767,
+                mcp_port=5001,
                 supersede_auto_threshold=0.5,
                 supersede_hint_threshold=0.8,
             )
@@ -771,7 +771,7 @@ class TestC1ConfigDisableSentinel:
             Config(
                 pg_host="/tmp/socket",
                 pg_password="placeholder",
-                mcp_port=8767,
+                mcp_port=5001,
                 supersede_auto_threshold=0.0,
                 supersede_hint_threshold=1.5,
             )

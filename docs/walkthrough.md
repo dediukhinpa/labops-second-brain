@@ -95,10 +95,10 @@ JSON-RPC tool-calling protocol — function calls over HTTP that any
 MCP-aware client, including Claude Code, knows how to invoke.)
 
 The first service is **memory** — the write side. Agents call tools
-like `create_decision_note` and `create_runbook_note`. The service
+like `create_decision_note` and `create_error_pattern_note`. The service
 deduplicates by content hash, so retrying a write is free. It writes a
 canonical markdown file into the vault and enqueues it for indexing.
-Decisions, runbooks, error patterns, handoffs — each has its own tool
+Decisions, error patterns, handoffs — each has its own tool
 with its own schema, and each lands in a predictable folder.
 
 The second service is **recall** — the read side. Agents send a
@@ -139,7 +139,7 @@ and never notice that the argument is forgeable.
 
 The three services share one Postgres database and one filesystem
 vault. The vault is plain markdown organized into semantic folders —
-`decisions/`, `runbooks/`, `error-patterns/`, and so on.
+`decisions/`, `knowledge/`, `error-patterns/`, and so on.
 Markdown is the canonical store. The Postgres index is derived: if you
 blow it away, a reindex job rebuilds it from the vault. Your data is
 human-readable, grep-able, version-controllable in git, and survives

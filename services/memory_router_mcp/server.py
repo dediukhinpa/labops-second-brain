@@ -1,4 +1,4 @@
-"""FastMCP server for memory_router-mcp (read-side hybrid search), default port 8768.
+"""FastMCP server for memory_router-mcp (read-side hybrid search), default port 5002.
 
 Adopts the AuthCaptureMiddleware pattern from agent_router-mcp and memory-mcp so all
 three services have consistent identity surfacing. The memory_router tools require
@@ -36,7 +36,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-DEFAULT_PORT = 8768
+DEFAULT_PORT = 5002
 
 _pool: asyncpg.Pool | None = None
 _embed_model: Any = None

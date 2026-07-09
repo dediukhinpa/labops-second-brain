@@ -72,9 +72,9 @@ fi
 : "${PG_DATABASE:=second_brain}"
 : "${PG_USER:=second_brain}"
 : "${PG_PASSWORD:=}"
-: "${MCP_MEMORY_PORT:=8767}"
-: "${MCP_RECALL_PORT:=8768}"
-: "${MCP_SWARM_PORT:=8766}"
+: "${MCP_MEMORY_PORT:=5001}"
+: "${MCP_MEMORY_ROUTER_PORT:=5002}"
+: "${MCP_AGENT_ROUTER_PORT:=5000}"
 : "${VAULT_ROOT:=$INSTALL_DIR/vault}"
 : "${DOMAIN:=}"
 : "${ACME_EMAIL:=}"
@@ -224,7 +224,7 @@ fi
 
 # Hard verify: a broken/empty sync (wrong VAULT_ROOT, failed copy) must turn
 # the install red here rather than surface later as "scope not allowed" writes.
-EXPECTED_SCOPES=(10-strategy 30-decisions 40-projects 70-runbooks 80-error-patterns 90-inbox)
+EXPECTED_SCOPES=(strategy decisions projects error-patterns inbox)
 missing_scopes=()
 for scope in "${EXPECTED_SCOPES[@]}"; do
   [ -d "$VAULT_ROOT/$scope" ] || missing_scopes+=("$scope")
@@ -338,8 +338,8 @@ PG_USER=$PG_USER
 PG_PASSWORD=$PG_PASSWORD
 VAULT_ROOT=$VAULT_ROOT
 MCP_MEMORY_PORT=$MCP_MEMORY_PORT
-MCP_RECALL_PORT=$MCP_RECALL_PORT
-MCP_SWARM_PORT=$MCP_SWARM_PORT
+MCP_MEMORY_ROUTER_PORT=$MCP_MEMORY_ROUTER_PORT
+MCP_AGENT_ROUTER_PORT=$MCP_AGENT_ROUTER_PORT
 EOF
 chmod 600 "$INSTALL_ENV"
 chown "$SERVICE_USER":"$SERVICE_USER" "$INSTALL_ENV"
@@ -503,8 +503,8 @@ systemctl --no-pager status \
 note "15. smoke test"
 
 if [ -x "$INSTALL_DIR/scripts/smoke-test.sh" ]; then
-  if MCP_MEMORY_PORT="$MCP_MEMORY_PORT" MCP_RECALL_PORT="$MCP_RECALL_PORT" \
-     MCP_SWARM_PORT="$MCP_SWARM_PORT" \
+  if MCP_MEMORY_PORT="$MCP_MEMORY_PORT" MCP_MEMORY_ROUTER_PORT="$MCP_MEMORY_ROUTER_PORT" \
+     MCP_AGENT_ROUTER_PORT="$MCP_AGENT_ROUTER_PORT" \
      bash "$INSTALL_DIR/scripts/smoke-test.sh"; then
     log "smoke test passed — install verified"
   elif [ "${SKIP_SMOKE_GATE:-0}" = "1" ]; then

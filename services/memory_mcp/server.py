@@ -1,4 +1,4 @@
-"""FastMCP server for memory-mcp (write-side), default port 8767.
+"""FastMCP server for memory-mcp (write-side), default port 5001.
 
 This server intentionally mirrors the agent_router-mcp pattern: an ASGI
 AuthCaptureMiddleware captures the per-request auth (Bearer string OR
@@ -32,7 +32,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-DEFAULT_PORT = 8767
+DEFAULT_PORT = 5001
 
 
 @asynccontextmanager

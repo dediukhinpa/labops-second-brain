@@ -4,7 +4,7 @@ This directory is a **template** for the shared vault that all your agents read 
 
 ## Layout
 
-The vault uses a Johnny-Decimal style numeric prefix to keep folders sortable and stable across agents. Each folder has a single purpose; agents pick a folder based on what they are writing, not who is writing.
+Folders use plain semantic names (no numeric prefixes). Each folder has a single purpose; agents pick a folder based on what they are writing, not who is writing.
 
 | Folder | Purpose | Typical author |
 |---|---|---|
@@ -17,7 +17,6 @@ The vault uses a Johnny-Decimal style numeric prefix to keep folders sortable an
 | `external/` | Scout sources: forwards, articles, channels, social posts | inbox-agent |
 | `knowledge/` | Compiled artifacts, documentation for other agents | inbox-agent, coordinator-agent |
 | `tasks/` | Task-board snapshots, archived task histories | coordinator-agent |
-| `runbooks/` | How-to playbooks: deploy, rollback, incident response | coder-agent, reviewer-agent |
 | `error-patterns/` | Incidents + fixes (recall weight 3.0×) | every agent |
 | `inbox/` | Handoffs between agents, state-machine messages | every agent |
 
@@ -46,7 +45,7 @@ Examples:
 
 ```
 decisions/2026-05-16-postgres-pgvector-index-strategy.md
-runbooks/2026-05-16-deploy-staging-rollback.md
+knowledge/2026-05-16-deploy-staging-rollback.md
 error-patterns/2026-05-16-mcp-stateless-headers-lost.md
 ```
 
@@ -58,7 +57,7 @@ Every file should start with YAML frontmatter. See `_templates/*.md` for canonic
 
 ```yaml
 ---
-type: decision | runbook | error-pattern | external | note
+type: decision | error-pattern | external | note
 created: '2026-05-16T10:00:00Z'
 updated: '2026-05-16T10:00:00Z'
 agent: <writing-agent-name>
@@ -71,7 +70,7 @@ related: []
 
 Do **not** add folders ad hoc. If you genuinely need a new top-level scope:
 
-1. Pick a numeric prefix that fits the conceptual band (10 = strategic, 20 = ops, 30 = decisions, 40 = projects, 50 = external/knowledge, 60 = tasks, 70 = runbooks, 80 = errors, 90 = inbox).
+1. Pick a plain semantic name that doesn't overlap an existing folder's purpose.
 2. Create the folder with `.gitkeep` and `README.md` describing purpose + typical author.
 3. Update this README's table.
 4. Update `services/memory_router_mcp/source_weights.py` if the new folder needs a non-default weight.

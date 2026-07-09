@@ -13,7 +13,7 @@
     │
     │ MCP-вызов: notify(to_agent="B", payload={"type":"task_assigned",...})
     ▼
-agent_router_mcp (FastAPI/FastMCP на VPS, :8766)
+agent_router_mcp (FastAPI/FastMCP на VPS, :5000)
     │
     │ INSERT в delivery_outbox
     │ status=pending, attempts=0

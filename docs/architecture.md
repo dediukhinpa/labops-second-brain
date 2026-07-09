@@ -12,9 +12,9 @@ Three MCP services on a VPS, a local Telegram bot on your workstation, a markdow
                               local                      VPS
                   +---------------------+   +-----------------------------+
                   |  inbox-agent        |   |  Caddy (TLS, optional)      |
-  Telegram -----> |  Telegram bot       |-->|     /memory/mcp -> :8767    |
-  forwards        |  dual-write hook    |   |     /memory_router/mcp -> :8768    |
-                  |  cron: compile,     |   |     /agent_router/mcp  -> :8766    |
+  Telegram -----> |  Telegram bot       |-->|     /memory/mcp -> :5001    |
+  forwards        |  dual-write hook    |   |     /memory_router/mcp -> :5002    |
+                  |  cron: compile,     |   |     /agent_router/mcp  -> :5000    |
                   |        daily-digest |   |                             |
                   |  raw/  (local fs)   |   |  memory_mcp   memory_router_mcp    |
                   +---------------------+   |  agent_router_mcp    ingest-worker |
@@ -39,7 +39,7 @@ Markdown stays canonical. Everything else is rebuildable from markdown + the aut
 
 All three speak MCP over HTTP using FastMCP's `streamable-http` transport. They each have their own systemd unit, their own port, and their own scope of behaviour. They share `services/shared/` for auth, DB, and audit logging.
 
-### `memory_mcp` (port 8767)
+### `memory_mcp` (port 5001)
 
 **Purpose:** the only path through which new markdown files are written into the vault and registered in Postgres.
 
@@ -48,7 +48,6 @@ All three speak MCP over HTTP using FastMCP's `streamable-http` transport. They 
 | Tool | Scope | What it writes |
 |---|---|---|
 | `create_decision_note` | `decisions` | Decision records (context, decision, consequences, alternatives) |
-| `create_runbook_note` | `runbooks` | Operational runbooks (incident response, deploy procedures) |
 | `create_error_pattern_note` | `error-patterns` | Recurring failure modes (symptom, root cause, fix) |
 | `create_external_note` | `external`, `knowledge` | External content: URLs, transcripts, screenshots, voice-to-text |
 | `create_handoff` | `inbox` | Inter-session handoff notes |
@@ -61,7 +60,7 @@ All three speak MCP over HTTP using FastMCP's `streamable-http` transport. They 
 
 **AuthCaptureMiddleware:** see "Auth model" below. The middleware reads the header per-request and stashes it in a `ContextVar` that the tool handler retrieves. Do not "simplify" this by reading the header inside `_extract_token` — under FastMCP's stateless-HTTP mode the headers do not propagate to the tool context.
 
-### `memory_router_mcp` (port 8768)
+### `memory_router_mcp` (port 5002)
 
 **Purpose:** the only path agents use to search and read from the vault.
 
@@ -78,7 +77,7 @@ All three speak MCP over HTTP using FastMCP's `streamable-http` transport. They 
 
 **No writes ever.** A compromised recall token leaks data (bad) but cannot corrupt the vault. A compromised memory token can write garbage (worse). Issue recall-only tokens to research agents that should not be allowed to write.
 
-### `agent_router_mcp` (port 8766)
+### `agent_router_mcp` (port 5000)
 
 **Purpose:** an event bus for inter-agent messaging. One agent can dispatch a task to another, ack it, broadcast to many, or escalate.
 
@@ -112,9 +111,8 @@ Plain markdown on a filesystem, mounted at `${VAULT_ROOT}` (default `/opt/second
 | `decisions/` | One file per architectural or product decision |
 | `projects/` | Per-project working notes (status, blockers, deliverables) |
 | `external/` | Content forwarded into the inbox (URLs, voice notes, screenshots) |
-| `knowledge/` | Curated explanations of topics (vs. raw external content) |
+| `knowledge/` | Curated explanations of topics (vs. raw external content), including step-by-step procedures (deploy, restore, on-call) |
 | `tasks/` | Task tracking, kanban-style notes |
-| `runbooks/` | Step-by-step procedures (deploy, restore, on-call) |
 | `error-patterns/` | Recurring problems with their resolutions |
 | `inbox/` | Triage area for items not yet classified |
 
@@ -216,7 +214,6 @@ Multiply by a per-scope weight from `services/memory_router_mcp/source_weights.p
 | Scope | Default weight |
 |---|---|
 | `error-patterns` | 3.0 |
-| `runbooks` | 2.0 |
 | `decisions` | 1.5 |
 | `knowledge` | 1.2 |
 | `projects` | 1.0 |
@@ -226,7 +223,7 @@ Multiply by a per-scope weight from `services/memory_router_mcp/source_weights.p
 | `tasks` | 0.6 |
 | `inbox` | 0.5 |
 
-Rationale: a query like "how do we redeploy the recall service" should preferentially surface a runbook over a daily-log mention. A query about a past failure mode should bias toward error-patterns. The weights are a default — tune them in `source_weights.py` for your usage.
+Rationale: a query like "how do we redeploy the recall service" should preferentially surface a knowledge write-up over a daily-log mention. A query about a past failure mode should bias toward error-patterns. The weights are a default — tune them in `source_weights.py` for your usage.
 
 ### Step 5: scope filter and limit
 

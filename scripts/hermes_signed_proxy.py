@@ -19,7 +19,7 @@ call. A static header value cannot satisfy a body-bound HMAC.
 
 The standard pattern to bridge this gap is a tiny **local sidecar
 proxy**: Hermes points ``mcp_servers.<name>.url`` at the proxy
-(``http://127.0.0.1:8767/...``) with no auth headers; the proxy holds
+(``http://127.0.0.1:5001/...``) with no auth headers; the proxy holds
 the raw HMAC secret in an env var, signs each forwarded request body
 with the canonical Hermes scheme, and POSTs the byte-identical body to
 the upstream MCP server.
@@ -42,12 +42,12 @@ Usage
     python scripts/hermes_signed_proxy.py \
         --target https://mcp.example.com/memory/mcp \
         --secret-env SECOND_BRAIN_PROXY_HMAC_SECRET \
-        --host 127.0.0.1 --port 8767
+        --host 127.0.0.1 --port 5001
 
 Hermes ``mcp_servers`` entry::
 
     second_brain_memory:
-      url: http://127.0.0.1:8767/
+      url: http://127.0.0.1:5001/
       # No auth block — the proxy signs each request.
 
 Testing
@@ -221,7 +221,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--port",
         type=int,
-        default=8767,
+        default=5001,
         help="bind port (default: %(default)s)",
     )
     parser.add_argument(

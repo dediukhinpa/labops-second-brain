@@ -36,9 +36,9 @@ This document covers both paths.
 ```
 +-----------------+   HTTPS    +---------------------+    UNIX    +-----------+
 |  Hermes client  | ---------> |  Caddy (TLS, :443)  | ---------> |  MCP svc  |
-|  (mcp_servers:) |  per-req   |  reverse proxy      |  127.x     |  :8767    |
-|                 |  signature |                     | passthr.   |  :8768    |
-+-----------------+            +---------------------+            |  :8766    |
+|  (mcp_servers:) |  per-req   |  reverse proxy      |  127.x     |  :5001    |
+|                 |  signature |                     | passthr.   |  :5002    |
++-----------------+            +---------------------+            |  :5000    |
                                                                   +-----+-----+
                                                                         |
                                                                         v
@@ -180,7 +180,7 @@ python scripts/hermes_signed_proxy.py \
     --target https://mcp.example.com/memory/mcp \
     --secret-env SECOND_BRAIN_PROXY_HMAC_SECRET \
     --host 127.0.0.1 \
-    --port 8767
+    --port 5001
 ```
 
 Point Hermes at the proxy — **no auth block needed**:
@@ -188,17 +188,17 @@ Point Hermes at the proxy — **no auth block needed**:
 ```yaml
 mcp_servers:
   second_brain_memory:
-    url: http://127.0.0.1:8767/
+    url: http://127.0.0.1:5001/
     # No auth here — the proxy signs every request.
 ```
 
 Run a second instance on a different port for each MCP service
-(memory_router :8768, agent_router :8766) or use `systemd` templates.
+(memory_router :5002, agent_router :5000) or use `systemd` templates.
 
 Health check:
 
 ```bash
-curl -sS http://127.0.0.1:8767/healthz
+curl -sS http://127.0.0.1:5001/healthz
 # {"status":"ok","target":"https://mcp.example.com/memory/mcp"}
 ```
 

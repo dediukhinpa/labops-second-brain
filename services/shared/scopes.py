@@ -12,6 +12,10 @@ window: :func:`normalize_scope` maps an old name to its canonical name, and
 query matches rows whether they were stored under the old or the new name.
 Migration ``007_scope_rename.sql`` rewrites the stored values; once it has run on
 a deployment the aliases are only a safety net.
+
+The ``runbooks`` scope was retired in migration ``008_remove_runbooks_scope.sql``
+(the tool and folder saw no real usage); both ``runbooks`` and the legacy
+``70-runbooks`` now alias to ``knowledge``, the closest remaining semantic fit.
 """
 from __future__ import annotations
 
@@ -28,7 +32,6 @@ CANONICAL_SCOPES = frozenset({
     "knowledge",
     "tasks",
     "task-board",
-    "runbooks",
     "error-patterns",
     "inbox",
 })
@@ -54,7 +57,8 @@ SCOPE_ALIASES = {
     "50-knowledge": "knowledge",
     "60-tasks": "tasks",
     "10-tasks": "task-board",
-    "70-runbooks": "runbooks",
+    "70-runbooks": "knowledge",
+    "runbooks": "knowledge",
     "80-error-patterns": "error-patterns",
     "90-inbox": "inbox",
 }

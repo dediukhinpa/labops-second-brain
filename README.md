@@ -69,7 +69,7 @@ cd labops-second-brain && claude
 **2. Fill in only the required variables** in `.env` (everything else is generated / optional — see the Quick Start block at the top of [`.env.example`](.env.example)):
 
 - `PG_HOST` — DB host (default is the unix socket `/var/run/postgresql` → peer-auth, no password needed), `PG_DATABASE`, `PG_USER`;
-- `MCP_MEMORY_PORT` / `MCP_RECALL_PORT` / `MCP_SWARM_PORT` — server ports (defaults `8767` / `8768` / `8766`);
+- `MCP_MEMORY_PORT` / `MCP_MEMORY_ROUTER_PORT` / `MCP_AGENT_ROUTER_PORT` — server ports (defaults `5001` / `5002` / `5000`);
 - `PG_PASSWORD` is needed **only** with a TCP host; leave it empty for peer-auth.
 
 The install is considered successful only when the **smoke-test** at the end is green (if it fails, see [Troubleshooting](#troubleshooting)).
@@ -89,9 +89,9 @@ sudo -u second_brain python /opt/second_brain/scripts/issue-agent-token.py \
 // ~/.claude/.mcp.json on the agent host
 {
   "mcpServers": {
-    "second_brain-memory": { "url": "http://<VPS>:8767/mcp", "headers": { "Authorization": "Bearer <token>" } },
-    "second_brain-memory_router": { "url": "http://<VPS>:8768/mcp", "headers": { "Authorization": "Bearer <token>" } },
-    "second_brain-agent_router":  { "url": "http://<VPS>:8766/mcp", "headers": { "Authorization": "Bearer <token>" } }
+    "second_brain-memory": { "url": "http://<VPS>:5001/mcp", "headers": { "Authorization": "Bearer <token>" } },
+    "second_brain-memory_router": { "url": "http://<VPS>:5002/mcp", "headers": { "Authorization": "Bearer <token>" } },
+    "second_brain-agent_router":  { "url": "http://<VPS>:5000/mcp", "headers": { "Authorization": "Bearer <token>" } }
   }
 }
 ```
@@ -107,7 +107,7 @@ recall(query="how do we store embeddings")
 To probe the brain directly without an agent:
 
 ```bash
-curl -sS -H "Authorization: Bearer <token>" http://<VPS>:8768/mcp/
+curl -sS -H "Authorization: Bearer <token>" http://<VPS>:5002/mcp/
 # expect 406 with an MCP error body (live upstream). 401 → wrong token. Connection refused → firewall.
 ```
 
@@ -147,10 +147,10 @@ flowchart LR
     end
 
     subgraph brain["labops-second-brain (single VPS)"]
-        MEM["memory-mcp :8767<br/>writes notes to the vault"]
-        REC["memory_router-mcp :8768<br/>hybrid search"]
-        SW["agent_router-mcp :8766<br/>agent routing"]
-        TASK["task-mcp :8769<br/>tasks/board"]
+        MEM["memory-mcp :5001<br/>writes notes to the vault"]
+        REC["memory_router-mcp :5002<br/>hybrid search"]
+        SW["agent_router-mcp :5000<br/>agent routing"]
+        TASK["task-mcp :5003<br/>tasks/board"]
         IW["ingest-worker<br/>chunking + embeddings"]
         SWW["agent_router-worker<br/>webhook delivery"]
         PG[("Postgres 16 + pgvector<br/>documents · embeddings ·<br/>agent_tokens · audit ·<br/>swarm_outbox · tasks")]
@@ -183,10 +183,10 @@ flowchart LR
 
 | Server | Port | Purpose | systemd |
 |---|---|---|---|
-| `memory-mcp` | **8767** | writes notes to the vault (decision/runbook/error/external/personal/project), dedup by sha256 | `memory-mcp.service` |
-| `memory_router-mcp` | **8768** | hybrid search (semantic + lexical + rerank), cross-links | `memory_router-mcp.service` |
-| `agent_router-mcp` | **8766** | swarm coordination: outbox, inter-agent messages | `agent_router-mcp.service` |
-| `task-mcp` | **8769** | tasks, board, agent supervisor | `task-mcp.service` |
+| `memory-mcp` | **5001** | writes notes to the vault (decision/error/external/personal/project), dedup by sha256 | `memory-mcp.service` |
+| `memory_router-mcp` | **5002** | hybrid search (semantic + lexical + rerank), cross-links | `memory_router-mcp.service` |
+| `agent_router-mcp` | **5000** | swarm coordination: outbox, inter-agent messages | `agent_router-mcp.service` |
+| `task-mcp` | **5003** | tasks, board, agent supervisor | `task-mcp.service` |
 | `ingest-worker` | — | chunking + embeddings (watermark over changes) | `ingest-worker.service` |
 | `agent_router-worker` | — | webhook delivery (5 retries, exp backoff) | `agent_router-worker.service` |
 
@@ -208,7 +208,7 @@ A document flows: written via `memory-mcp` → a file in the vault + a row in `d
 
 ## Scopes & RBAC
 
-Numeric prefixes (`10-`, `30-`, `90-`…) are simply **top-level folders in the vault** into which knowledge is sorted (strategy, decisions, inbox, etc.); the digits set ordering and grouping, not priority. Each scope is a separate "shelf", and read/write access is granted as a list of these shelves. The easiest start for a newcomer is to issue yourself a token with `scopes='*'` (access to every shelf — handy for admin and tests) and narrow the rights later, once it is clear who needs what.
+Scopes are plain semantic names — simply **top-level folders in the vault** into which knowledge is sorted (strategy, decisions, inbox, etc.). Each scope is a separate "shelf", and read/write access is granted as a list of these shelves. The easiest start for a newcomer is to issue yourself a token with `scopes='*'` (access to every shelf — handy for admin and tests) and narrow the rights later, once it is clear who needs what.
 
 **Scope** = the first folder of a path in the vault. The allowed list is `services/memory_mcp/path_guard.py` (`ALLOWED_SCOPES`):
 
@@ -219,9 +219,8 @@ Numeric prefixes (`10-`, `30-`, `90-`…) are simply **top-level folders in the 
 | `daily` / `metrics` | daily logs, metrics |
 | `decisions` | architectural/product decisions |
 | `projects` | business: accounting, contracts, policies, correspondence, commercial secrets |
-| `external` / `knowledge` | external sources, research, articles |
+| `external` / `knowledge` | external sources, research, articles, reproducible processes |
 | `tasks` | tasks |
-| `runbooks` | reproducible processes |
 | `error-patterns` | bugs and their fixes |
 | `inbox` | incoming, unsorted |
 
@@ -278,7 +277,6 @@ Details — `docs/INTER-AGENT-WEBHOOKS.md`.
 | Tool | Default scope | What it records |
 |---|---|---|
 | `create_decision_note` | `decisions` | architectural/product decisions, API contracts, rules |
-| `create_runbook_note` | `runbooks` | reproducible processes |
 | `create_error_pattern_note` | `error-patterns` | a bug + its fix + how not to repeat it |
 | `create_external_note` | `external` | external sources/research (+ `source_url`) |
 | `create_personal_note` | `personal` | about the person |
@@ -341,7 +339,7 @@ The full reference is [`.env.example`](.env.example). The essentials:
 
 | Variable | Purpose |
 |---|---|
-| `MCP_MEMORY_PORT` / `MCP_RECALL_PORT` / `MCP_SWARM_PORT` / `MCP_TASK_PORT` | server ports (8767/8768/8766/8769) |
+| `MCP_MEMORY_PORT` / `MCP_MEMORY_ROUTER_PORT` / `MCP_AGENT_ROUTER_PORT` / `MCP_TASK_PORT` | server ports (5001/5002/5000/5003) |
 | `SERVICE_USER` | system user (`second_brain`) |
 | `INSTALL_DIR` | install directory (`/opt/second_brain`) |
 | `DOMAIN` / `ACME_EMAIL` | for Caddy + TLS (optional) |

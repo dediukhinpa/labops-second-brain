@@ -346,7 +346,7 @@ def _default_mcp_ports() -> tuple[int, int, int]:
     """Read MCP ports from env vars with .env.example defaults.
 
     Mirrors the install / smoke-test scripts so custom installs don't
-    false-fail when MCP_MEMORY_PORT / MCP_RECALL_PORT / MCP_SWARM_PORT
+    false-fail when MCP_MEMORY_PORT / MCP_MEMORY_ROUTER_PORT / MCP_AGENT_ROUTER_PORT
     are overridden (H3).
     """
     def _port(name: str, default: int) -> int:
@@ -359,9 +359,9 @@ def _default_mcp_ports() -> tuple[int, int, int]:
             return default
 
     return (
-        _port("MCP_MEMORY_PORT", 8767),
-        _port("MCP_RECALL_PORT", 8768),
-        _port("MCP_SWARM_PORT", 8766),
+        _port("MCP_MEMORY_PORT", 5001),
+        _port("MCP_MEMORY_ROUTER_PORT", 5002),
+        _port("MCP_AGENT_ROUTER_PORT", 5000),
     )
 
 
@@ -370,8 +370,8 @@ async def check_mcp_livez(
 ) -> CheckResult:
     """Probe local MCP /livez endpoints on the documented ports.
 
-    H3: reads ports from MCP_MEMORY_PORT / MCP_RECALL_PORT / MCP_SWARM_PORT
-    env vars (default 8767/8768/8766). M8: realizes ``ports`` into a tuple
+    H3: reads ports from MCP_MEMORY_PORT / MCP_MEMORY_ROUTER_PORT / MCP_AGENT_ROUTER_PORT
+    env vars (default 5001/5002/5000). M8: realizes ``ports`` into a tuple
     on entry so the "responding" success message never sees an exhausted
     iterator.
     """

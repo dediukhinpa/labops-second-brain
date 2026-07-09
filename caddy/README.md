@@ -3,9 +3,9 @@
 `Caddyfile.template` is a path-based reverse proxy that fronts the three MCP services with TLS:
 
 ```
-mcp.<your-domain>/memory/*         → 127.0.0.1:8767
-mcp.<your-domain>/memory_router/*  → 127.0.0.1:8768
-mcp.<your-domain>/agent_router/*   → 127.0.0.1:8766
+mcp.<your-domain>/memory/*         → 127.0.0.1:5001
+mcp.<your-domain>/memory_router/*  → 127.0.0.1:5002
+mcp.<your-domain>/agent_router/*   → 127.0.0.1:5000
 ```
 
 ## Prerequisites

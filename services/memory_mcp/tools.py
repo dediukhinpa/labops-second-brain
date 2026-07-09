@@ -890,70 +890,7 @@ def register_tools(
         return f"created: {rel_path}"
 
     # ------------------------------------------------------------------
-    # 2. create_runbook_note
-    # ------------------------------------------------------------------
-    @gated_tool("create_runbook_note", annotations={"readOnlyHint": False})
-    async def create_runbook_note(
-        title: str,
-        body: str,
-        tags: list[str],
-        agent: str | None = None,
-        ctx: dict[str, object] | None = None,
-    ) -> str:
-        """Create a runbook note in runbooks/."""
-        t0 = time.monotonic()
-        pool: asyncpg.Pool = await get_pool_fn()  # type: ignore[misc]
-        agent_ctx = await _authenticate_request(ctx, pool)
-        scope = "runbooks"
-
-        if not check_write_scope(agent_ctx, scope):
-            raise PermissionError(f"Agent '{agent_ctx.agent}' cannot write to {scope}")
-
-        # C1 fix (security): identity stays authenticated. Tool ``agent``
-        # parameter is human-attribution only — never the audit identity.
-        resolved_agent = agent_ctx.agent
-        declared_author = agent if (agent and agent != agent_ctx.agent) else None
-        slug = _slugify(title)
-        rel_path = f"{scope}/{slug}.md"
-        abs_path = validate_path(rel_path, vault_root)
-
-        fm: dict[str, Any] = {
-            "type": "runbook",
-            "created": _now_iso(),
-            "updated": _now_iso(),
-            "agent": resolved_agent,
-            "tags": tags,
-            "related": [],
-        }
-        if declared_author is not None:
-            fm["declared_author"] = declared_author
-        content = _build_frontmatter(fm) + f"\n# {title}\n\n{body}\n"
-        content_hash = _sha256(content)
-
-        doc_id, changed = await _upsert_document(
-            pool, rel_path, fm, body, content_hash, "runbook", resolved_agent,
-        )
-        if not changed:
-            await log_audit(
-                pool, resolved_agent, "create_runbook_note",
-                {"title": title, "path": rel_path}, "unchanged",
-                int((time.monotonic() - t0) * 1000),
-            )
-            return f"unchanged: {rel_path}"
-
-        abs_path.parent.mkdir(parents=True, exist_ok=True)
-        abs_path.write_text(content, encoding="utf-8")
-
-        await _queue_embedding(pool, doc_id)
-        await log_audit(
-            pool, resolved_agent, "create_runbook_note",
-            {"title": title, "path": rel_path}, "ok",
-            int((time.monotonic() - t0) * 1000),
-        )
-        return f"created: {rel_path}"
-
-    # ------------------------------------------------------------------
-    # 3. create_error_pattern_note
+    # 2. create_error_pattern_note
     # ------------------------------------------------------------------
     @gated_tool("create_error_pattern_note", annotations={"readOnlyHint": False})
     async def create_error_pattern_note(
@@ -1038,7 +975,7 @@ def register_tools(
         """Create a personal note in personal/.
 
         Subject = the human: skills, experience, FIO, age, life situations.
-        Orthogonal to the structural note types (decision/runbook/error).
+        Orthogonal to the structural note types (decision/error).
         """
         t0 = time.monotonic()
         pool: asyncpg.Pool = await get_pool_fn()  # type: ignore[misc]
@@ -1106,7 +1043,7 @@ def register_tools(
 
         Subject = the business/project: source data, accounting, company
         structure, contracts, invoices, regulations, commercial offers.
-        Orthogonal to the structural note types (decision/runbook/error).
+        Orthogonal to the structural note types (decision/error).
         """
         t0 = time.monotonic()
         pool: asyncpg.Pool = await get_pool_fn()  # type: ignore[misc]
@@ -1160,7 +1097,7 @@ def register_tools(
         return f"created: {rel_path}"
 
     # ------------------------------------------------------------------
-    # 4. create_external_note
+    # 3. create_external_note
     # ------------------------------------------------------------------
     @gated_tool("create_external_note", annotations={"readOnlyHint": False})
     async def create_external_note(
@@ -1223,7 +1160,7 @@ def register_tools(
         return f"created: {rel_path}"
 
     # ------------------------------------------------------------------
-    # 5. create_handoff
+    # 4. create_handoff
     # ------------------------------------------------------------------
     @gated_tool("create_handoff", annotations={"readOnlyHint": False})
     async def create_handoff(
@@ -1281,7 +1218,7 @@ def register_tools(
         return f"created: {rel_path}"
 
     # ------------------------------------------------------------------
-    # 6. append_daily_log
+    # 5. append_daily_log
     # ------------------------------------------------------------------
     @gated_tool("append_daily_log", annotations={"readOnlyHint": False})
     async def append_daily_log(
@@ -1341,7 +1278,7 @@ def register_tools(
         return f"appended: {rel_path}"
 
     # ------------------------------------------------------------------
-    # 7. update_index
+    # 6. update_index
     # ------------------------------------------------------------------
     @gated_tool("update_index", annotations={"readOnlyHint": False})
     async def update_index(
@@ -1390,7 +1327,7 @@ def register_tools(
         return f"index updated: {folder}/index.md ({len(entries)} entries)"
 
     # ------------------------------------------------------------------
-    # 8. update_document
+    # 7. update_document
     # ------------------------------------------------------------------
     @gated_tool("update_document", annotations={"readOnlyHint": False})
     async def update_document(
@@ -1454,7 +1391,7 @@ def register_tools(
         return f"{status}: {path}"
 
     # ------------------------------------------------------------------
-    # 9. supersede_decision
+    # 8. supersede_decision
     # ------------------------------------------------------------------
     @gated_tool("supersede_decision", annotations={"readOnlyHint": False})
     async def supersede_decision(

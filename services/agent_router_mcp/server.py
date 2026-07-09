@@ -1,4 +1,4 @@
-"""FastMCP server for agent_router-mcp (inter-agent triggers), port 8766."""
+"""FastMCP server for agent_router-mcp (inter-agent triggers), port 5000."""
 import logging
 import os
 import sys
@@ -31,7 +31,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-DEFAULT_PORT = 8766
+DEFAULT_PORT = 5000
 
 # Per-request auth captured by ASGI middleware. Holds a Bearer string,
 # a HmacAuthValue, or None. Workaround for FastMCP stateless HTTP not

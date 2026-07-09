@@ -1,7 +1,7 @@
 """Tests for create_personal_note / create_project_note + personal scope.
 
 personal/project notes split data by SUBJECT (the human vs the business),
-orthogonal to the structural note types (decision/runbook/error/external).
+orthogonal to the structural note types (decision/error/external).
 Both scopes are team-wide read/write (operator decision 2026-06-25).
 """
 from pathlib import Path

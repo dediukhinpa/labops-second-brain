@@ -5,7 +5,7 @@ Knowledge base. Compiled artifacts, documentation for agents.
 ## What goes here
 
 - Distilled write-ups synthesized from `external/` forwards
-- Internal playbooks that are not step-by-step (those go to `runbooks/`)
+- Internal playbooks, including step-by-step how-to procedures
 - Glossary entries, concept explanations, reference cards
 - Vendor / API / provider notes (quirks, rate limits, gotchas)
 - Stable how-things-work documentation for your stack
@@ -14,7 +14,6 @@ Knowledge base. Compiled artifacts, documentation for agents.
 ## What does NOT go here
 
 - Raw forwards — `external/`
-- Step-by-step procedures — `runbooks/`
 - Decision records — `decisions/`
 - Active project notes — `projects/<slug>/notes/`
 

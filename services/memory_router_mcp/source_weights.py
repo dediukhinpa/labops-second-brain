@@ -3,7 +3,6 @@
 SOURCE_WEIGHTS: dict[str, float] = {
     "error-pattern": 3.0,
     "decision": 2.0,
-    "runbook": 1.5,
     "protocol": 1.5,
     "project": 1.2,
     "external": 1.0,

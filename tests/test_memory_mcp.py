@@ -47,7 +47,7 @@ class TestPathGuard:
             assert str(result).startswith(str(tmp_path.resolve()))
 
     def test_scope_count(self) -> None:
-        assert len(ALLOWED_SCOPES) == 14
+        assert len(ALLOWED_SCOPES) == 13
 
     def test_empty_path_raises(self, tmp_path: Path) -> None:
         with pytest.raises(ValueError, match="must not be empty"):
@@ -208,7 +208,7 @@ class TestAuth:
 
         pool.fetchrow = AsyncMock(return_value={
             "agent": "coder-agent",
-            "can_write_scopes": ["decisions", "runbooks"],
+            "can_write_scopes": ["decisions", "external"],
             "can_read_scopes": ["*"],
         })
 
@@ -253,7 +253,7 @@ class TestAuth:
             read_scopes=[],
         )
         assert check_write_scope(ctx, "decisions") is True
-        assert check_write_scope(ctx, "runbooks") is False
+        assert check_write_scope(ctx, "external") is False
 
     def test_check_write_scope_empty(self) -> None:
         ctx = AgentContext(agent="readonly", write_scopes=[], read_scopes=["*"])

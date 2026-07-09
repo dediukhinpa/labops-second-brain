@@ -315,7 +315,7 @@ def _fake_response(code: int):
 
 @pytest.mark.asyncio
 async def test_check_mcp_livez_all_ok():
-    fake = _FakeClient({8766: _fake_response(200), 8767: _fake_response(200), 8768: _fake_response(200)})
+    fake = _FakeClient({5000: _fake_response(200), 5001: _fake_response(200), 5002: _fake_response(200)})
     with patch.object(doc.httpx, "AsyncClient", return_value=fake):
         res = await doc.check_mcp_livez()
     assert res.status == "pass"
@@ -324,14 +324,14 @@ async def test_check_mcp_livez_all_ok():
 @pytest.mark.asyncio
 async def test_check_mcp_livez_one_down():
     fake = _FakeClient({
-        8766: _fake_response(200),
-        8767: ConnectionError("boom"),
-        8768: _fake_response(200),
+        5000: _fake_response(200),
+        5001: ConnectionError("boom"),
+        5002: _fake_response(200),
     })
     with patch.object(doc.httpx, "AsyncClient", return_value=fake):
         res = await doc.check_mcp_livez()
     assert res.status == "fail"
-    assert "8767" in res.message
+    assert "5001" in res.message
 
 
 # ---------------------------------------------------------------------------

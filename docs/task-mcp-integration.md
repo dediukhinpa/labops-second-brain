@@ -17,7 +17,7 @@ systemctl daemon-reload
 systemctl enable --now second_brain-task-mcp
 
 # 3. Verify
-curl -s -X POST http://127.0.0.1:8769/mcp \
+curl -s -X POST http://127.0.0.1:5003/mcp \
   -H 'Content-Type: application/json' \
   -H 'Accept: application/json, text/event-stream' \
   -H 'Authorization: Bearer <your-agent-token>' \
@@ -26,7 +26,7 @@ curl -s -X POST http://127.0.0.1:8769/mcp \
 
 ## Port
 
-Default: **8769**. Set via `MCP_PORT=8769` in the systemd unit Environment directive (not in `.env`, since `MCP_PORT` is per-service).
+Default: **5003**. Set via `MCP_PORT=5003` in the systemd unit Environment directive (not in `.env`, since `MCP_PORT` is per-service).
 
 ## Auth
 
@@ -59,7 +59,7 @@ Add to your agent's `.mcp.json`:
 {
   "second_brain-tasks": {
     "type": "http",
-    "url": "http://<second_brain-host>:8769/mcp",
+    "url": "http://<second_brain-host>:5003/mcp",
     "headers": {
       "Authorization": "Bearer <your-agent-token>"
     }

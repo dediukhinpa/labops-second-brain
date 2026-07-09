@@ -10,7 +10,7 @@ System configs, infra notes, environment topology.
 - Service catalog: which systemd units exist on which host
 - Credentials INDEX (never the secrets themselves — only pointers to where they live)
 - Backup strategy: what is backed up, where, retention
-- Disaster recovery procedures (high level — detailed steps in `runbooks/`)
+- Disaster recovery procedures (high level — detailed steps in `knowledge/`)
 
 ## What does NOT go here
 
