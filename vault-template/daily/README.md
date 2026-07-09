@@ -53,4 +53,4 @@ Every agent appends to the current day's file. If the file does not exist yet, c
 
 - Read: at session start to see what other agents did
 - Write: after any notable action
-- Rotate: never delete; old days are searchable via `recall_mcp`
+- Rotate: never delete; old days are searchable via `memory_router_mcp`

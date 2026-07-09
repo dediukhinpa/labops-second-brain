@@ -1,12 +1,12 @@
-"""FastMCP server for recall-mcp (read-side hybrid search), default port 8768.
+"""FastMCP server for memory_router-mcp (read-side hybrid search), default port 8768.
 
-Adopts the AuthCaptureMiddleware pattern from swarm-mcp and memory-mcp so all
-three services have consistent identity surfacing. The recall tools require
+Adopts the AuthCaptureMiddleware pattern from agent_router-mcp and memory-mcp so all
+three services have consistent identity surfacing. The memory_router tools require
 token validation (Bearer or HMAC) and enforce ``agent_tokens.can_read_scopes``
-per-call via :func:`services.recall_mcp.search._resolve_reader` and
+per-call via :func:`services.memory_router_mcp.search._resolve_reader` and
 ``restrict_read_scopes`` / ``check_read_scope`` from :mod:`services.shared.auth`.
 The middleware publishes the captured auth into a ContextVar
-(``services.recall_mcp.search._REQUEST_AUTH``) which every tool body
+(``services.memory_router_mcp.search._REQUEST_AUTH``) which every tool body
 consults.
 """
 import logging
@@ -95,7 +95,7 @@ async def lifespan(server: FastMCP) -> AsyncIterator[dict[str, Any]]:
     config = Config(mcp_port=int(os.environ.get("MCP_PORT", str(DEFAULT_PORT))))
     _vault_root = Path(config.vault_root)
 
-    logger.info("Starting recall-mcp: loading asyncpg pool")
+    logger.info("Starting memory_router-mcp: loading asyncpg pool")
     _pool = await get_pool(config)
 
     logger.info("Loading FastEmbed model: %s", config.fastembed_model)
@@ -123,7 +123,7 @@ async def lifespan(server: FastMCP) -> AsyncIterator[dict[str, Any]]:
             _reranker = None
 
     logger.info(
-        "recall-mcp ready: port=%d embed=%s rerank=%s",
+        "memory_router-mcp ready: port=%d embed=%s rerank=%s",
         config.mcp_port,
         config.fastembed_model,
         config.rerank_model if (config.rerank_enabled and _reranker) else "off",
@@ -132,7 +132,7 @@ async def lifespan(server: FastMCP) -> AsyncIterator[dict[str, Any]]:
     try:
         yield {}
     finally:
-        logger.info("Shutting down recall-mcp")
+        logger.info("Shutting down memory_router-mcp")
         _cache.invalidate_all()
         await close_pool()
         _pool = None
@@ -182,7 +182,7 @@ def _get_vault_root() -> Path:
 
 
 mcp = FastMCP(
-    "recall-mcp",
+    "memory_router-mcp",
     lifespan=lifespan,
 )
 
@@ -206,7 +206,7 @@ class AuthCaptureMiddleware(HermesAwareAuthMiddleware):
     """ASGI middleware: capture Bearer or Hermes HMAC auth into ContextVar.
 
     Thin compatibility subclass over :class:`HermesAwareAuthMiddleware`
-    that binds the recall-mcp ContextVar. Mirrors swarm-mcp and
+    that binds the memory_router-mcp ContextVar. Mirrors agent_router-mcp and
     memory-mcp pattern for consistent identity surfacing across all
     three MCP services.
     """
@@ -216,11 +216,11 @@ class AuthCaptureMiddleware(HermesAwareAuthMiddleware):
 
 
 def main() -> None:
-    """Entry point for recall-mcp server."""
+    """Entry point for memory_router-mcp server."""
     import uvicorn
     port = int(os.environ.get("MCP_PORT", str(DEFAULT_PORT)))
     host = os.environ.get("MCP_HOST", "0.0.0.0")
-    logger.info("Starting recall-mcp on %s:%d (with auth middleware)", host, port)
+    logger.info("Starting memory_router-mcp on %s:%d (with auth middleware)", host, port)
     app = mcp.http_app(transport="streamable-http")
     app = AuthCaptureMiddleware(app)
     uvicorn.run(app, host=host, port=port, log_level="info")

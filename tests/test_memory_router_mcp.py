@@ -1,4 +1,4 @@
-"""Smoke + unit tests for recall-mcp.
+"""Smoke + unit tests for memory_router-mcp.
 
 Unit smoke covers:
 - AuthCaptureMiddleware ContextVar is exposed (server.py wires it through search.py)
@@ -24,9 +24,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from services.recall_mcp.cache import RecallCache
-from services.recall_mcp.cross_link import find_wikilinks
-from services.recall_mcp.search import (
+from services.memory_router_mcp.cache import RecallCache
+from services.memory_router_mcp.cross_link import find_wikilinks
+from services.memory_router_mcp.search import (
     _QUERY_VEC_CACHE,
     _QUERY_VEC_CACHE_MAX,
     _REQUEST_AUTH,
@@ -167,27 +167,27 @@ def test_find_wikilinks_with_related_frontmatter() -> None:
 
 def test_search_module_exports_register_tools() -> None:
     """register_tools must be exposed -- server.py imports it on startup."""
-    from services.recall_mcp import search
+    from services.memory_router_mcp import search
 
     assert callable(search.register_tools)
 
 
 @pytest.mark.integration
-def test_recall_mcp_lists_tools_with_valid_auth() -> None:
+def test_memory_router_mcp_lists_tools_with_valid_auth() -> None:
     """End-to-end: a valid Bearer token should yield a non-empty tool list."""
-    pytest.skip("recall-mcp integration smoke not yet implemented")
+    pytest.skip("memory_router-mcp integration smoke not yet implemented")
 
 
 @pytest.mark.integration
-def test_recall_mcp_missing_auth_returns_401() -> None:
+def test_memory_router_mcp_missing_auth_returns_401() -> None:
     """End-to-end: request without Authorization header should be rejected by middleware."""
-    pytest.skip("recall-mcp integration smoke not yet implemented")
+    pytest.skip("memory_router-mcp integration smoke not yet implemented")
 
 
 @pytest.mark.integration
-def test_recall_mcp_bad_auth_returns_401() -> None:
+def test_memory_router_mcp_bad_auth_returns_401() -> None:
     """End-to-end: request with unknown Bearer token should be rejected."""
-    pytest.skip("recall-mcp integration smoke not yet implemented")
+    pytest.skip("memory_router-mcp integration smoke not yet implemented")
 
 
 # ---------------------------------------------------------------------------
@@ -415,7 +415,7 @@ class _RecordingPool:
 
 def _capture_recall_tool(tool_set: str = "all", cache: _SpyCache | None = None):
     """Register tools onto a ToolRecorder and return the captured `recall` fn + cache."""
-    from services.recall_mcp.search import register_tools
+    from services.memory_router_mcp.search import register_tools
 
     cache = cache or _SpyCache()
     pool = _RecordingPool()
@@ -461,7 +461,7 @@ def test_recall_cache_key_includes_agent_filter(monkeypatch: pytest.MonkeyPatch)
         return AgentContext(agent="nova", write_scopes=[], read_scopes=["*"])
 
     monkeypatch.setattr(
-        "services.recall_mcp.search.resolve_request_identity",
+        "services.memory_router_mcp.search.resolve_request_identity",
         _fake_resolve,
     )
     tok = _REQUEST_AUTH.set("Bearer test-token")
@@ -495,7 +495,7 @@ def test_recall_cache_key_includes_source_types_sorted(
         return AgentContext(agent="nova", write_scopes=[], read_scopes=["*"])
 
     monkeypatch.setattr(
-        "services.recall_mcp.search.resolve_request_identity",
+        "services.memory_router_mcp.search.resolve_request_identity",
         _fake_resolve,
     )
     tok = _REQUEST_AUTH.set("Bearer test-token")
@@ -557,7 +557,7 @@ def test_request_auth_accepts_hmac_value() -> None:
 
 def test_resolve_reader_is_exported() -> None:
     """``_resolve_reader`` must be importable for HMAC-aware read tools."""
-    from services.recall_mcp.search import _resolve_reader
+    from services.memory_router_mcp.search import _resolve_reader
 
     assert callable(_resolve_reader)
 
@@ -652,13 +652,13 @@ def test_recall_applies_reranking_when_scorer_provided(
     from datetime import datetime, timezone
 
     from services.shared.auth import AgentContext
-    from services.recall_mcp.search import register_tools
+    from services.memory_router_mcp.search import register_tools
 
     async def _fake_resolve(_var, _pool, **_kwargs):
         return AgentContext(agent="nova", write_scopes=[], read_scopes=["*"])
 
     monkeypatch.setattr(
-        "services.recall_mcp.search.resolve_request_identity",
+        "services.memory_router_mcp.search.resolve_request_identity",
         _fake_resolve,
     )
 

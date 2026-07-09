@@ -90,8 +90,8 @@ sudo -u second_brain python /opt/second_brain/scripts/issue-agent-token.py \
 {
   "mcpServers": {
     "second_brain-memory": { "url": "http://<VPS>:8767/mcp", "headers": { "Authorization": "Bearer <token>" } },
-    "second_brain-recall": { "url": "http://<VPS>:8768/mcp", "headers": { "Authorization": "Bearer <token>" } },
-    "second_brain-swarm":  { "url": "http://<VPS>:8766/mcp", "headers": { "Authorization": "Bearer <token>" } }
+    "second_brain-memory_router": { "url": "http://<VPS>:8768/mcp", "headers": { "Authorization": "Bearer <token>" } },
+    "second_brain-agent_router":  { "url": "http://<VPS>:8766/mcp", "headers": { "Authorization": "Bearer <token>" } }
   }
 }
 ```
@@ -148,11 +148,11 @@ flowchart LR
 
     subgraph brain["labops-second-brain (single VPS)"]
         MEM["memory-mcp :8767<br/>writes notes to the vault"]
-        REC["recall-mcp :8768<br/>hybrid search"]
-        SW["swarm-mcp :8766<br/>swarm coordination"]
+        REC["memory_router-mcp :8768<br/>hybrid search"]
+        SW["agent_router-mcp :8766<br/>agent routing"]
         TASK["task-mcp :8769<br/>tasks/board"]
         IW["ingest-worker<br/>chunking + embeddings"]
-        SWW["swarm-worker<br/>webhook delivery"]
+        SWW["agent_router-worker<br/>webhook delivery"]
         PG[("Postgres 16 + pgvector<br/>documents · embeddings ·<br/>agent_tokens · audit ·<br/>swarm_outbox · tasks")]
         VAULT["vault/ (Markdown SSOT)"]
     end
@@ -176,19 +176,19 @@ flowchart LR
 
 - **MCP servers** — the entry points for agents (HTTP, authenticated with a Bearer token or an HMAC signature).
 - **ingest-worker** — watches the vault for changes, splits documents into context-aware chunks and computes embeddings (FastEmbed `multilingual-e5-large`).
-- **swarm-worker** — asynchronously delivers inter-agent webhooks with retries.
-- **core-mcp** — a mode that aggregates memory+swarm+task in a single process (see tool-gating below).
+- **agent_router-worker** — asynchronously delivers inter-agent webhooks with retries.
+- **core-mcp** — a mode that aggregates memory+agent_router+task in a single process (see tool-gating below).
 
 ### MCP servers & ports
 
 | Server | Port | Purpose | systemd |
 |---|---|---|---|
 | `memory-mcp` | **8767** | writes notes to the vault (decision/runbook/error/external/personal/project), dedup by sha256 | `memory-mcp.service` |
-| `recall-mcp` | **8768** | hybrid search (semantic + lexical + rerank), cross-links | `recall-mcp.service` |
-| `swarm-mcp` | **8766** | swarm coordination: outbox, inter-agent messages | `swarm-mcp.service` |
+| `memory_router-mcp` | **8768** | hybrid search (semantic + lexical + rerank), cross-links | `memory_router-mcp.service` |
+| `agent_router-mcp` | **8766** | swarm coordination: outbox, inter-agent messages | `agent_router-mcp.service` |
 | `task-mcp` | **8769** | tasks, board, agent supervisor | `task-mcp.service` |
 | `ingest-worker` | — | chunking + embeddings (watermark over changes) | `ingest-worker.service` |
-| `swarm-worker` | — | webhook delivery (5 retries, exp backoff) | `swarm-worker.service` |
+| `agent_router-worker` | — | webhook delivery (5 retries, exp backoff) | `agent_router-worker.service` |
 
 **tool-gating:** the `SECOND_BRAIN_TOOLS` variable (default `core`) decides which tools the server exposes to clients. A new memory tool is visible only if it is present in `CORE_TOOLS_BY_SERVER` (`services/shared/tool_gating.py`), not just in the code.
 
@@ -234,7 +234,7 @@ Numeric prefixes (`10-`, `30-`, `90-`…) are simply **top-level folders in the 
 <details>
 <summary><b>Hybrid recall</b> — semantic search, not grep</summary>
 
-`recall-mcp` is not grep, but semantic search:
+`memory_router-mcp` is not grep, but semantic search:
 
 1. **Semantic** — embed the query (e5, with the correct `query:`/`passage:` prefixes) → cosine over pgvector.
 2. **Lexical** — a full-text signal.
@@ -242,7 +242,7 @@ Numeric prefixes (`10-`, `30-`, `90-`…) are simply **top-level folders in the 
 4. **Rerank** — reordering the top candidates.
 5. **Cross-link** — related notes (`cross_link.py`).
 
-A query-embedding cache (`recall_mcp/cache.py`) and per-source weights (`source_weights.py`) exist for speed and relevance.
+A query-embedding cache (`memory_router_mcp/cache.py`) and per-source weights (`source_weights.py`) exist for speed and relevance.
 
 </details>
 
@@ -262,8 +262,8 @@ The full "what and when to write" policy lives in `labops-agent-architecture` (`
 
 Agents poke each other through **inter-agent webhooks** (not directly):
 
-- the sender puts a message into `swarm_outbox` (via `swarm-mcp`);
-- `swarm-worker` delivers it to the recipient, statuses `pending|delivered|acked|failed`;
+- the sender puts a message into `swarm_outbox` (via `agent_router-mcp`);
+- `agent_router-worker` delivers it to the recipient, statuses `pending|delivered|acked|failed`;
 - **5 retries** with exponential backoff, then `failed` (a manual replay is needed);
 - requests are signed with **HMAC** (`x-hermes-signature`/`x-hermes-timestamp`, secrets in `migrations/004_hmac_secrets.sql` + `issue-hmac-secret.py`), plus Bearer tokens.
 
@@ -287,7 +287,7 @@ Details — `docs/INTER-AGENT-WEBHOOKS.md`.
 | `create_handoff` | — | a flush before compaction / at the end of a session |
 | `supersede_decision` | `decisions` | an outdated decision |
 
-Recall: `recall(...)`. Coordination: `swarm_*`. Tasks: `task_*`.
+Recall: `recall(...)`. Coordination: `agent_router_*`. Tasks: `task_*`.
 
 ---
 
@@ -357,7 +357,7 @@ The full reference is [`.env.example`](.env.example). The essentials:
 python -m pytest tests/ -q
 ```
 
-`scripts/install.sh` runs `smoke-test.sh` at the end of the install (live services + DB). The unit/contract tests (`tests/`, 400+) cover scopes, RBAC, tool-gating, recall, HMAC, swarm. `scripts/gbrain_doctor.py` / `scripts/check_env_sync.py` are environment diagnostics.
+`scripts/install.sh` runs `smoke-test.sh` at the end of the install (live services + DB). The unit/contract tests (`tests/`, 400+) cover scopes, RBAC, tool-gating, recall, HMAC, agent_router. `scripts/gbrain_doctor.py` / `scripts/check_env_sync.py` are environment diagnostics.
 
 ---
 

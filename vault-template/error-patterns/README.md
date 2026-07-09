@@ -18,7 +18,7 @@ Incidents + fixes. **Weighted 3.0× in recall** — this folder is the team's in
 
 ## Why weight 3.0×
 
-When an agent searches the vault, results from this folder are ranked higher than the same text in other folders. The reasoning: if you have ever solved this exact problem, you want to surface that fact **before** you start fresh debugging. The 3.0× multiplier is tuned in `services/recall_mcp/source_weights.py` — adjust if your team's error-pattern signal is too noisy or too weak.
+When an agent searches the vault, results from this folder are ranked higher than the same text in other folders. The reasoning: if you have ever solved this exact problem, you want to surface that fact **before** you start fresh debugging. The 3.0× multiplier is tuned in `services/memory_router_mcp/source_weights.py` — adjust if your team's error-pattern signal is too noisy or too weak.
 
 ## What a good error-pattern entry looks like
 

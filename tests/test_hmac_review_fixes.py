@@ -283,7 +283,7 @@ async def test_recall_restricts_to_read_scopes_via_bearer(
     closure, with auth + DB stubbed but the scope-check on the real
     code path.
     """
-    from services.recall_mcp import search as rmod
+    from services.memory_router_mcp import search as rmod
 
     # Stub auth to a restricted token.
     restricted = AgentContext(
@@ -329,7 +329,7 @@ async def test_get_authorizes_target_doc_scope(
     """C3: recall ``get(path)`` must check the target doc's scope against
     agent_ctx.read_scopes before returning the body.
     """
-    from services.recall_mcp import search as rmod
+    from services.memory_router_mcp import search as rmod
 
     restricted = AgentContext(
         agent="iris", write_scopes=[], read_scopes=["decisions"]
@@ -382,7 +382,7 @@ async def test_get_allows_target_scope_when_in_read_scopes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """C3: ``get`` returns the body when target scope is allowed."""
-    from services.recall_mcp import search as rmod
+    from services.memory_router_mcp import search as rmod
 
     ctx = AgentContext(
         agent="iris", write_scopes=[], read_scopes=["decisions"]

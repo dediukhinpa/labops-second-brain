@@ -25,8 +25,8 @@ fi
 : "${INSTALL_DIR:=/opt/second_brain}"
 : "${MCP_BASE:=}"
 : "${MCP_MEMORY_PORT:=8767}"
-: "${MCP_RECALL_PORT:=8768}"
-: "${MCP_SWARM_PORT:=8766}"
+: "${MCP_MEMORY_ROUTER_PORT:=8768}"
+: "${MCP_AGENT_ROUTER_PORT:=8766}"
 : "${ADMIN_TOKEN:=}"
 
 # Load admin token from file if not set
@@ -45,14 +45,14 @@ fi
 if [ -n "$MCP_BASE" ]; then
   ENDPOINTS=(
     "memory:${MCP_BASE}/memory/mcp"
-    "recall:${MCP_BASE}/recall/mcp"
-    "swarm:${MCP_BASE}/swarm/mcp"
+    "memory_router:${MCP_BASE}/memory_router/mcp"
+    "agent_router:${MCP_BASE}/agent_router/mcp"
   )
 else
   ENDPOINTS=(
     "memory:http://127.0.0.1:${MCP_MEMORY_PORT}/mcp"
-    "recall:http://127.0.0.1:${MCP_RECALL_PORT}/mcp"
-    "swarm:http://127.0.0.1:${MCP_SWARM_PORT}/mcp"
+    "memory_router:http://127.0.0.1:${MCP_MEMORY_ROUTER_PORT}/mcp"
+    "agent_router:http://127.0.0.1:${MCP_AGENT_ROUTER_PORT}/mcp"
   )
 fi
 

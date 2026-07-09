@@ -76,7 +76,7 @@ if [ -f "$MCP_JSON_TPL" ]; then
     read -r -p "MCP host base URL (e.g. https://mcp.example.com): " MCP_HOST
   fi
   if [ -z "$INBOX_BEARER" ]; then
-    read -r -p "Bearer token for inbox-agent (one token, used for memory/recall/swarm): " INBOX_BEARER
+    read -r -p "Bearer token for inbox-agent (one token, used for memory/memory_router/agent_router): " INBOX_BEARER
   fi
 
   mkdir -p "$INBOX_AGENT_HOME/.claude"

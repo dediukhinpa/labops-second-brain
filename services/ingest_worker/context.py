@@ -72,7 +72,7 @@ def build_context_prefix(
 # with "query: " / "passage: " prefixes; embedding without them degrades
 # retrieval quality. The prefix goes ONLY on the text handed to the embedder —
 # never on the stored content, which feeds FTS + rerank and must stay clean.
-# The matching "query: " prefix lives in recall_mcp.search (query side).
+# The matching "query: " prefix lives in memory_router_mcp.search (query side).
 PASSAGE_PREFIX = "passage: "
 
 

@@ -31,15 +31,15 @@ VENV_PY="${VENV_PY:-$SB_HOME/.venv/bin/python}"
 VERIFY_BEARER="${VERIFY_BEARER:-}"
 
 # MCP endpoints to probe: "unit:port:path". Standard consolidated topology
-# (memory/swarm/task live in one core process, recall is separate). Edit the
+# (memory/agent_router/task live in one core process, memory_router is separate). Edit the
 # ports here only if you changed them at install time.
 MCP_ENDPOINTS=(
   "second_brain-core-mcp:8767:/mcp"    # memory
-  "second_brain-core-mcp:8766:/mcp"    # swarm
+  "second_brain-core-mcp:8766:/mcp"    # agent_router
   "second_brain-core-mcp:8769:/mcp"    # task
-  "second_brain-recall-mcp:8768:/mcp"  # recall
+  "second_brain-memory_router-mcp:8768:/mcp"  # memory_router
 )
-WORKER_UNITS=( second_brain-ingest-worker second_brain-swarm-worker )
+WORKER_UNITS=( second_brain-ingest-worker second_brain-agent_router-worker )
 REQUIRED_SECRET_KEYS=( PG_HOST PG_PORT PG_DATABASE PG_USER PG_PASSWORD \
                        VAULT_ROOT LOG_DIR STATE_DIR FASTEMBED_CACHE_DIR )
 REQUIRED_TABLES=( agent_tokens agents chunks documents delivery_outbox \

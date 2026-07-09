@@ -41,9 +41,9 @@ dev = [
 
 [project.scripts]
 second_brain-memory-mcp = "services.memory_mcp.server:main"
-second_brain-recall-mcp = "services.recall_mcp.server:main"
-second_brain-swarm-mcp = "services.swarm_mcp.server:main"
-second_brain-swarm-worker = "services.swarm_mcp.worker:main"
+second_brain-memory_router-mcp = "services.memory_router_mcp.server:main"
+second_brain-agent_router-mcp = "services.agent_router_mcp.server:main"
+second_brain-agent_router-worker = "services.agent_router_mcp.worker:main"
 second_brain-ingest-worker = "services.ingest_worker.worker:main"
 second_brain-doctor = "scripts.second_brain_doctor:main"
 

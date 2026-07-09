@@ -476,24 +476,24 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 14. Start services (memory-mcp, recall-mcp, swarm-mcp, swarm-worker, ingest-worker)
+# 14. Start services (memory-mcp, memory_router-mcp, agent_router-mcp, agent_router-worker, ingest-worker)
 # ---------------------------------------------------------------------------
 
 note "14. start services"
 
 systemctl enable --now \
   second_brain-memory-mcp \
-  second_brain-recall-mcp \
-  second_brain-swarm-mcp \
-  second_brain-swarm-worker \
+  second_brain-memory_router-mcp \
+  second_brain-agent_router-mcp \
+  second_brain-agent_router-worker \
   second_brain-ingest-worker
 
 sleep 3
 systemctl --no-pager status \
   second_brain-memory-mcp \
-  second_brain-recall-mcp \
-  second_brain-swarm-mcp \
-  second_brain-swarm-worker \
+  second_brain-memory_router-mcp \
+  second_brain-agent_router-mcp \
+  second_brain-agent_router-worker \
   second_brain-ingest-worker || true
 
 # ---------------------------------------------------------------------------
@@ -541,7 +541,7 @@ cat <<EOF
 Next steps:
   1. Verify services are listening:  ss -tlnp | grep -E '876[678]'
   2. Issue per-agent tokens:         $INSTALL_DIR/.venv/bin/python $INSTALL_DIR/scripts/issue-agent-token.py --agent <name> --scopes 'read,write'
-  3. Point your local agents at:     http(s)://<host>/{memory,recall,swarm}/mcp
+  3. Point your local agents at:     http(s)://<host>/{memory,memory_router,agent_router}/mcp
   4. Set up the inbox-agent locally: bash $INSTALL_DIR/scripts/install-local.sh
   5. Review $ETC_DIR/secrets.env and add provider API keys you want available.
 

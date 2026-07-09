@@ -1,4 +1,4 @@
-"""FastMCP server for swarm-mcp (inter-agent triggers), port 8766."""
+"""FastMCP server for agent_router-mcp (inter-agent triggers), port 8766."""
 import logging
 import os
 import sys
@@ -37,14 +37,14 @@ DEFAULT_PORT = 8766
 # a HmacAuthValue, or None. Workaround for FastMCP stateless HTTP not
 # surfacing request headers to tool handlers via ctx.request_context in
 # some transport configs.
-_REQUEST_AUTH: ContextVar[AuthValue] = ContextVar("swarm_request_auth", default=None)
+_REQUEST_AUTH: ContextVar[AuthValue] = ContextVar("agent_router_request_auth", default=None)
 
 
 class AuthCaptureMiddleware(HermesAwareAuthMiddleware):
     """ASGI middleware: capture Bearer or Hermes HMAC auth into ContextVar.
 
     Thin compatibility subclass over :class:`HermesAwareAuthMiddleware`
-    that binds the swarm-mcp ContextVar.
+    that binds the agent_router-mcp ContextVar.
     """
 
     def __init__(self, app):
@@ -57,16 +57,16 @@ async def lifespan(server: FastMCP) -> AsyncIterator[dict[str, object]]:
     pool = await get_pool(config)
     n_recovered = await outbox.bootstrap_recovery(pool)
     logger.info(
-        "swarm-mcp started: port=%d recovered=%d", config.mcp_port, n_recovered
+        "agent_router-mcp started: port=%d recovered=%d", config.mcp_port, n_recovered
     )
     try:
         yield {"pool": pool, "config": config}
     finally:
         await close_pool()
-        logger.info("swarm-mcp shutdown complete")
+        logger.info("agent_router-mcp shutdown complete")
 
 
-mcp = FastMCP("swarm-mcp", lifespan=lifespan)
+mcp = FastMCP("agent_router-mcp", lifespan=lifespan)
 
 # Tool gating: parse SECOND_BRAIN_TOOLS once at import time. `core` exposes only
 # always-on tools (notify, ack). `all` exposes the full swarm surface.
@@ -80,7 +80,7 @@ def _gated_tool(tool_name: str, **kwargs):
     Returns either `mcp.tool(...)` or an identity decorator so the underlying
     coroutine remains importable and callable from Python regardless of mode.
     """
-    if should_register_tool("swarm_mcp", tool_name, _TOOL_SET):
+    if should_register_tool("agent_router_mcp", tool_name, _TOOL_SET):
         return mcp.tool(**kwargs)
 
     def _identity(fn):
@@ -230,7 +230,7 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("MCP_PORT", str(DEFAULT_PORT)))
     host = os.environ.get("MCP_HOST", "0.0.0.0")
-    logger.info("Starting swarm-mcp on %s:%d (with auth middleware)", host, port)
+    logger.info("Starting agent_router-mcp on %s:%d (with auth middleware)", host, port)
     app = mcp.http_app(transport="streamable-http")
     app = AuthCaptureMiddleware(app)
     uvicorn.run(app, host=host, port=port, log_level="info")

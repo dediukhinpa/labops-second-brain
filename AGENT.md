@@ -31,7 +31,7 @@ You will NOT:
 
 The system you deploy has up to four layers (the last is Path B only):
 
-1. **Shared brain (VPS):** 3 MCP services (memory write / recall read / swarm event bus) backed by Postgres + pgvector, plus an ingest worker that embeds new vault files. The vault is 12 folders of markdown.
+1. **Shared brain (VPS):** 3 MCP services (memory write / memory_router read / agent_router event bus) backed by Postgres + pgvector, plus an ingest worker that embeds new vault files. The vault is 12 folders of markdown.
 2. **Inbox-agent (local):** a Telegram bot the user forwards content to (links, voice notes, screenshots). It dual-writes — once to a local `raw/` folder for resilience, once to the shared brain via the memory MCP. Cron jobs compile raw into structured notes daily and send a digest.
 3. **Skills bundle (local):** optional ingestion skills the inbox-agent (and any personal agent) can invoke per content type (YouTube transcripts, Instagram captions, X threads, voice-to-text, generic markdown).
 4. **Personal agent workspaces (local, Path B):** one or more `~/.claude-lab/<agent-id>/.claude/` workspaces produced by `agent-template/install.sh`. Each has its own SOUL (CLAUDE.md), rules, layered memory (handoff.md → decisions.md → MEMORY.md/LEARNINGS.md/TOOLS.md), Stop/SessionStart/PreCompact hooks, and an `.mcp.json` wired to the shared brain. Multiple workspaces share **one** brain — that is the point.
@@ -129,8 +129,8 @@ If the user is undecided after reading this section, default to Path A and expli
               |   Caddy (TLS, optional)                         |
               |     |                                           |
               |     +-- /memory/mcp  --> memory_mcp  :8767      |
-              |     +-- /recall/mcp  --> recall_mcp  :8768      |
-              |     +-- /swarm/mcp   --> swarm_mcp   :8766      |
+              |     +-- /memory_router/mcp  --> memory_router_mcp  :8768      |
+              |     +-- /agent_router/mcp   --> agent_router_mcp   :8766      |
               |                                                 |
               |   ingest-worker (systemd)                       |
               |     watches embedding_jobs --> embeds chunks    |
@@ -150,8 +150,8 @@ If the user is undecided after reading this section, default to Path A and expli
 | Service | Port | Purpose | Scopes it writes |
 |---|---|---|---|
 | `memory_mcp` | 8767 | Write tools: create decision, runbook, error-pattern, external note, daily log entry | daily, decisions, external, knowledge, runbooks, error-patterns, inbox |
-| `recall_mcp` | 8768 | Read tools: recall (hybrid search), recent, related, get-by-id, stats | none (read-only) |
-| `swarm_mcp` | 8766 | Inter-agent event bus: notify, ack, list-pending, broadcast | none (writes to `outbox` table only) |
+| `memory_router_mcp` | 8768 | Read tools: recall (hybrid search), recent, related, get-by-id, stats | none (read-only) |
+| `agent_router_mcp` | 8766 | Inter-agent event bus: notify, ack, list-pending, broadcast | none (writes to `outbox` table only) |
 
 **Auth:** each agent gets a Bearer token. Token sha256 is stored in `agent_tokens.token_sha256`. Each request's `Authorization: Bearer <token>` header is captured by `AuthCaptureMiddleware` and the token resolves to an agent identity with scoped write permissions. No header → 401. No silent fallback. Ever. **In Path B, each personal agent workspace gets its own distinct Bearer** — never share tokens between agents.
 
@@ -180,7 +180,7 @@ test -x agent-template/install.sh || { echo "agent-template/install.sh missing o
 ls agent-template/templates/ agent-template/scripts/ agent-template/hooks/ agent-template/docs/
 ```
 
-You should see template files (`CLAUDE.md.template`, `rules.md.template`, `mcp.json.template`, etc.), workspace scripts (`memory-rotate.sh`, `trim-hot.sh`, `rotate-warm.sh`, `compress-warm.sh`, `second_brain-recall-on-start.sh`), hooks (`stop-hook.sh`, `session-start-hook.sh`, `precompact-hook.sh`), and docs (`ARCHITECTURE.md`, `MEMORY.md`, `HOOKS.md`, `MULTI-AGENT.md`, `TOKEN-OPTIMIZATION.md`, `SETUP-GUIDE.md`).
+You should see template files (`CLAUDE.md.template`, `rules.md.template`, `mcp.json.template`, etc.), workspace scripts (`memory-rotate.sh`, `trim-hot.sh`, `rotate-warm.sh`, `compress-warm.sh`, `second_brain-memory_router-on-start.sh`), hooks (`stop-hook.sh`, `session-start-hook.sh`, `precompact-hook.sh`), and docs (`ARCHITECTURE.md`, `MEMORY.md`, `HOOKS.md`, `MULTI-AGENT.md`, `TOKEN-OPTIMIZATION.md`, `SETUP-GUIDE.md`).
 
 If any of those are missing → STOP and ask the user to re-clone. Path B cannot proceed without a complete `agent-template/`.
 
@@ -308,14 +308,14 @@ This is idempotent and takes 10–15 minutes. It will:
 - install systemd unit files from templates in `systemd/`
 - install Caddyfile from `caddy/Caddyfile.template` (only if domain given)
 - generate the first admin agent token and print it ONCE
-- start all 4 services (`second_brain-memory-mcp`, `second_brain-recall-mcp`, `second_brain-swarm-mcp`, `second_brain-ingest-worker`)
+- start all 4 services (`second_brain-memory-mcp`, `second_brain-memory_router-mcp`, `second_brain-agent_router-mcp`, `second_brain-ingest-worker`)
 
 Read the script's output carefully. The admin token is printed only once — capture it. If the script exits non-zero, do not proceed. Look at the last 50 lines for the actual error, then check `docs/troubleshooting.md`.
 
 ### Step 4: Verify all 4 services are healthy
 
 ```bash
-ssh <USER>@<VPS_IP> "systemctl status second_brain-memory-mcp second_brain-recall-mcp second_brain-swarm-mcp second_brain-ingest-worker --no-pager"
+ssh <USER>@<VPS_IP> "systemctl status second_brain-memory-mcp second_brain-memory_router-mcp second_brain-agent_router-mcp second_brain-ingest-worker --no-pager"
 ```
 
 All four must be `active (running)`. If any is `failed` or `activating (auto-restart)`, pull logs:
@@ -339,7 +339,7 @@ This script:
 - inserts a test row into `agent_tokens` for `inbox-agent`, queries it back, deletes it (auth round-trip)
 - exits 0 on full pass
 
-If smoke-test fails, do not move on. The most common cause is `AuthCaptureMiddleware` not loaded — verify `services/memory_mcp/server.py` and `services/recall_mcp/server.py` both have the middleware (they should, in this distro; if not, the repo is broken).
+If smoke-test fails, do not move on. The most common cause is `AuthCaptureMiddleware` not loaded — verify `services/memory_mcp/server.py` and `services/memory_router_mcp/server.py` both have the middleware (they should, in this distro; if not, the repo is broken).
 
 ### Step 6: Issue agent tokens
 
@@ -376,7 +376,7 @@ This script:
 - writes `${INBOX_AGENT_HOME}/.claude/.mcp.json` from `inbox-agent/config/.mcp.json.template`, filling in the VPS URL (`MCP_HOST`) and the inbox-agent Bearer token (`AGENT_TOKEN`)
 - writes a `.env` with the optional API keys the user provided
 - `chmod 600` on `.env` and `.mcp.json`
-- verifies the inbox-agent can reach the VPS's `/recall/mcp` endpoint with its token
+- verifies the inbox-agent can reach the VPS's `/memory_router/mcp` endpoint with its token
 
 If the local reachability check fails, the most likely cause is firewall, missing DNS, or the user's machine not having Tailscale up (if Tailscale-only). Fix that before proceeding.
 
@@ -498,7 +498,7 @@ The script will:
 1. Create `~/.claude-lab/<agent-id>/.claude/` with the full skeleton: `CLAUDE.md`, `core/USER.md`, `core/rules.md`, `core/MEMORY.md`, `core/LEARNINGS.md`, `core/AGENTS.md`, `core/warm/decisions.md`, `core/hot/handoff.md`, `core/hot/recent.md`, `tools/TOOLS.md`, `settings.json`, `hooks/`, `scripts/`, `skills/`.
 2. Render each `*.template` file with the user's answers using a `sed_i` helper that works on both macOS and Linux.
 3. Copy hook shell scripts (`stop-hook.sh`, `session-start-hook.sh`, `precompact-hook.sh`) into `hooks/` and `chmod +x` them.
-4. Copy memory-rotation scripts (`memory-rotate.sh`, `trim-hot.sh`, `rotate-warm.sh`, `compress-warm.sh`, `second_brain-recall-on-start.sh`) into `scripts/` and `chmod +x` them.
+4. Copy memory-rotation scripts (`memory-rotate.sh`, `trim-hot.sh`, `rotate-warm.sh`, `compress-warm.sh`, `second_brain-memory_router-on-start.sh`) into `scripts/` and `chmod +x` them.
 5. Write `.mcp.json` from `agent-template/templates/mcp.json.template`, leaving the `Authorization: Bearer <AGENT_BEARER>` placeholder in place.
 6. Print the path to the new workspace and the next step (issue token + fill `.mcp.json`).
 
@@ -547,12 +547,12 @@ For each agent, edit `~/.claude-lab/<agent-id>/.claude/.mcp.json` and replace th
       "url": "https://<DOMAIN>/memory/mcp",
       "headers": { "Authorization": "Bearer <ACTUAL_TOKEN>" }
     },
-    "second_brain-recall": {
-      "url": "https://<DOMAIN>/recall/mcp",
+    "second_brain-memory_router": {
+      "url": "https://<DOMAIN>/memory_router/mcp",
       "headers": { "Authorization": "Bearer <ACTUAL_TOKEN>" }
     },
-    "second_brain-swarm": {
-      "url": "https://<DOMAIN>/swarm/mcp",
+    "second_brain-agent_router": {
+      "url": "https://<DOMAIN>/agent_router/mcp",
       "headers": { "Authorization": "Bearer <ACTUAL_TOKEN>" }
     }
   }
@@ -598,7 +598,7 @@ claude --project ~/.claude-lab/<agent-id>/.claude
 If recall returns 0 results despite the brain having data:
 
 - Check `.mcp.json` Bearer is correct (re-read it; should be the value from step 14, not the placeholder).
-- Check the brain is reachable: `curl -sS -H "Authorization: Bearer <token>" https://<DOMAIN>/recall/mcp/` should return 406 with an MCP error body. 401 → wrong token. Connection refused → firewall.
+- Check the brain is reachable: `curl -sS -H "Authorization: Bearer <token>" https://<DOMAIN>/memory_router/mcp/` should return 406 with an MCP error body. 401 → wrong token. Connection refused → firewall.
 - Check the agent's bearer is for an agent whose scope set includes `external` for reads (default read scope `*` covers everything).
 
 ### Step 18 (optional): Wire the agent into a Telegram bot
@@ -659,8 +659,8 @@ There is a strict order to error handling. Do not skip steps.
 
    ```bash
    ssh <USER>@<VPS_IP> "journalctl -u second_brain-memory-mcp -n 200 --no-pager"
-   ssh <USER>@<VPS_IP> "journalctl -u second_brain-recall-mcp -n 200 --no-pager"
-   ssh <USER>@<VPS_IP> "journalctl -u second_brain-swarm-mcp -n 200 --no-pager"
+   ssh <USER>@<VPS_IP> "journalctl -u second_brain-memory_router-mcp -n 200 --no-pager"
+   ssh <USER>@<VPS_IP> "journalctl -u second_brain-agent_router-mcp -n 200 --no-pager"
    ssh <USER>@<VPS_IP> "journalctl -u second_brain-ingest-worker -n 200 --no-pager"
    ssh <USER>@<VPS_IP> "journalctl -u postgresql -n 200 --no-pager"
    ssh <USER>@<VPS_IP> "journalctl -u caddy -n 200 --no-pager"
@@ -687,9 +687,9 @@ The deployment is complete when ALL of these are verifiable. Read each one and c
 
 ### Path A — done condition
 
-- [ ] `systemctl is-active second_brain-memory-mcp second_brain-recall-mcp second_brain-swarm-mcp second_brain-ingest-worker` returns `active` for all four.
+- [ ] `systemctl is-active second_brain-memory-mcp second_brain-memory_router-mcp second_brain-agent_router-mcp second_brain-ingest-worker` returns `active` for all four.
 - [ ] `psql -U second_brain -d second_brain -c "SELECT agent, array_length(can_write_scopes,1) FROM agent_tokens WHERE revoked_at IS NULL;"` shows at least two rows (`coordinator-agent`, `inbox-agent`) with the expected scope counts.
-- [ ] `curl -sS https://<DOMAIN>/recall/mcp` or `curl -sS http://<VPS_IP>:8768/` returns the recall service banner (200, "MCP service: recall").
+- [ ] `curl -sS https://<DOMAIN>/memory_router/mcp` or `curl -sS http://<VPS_IP>:8768/` returns the recall service banner (200, "MCP service: recall").
 - [ ] The Telegram bot (`bot.py`) responds to `/start` from the allowlisted user_id within 2 seconds, and replies with a short ack to a forwarded URL.
 - [ ] A forwarded URL → bot ack ("Got it") → `recall.recent(scope='external')` returns the URL with `agent: inbox-agent`. End-to-end.
 - [ ] `crontab -l` shows the two inbox-agent entries.
@@ -701,7 +701,7 @@ The deployment is complete when ALL of these are verifiable. Read each one and c
 For each agent in the user's list:
 
 - [ ] Workspace exists: `ls ~/.claude-lab/<agent-id>/.claude/` shows `CLAUDE.md`, `core/`, `hooks/`, `scripts/`, `.mcp.json`.
-- [ ] `.mcp.json` has all three second_brain entries (memory / recall / swarm), each with that agent's Bearer (not the placeholder, not the inbox-agent token, not another agent's token).
+- [ ] `.mcp.json` has all three second_brain entries (memory / memory_router / agent_router), each with that agent's Bearer (not the placeholder, not the inbox-agent token, not another agent's token).
 - [ ] `claude --project ~/.claude-lab/<agent-id>/.claude` opens without errors and reports the role you set.
 - [ ] From inside that agent, `recall.recent(scope='external')` returns results (at minimum, the URL forwarded in Path A step 10).
 - [ ] `crontab -l | grep <agent-id>` shows three rotation entries (trim-hot, rotate-warm, compress-warm).
@@ -729,7 +729,7 @@ Once all are checked, tell the user: "Deployment complete. The brain is running 
 
 **For adding new ingestion skills** (Telegram channels, RSS feeds, a custom API source): read `skills/README.md`.
 
-**For changing recall behaviour** (source weights, decay constants): read `docs/architecture.md` section "Recall — source weights and temporal decay" and edit `services/recall_mcp/source_weights.py`. Restart `second_brain-recall-mcp` after changes.
+**For changing recall behaviour** (source weights, decay constants): read `docs/architecture.md` section "Recall — source weights and temporal decay" and edit `services/memory_router_mcp/source_weights.py`. Restart `second_brain-memory_router-mcp` after changes.
 
 **For security operations** (revoking tokens, rotating Postgres password, regenerating Caddy certs): read `docs/security.md`.
 

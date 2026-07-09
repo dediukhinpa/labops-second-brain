@@ -5,8 +5,8 @@ Four service unit templates that `scripts/install.sh` renders and installs to `/
 | Template | Installed name | Purpose |
 |---|---|---|
 | `memory-mcp.service.template` | `second_brain-memory-mcp.service` | Write-side MCP (port 8767) |
-| `recall-mcp.service.template` | `second_brain-recall-mcp.service` | Read-side MCP (port 8768) |
-| `swarm-mcp.service.template` | `second_brain-swarm-mcp.service` | Inter-agent event bus (port 8766) |
+| `memory_router-mcp.service.template` | `second_brain-memory_router-mcp.service` | Read-side MCP (port 8768) |
+| `agent_router-mcp.service.template` | `second_brain-agent_router-mcp.service` | Inter-agent event bus (port 8766) |
 | `ingest-worker.service.template` | `second_brain-ingest-worker.service` | Vault file indexer |
 
 ## Placeholders
@@ -38,7 +38,7 @@ for tpl in systemd/*.service.template; do
     "$tpl" | sudo tee "$rendered" >/dev/null
 done
 sudo systemctl daemon-reload
-sudo systemctl enable --now second_brain-memory-mcp second_brain-recall-mcp second_brain-swarm-mcp second_brain-ingest-worker
+sudo systemctl enable --now second_brain-memory-mcp second_brain-memory_router-mcp second_brain-agent_router-mcp second_brain-ingest-worker
 ```
 
 ## Hardening notes
@@ -59,7 +59,7 @@ If a service refuses to start with a syscall error, check `journalctl -u second_
 After install:
 
 ```bash
-systemctl status second_brain-memory-mcp second_brain-recall-mcp second_brain-swarm-mcp second_brain-ingest-worker
+systemctl status second_brain-memory-mcp second_brain-memory_router-mcp second_brain-agent_router-mcp second_brain-ingest-worker
 journalctl -u second_brain-memory-mcp -n 50 --no-pager
 ss -tlnp | grep -E '876[678]'
 ```

@@ -90,8 +90,8 @@ sudo -u second_brain python /opt/second_brain/scripts/issue-agent-token.py \
 {
   "mcpServers": {
     "second_brain-memory": { "url": "http://<VPS>:8767/mcp", "headers": { "Authorization": "Bearer <token>" } },
-    "second_brain-recall": { "url": "http://<VPS>:8768/mcp", "headers": { "Authorization": "Bearer <token>" } },
-    "second_brain-swarm":  { "url": "http://<VPS>:8766/mcp", "headers": { "Authorization": "Bearer <token>" } }
+    "second_brain-memory_router": { "url": "http://<VPS>:8768/mcp", "headers": { "Authorization": "Bearer <token>" } },
+    "second_brain-agent_router":  { "url": "http://<VPS>:8766/mcp", "headers": { "Authorization": "Bearer <token>" } }
   }
 }
 ```
@@ -148,11 +148,11 @@ flowchart LR
 
     subgraph brain["labops-second-brain (один VPS)"]
         MEM["memory-mcp :8767<br/>запись заметок в vault"]
-        REC["recall-mcp :8768<br/>гибридный поиск"]
-        SW["swarm-mcp :8766<br/>координация роя"]
+        REC["memory_router-mcp :8768<br/>гибридный поиск"]
+        SW["agent_router-mcp :8766<br/>маршрутизация агентов"]
         TASK["task-mcp :8769<br/>задачи/доска"]
         IW["ingest-worker<br/>чанкинг + эмбеддинги"]
-        SWW["swarm-worker<br/>доставка webhooks"]
+        SWW["agent_router-worker<br/>доставка webhooks"]
         PG[("Postgres 16 + pgvector<br/>documents · embeddings ·<br/>agent_tokens · audit ·<br/>swarm_outbox · tasks")]
         VAULT["vault/ (Markdown SSOT)"]
     end
@@ -176,19 +176,19 @@ flowchart LR
 
 - **MCP-серверы** — точки входа для агентов (HTTP, аутентификация Bearer-токеном или HMAC-подписью).
 - **ingest-worker** — следит за изменениями vault, режет документы на чанки с контекстом и считает эмбеддинги (FastEmbed `multilingual-e5-large`).
-- **swarm-worker** — асинхронно доставляет inter-agent webhooks с ретраями.
-- **core-mcp** — режим, агрегирующий memory+swarm+task в одном процессе (см. tool-gating ниже).
+- **agent_router-worker** — асинхронно доставляет inter-agent webhooks с ретраями.
+- **core-mcp** — режим, агрегирующий memory+agent_router+task в одном процессе (см. tool-gating ниже).
 
 ### MCP-серверы и порты
 
 | Сервер | Порт | Назначение | systemd |
 |---|---|---|---|
 | `memory-mcp` | **8767** | запись заметок в vault (decision/runbook/error/external/personal/project), дедуп по sha256 | `memory-mcp.service` |
-| `recall-mcp` | **8768** | гибридный поиск (semantic + lexical + rerank), кросс-линки | `recall-mcp.service` |
-| `swarm-mcp` | **8766** | координация роя: outbox, inter-agent сообщения | `swarm-mcp.service` |
+| `memory_router-mcp` | **8768** | гибридный поиск (semantic + lexical + rerank), кросс-линки | `memory_router-mcp.service` |
+| `agent_router-mcp` | **8766** | координация роя: outbox, inter-agent сообщения | `agent_router-mcp.service` |
 | `task-mcp` | **8769** | задачи, доска, supervisor агентов | `task-mcp.service` |
 | `ingest-worker` | — | чанкинг + эмбеддинги (watermark по изменениям) | `ingest-worker.service` |
-| `swarm-worker` | — | доставка webhooks (5 ретраев, exp backoff) | `swarm-worker.service` |
+|  `agent_router-worker` | — | доставка webhooks (5 ретраев, exp backoff) | `agent_router-worker.service` |
 
 **tool-gating:** переменная `SECOND_BRAIN_TOOLS` (дефолт `core`) определяет, какие инструменты сервер отдаёт клиентам. Новый memory-инструмент виден только если он есть в `CORE_TOOLS_BY_SERVER` (`services/shared/tool_gating.py`), а не только в коде.
 
@@ -234,7 +234,7 @@ flowchart LR
 <details>
 <summary><b>Гибридный recall</b> — смысловой поиск, не grep</summary>
 
-`recall-mcp` не grep, а смысловой поиск:
+`memory_router-mcp` не grep, а смысловой поиск:
 
 1. **Semantic** — эмбеддинг запроса (e5, с правильными префиксами `query:`/`passage:`) → cosine по pgvector.
 2. **Lexical** — полнотекстовый сигнал.
@@ -242,7 +242,7 @@ flowchart LR
 4. **Rerank** — переупорядочивание top-кандидатов.
 5. **Cross-link** — связанные заметки (`cross_link.py`).
 
-Кэш запросов-эмбеддингов (`recall_mcp/cache.py`) и веса источников (`source_weights.py`) — для скорости и релевантности.
+Кэш запросов-эмбеддингов (`memory_router_mcp/cache.py`) и веса источников (`source_weights.py`) — для скорости и релевантности.
 
 </details>
 
@@ -262,8 +262,8 @@ flowchart LR
 
 Агенты дёргают друг друга через **inter-agent webhooks** (не напрямую):
 
-- отправитель кладёт сообщение в `swarm_outbox` (через `swarm-mcp`);
-- `swarm-worker` доставляет его получателю, статусы `pending|delivered|acked|failed`;
+- отправитель кладёт сообщение в `swarm_outbox` (через `agent_router-mcp`);
+-  `agent_router-worker` доставляет его получателю, статусы `pending|delivered|acked|failed`;
 - **5 ретраев** с экспоненциальным backoff, потом `failed` (нужен ручной replay);
 - запросы подписаны **HMAC** (`x-hermes-signature`/`x-hermes-timestamp`, секреты в `migrations/004_hmac_secrets.sql` + `issue-hmac-secret.py`), плюс Bearer-токены.
 
@@ -287,7 +287,7 @@ flowchart LR
 | `create_handoff` | — | выгрузка перед компакцией/в конце сессии |
 | `supersede_decision` | `decisions` | устаревшее решение |
 
-Recall: `recall(...)`. Координация: `swarm_*`. Задачи: `task_*`.
+Recall: `recall(...)`. Координация: `agent_router_*`. Задачи: `task_*`.
 
 ---
 
@@ -357,7 +357,7 @@ sudo SKIP_SMOKE_GATE=1 bash scripts/install.sh
 python -m pytest tests/ -q
 ```
 
-`scripts/install.sh` прогоняет `smoke-test.sh` в конце установки (живые сервисы + БД). Юнит/контрактные тесты (`tests/`, 400+) проверяют scopes, RBAC, tool-gating, recall, HMAC, swarm. `scripts/gbrain_doctor.py` / `scripts/check_env_sync.py` — диагностика окружения.
+`scripts/install.sh` прогоняет `smoke-test.sh` в конце установки (живые сервисы + БД). Юнит/контрактные тесты (`tests/`, 400+) проверяют scopes, RBAC, tool-gating, recall, HMAC, agent_router. `scripts/gbrain_doctor.py` / `scripts/check_env_sync.py` — диагностика окружения.
 
 ---
 

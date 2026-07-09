@@ -13,11 +13,11 @@ Three MCP services on a VPS, a local Telegram bot on your workstation, a markdow
                   +---------------------+   +-----------------------------+
                   |  inbox-agent        |   |  Caddy (TLS, optional)      |
   Telegram -----> |  Telegram bot       |-->|     /memory/mcp -> :8767    |
-  forwards        |  dual-write hook    |   |     /recall/mcp -> :8768    |
-                  |  cron: compile,     |   |     /swarm/mcp  -> :8766    |
+  forwards        |  dual-write hook    |   |     /memory_router/mcp -> :8768    |
+                  |  cron: compile,     |   |     /agent_router/mcp  -> :8766    |
                   |        daily-digest |   |                             |
-                  |  raw/  (local fs)   |   |  memory_mcp   recall_mcp    |
-                  +---------------------+   |  swarm_mcp    ingest-worker |
+                  |  raw/  (local fs)   |   |  memory_mcp   memory_router_mcp    |
+                  +---------------------+   |  agent_router_mcp    ingest-worker |
                                             |                             |
                                             |  Postgres 16 + pgvector     |
                                             |    agent_tokens             |
@@ -61,7 +61,7 @@ All three speak MCP over HTTP using FastMCP's `streamable-http` transport. They 
 
 **AuthCaptureMiddleware:** see "Auth model" below. The middleware reads the header per-request and stashes it in a `ContextVar` that the tool handler retrieves. Do not "simplify" this by reading the header inside `_extract_token` — under FastMCP's stateless-HTTP mode the headers do not propagate to the tool context.
 
-### `recall_mcp` (port 8768)
+### `memory_router_mcp` (port 8768)
 
 **Purpose:** the only path agents use to search and read from the vault.
 
@@ -78,7 +78,7 @@ All three speak MCP over HTTP using FastMCP's `streamable-http` transport. They 
 
 **No writes ever.** A compromised recall token leaks data (bad) but cannot corrupt the vault. A compromised memory token can write garbage (worse). Issue recall-only tokens to research agents that should not be allowed to write.
 
-### `swarm_mcp` (port 8766)
+### `agent_router_mcp` (port 8766)
 
 **Purpose:** an event bus for inter-agent messaging. One agent can dispatch a task to another, ack it, broadcast to many, or escalate.
 
@@ -211,7 +211,7 @@ Default `half_life_days = 180`. Older notes are not erased but ranked lower for 
 
 ### Step 4: source_weights
 
-Multiply by a per-scope weight from `services/recall_mcp/source_weights.py`:
+Multiply by a per-scope weight from `services/memory_router_mcp/source_weights.py`:
 
 | Scope | Default weight |
 |---|---|
@@ -312,7 +312,7 @@ The skeleton:
 ~/.claude-lab/<agent-id>/.claude/
 ├── CLAUDE.md              # SOUL — identity, role, style, boundaries (always loaded)
 ├── settings.json          # env vars, hooks registration, permissions
-├── .mcp.json              # MCP server config — brain memory/recall/swarm + Bearer
+├── .mcp.json              # MCP server config — brain memory/memory_router/agent_router + Bearer
 ├── core/
 │   ├── USER.md            # Owner profile (always loaded via @include)
 │   ├── rules.md           # Operational rules (always loaded via @include)
@@ -337,7 +337,7 @@ The skeleton:
 │   ├── trim-hot.sh
 │   ├── rotate-warm.sh
 │   ├── compress-warm.sh
-│   └── second_brain-recall-on-start.sh
+│   └── second_brain-memory_router-on-start.sh
 └── logs/                  # Per-script log files (chmod 600)
 ```
 
@@ -352,20 +352,20 @@ IDENTITY ───── always in context  (CLAUDE.md + core/USER.md + core/rul
 WARM 14d ───── always in context  (core/warm/decisions.md)
 HOT ────────── handoff at startup (core/hot/handoff.md, last ~10 entries)
 COLD ───────── Read tool on demand (core/MEMORY.md, core/LEARNINGS.md, tools/TOOLS.md)
-SHARED BRAIN ─ MCP on demand     (second_brain via .mcp.json — recall.*, memory.*, swarm.*)
+SHARED BRAIN ─ MCP on demand     (second_brain via .mcp.json — memory_router.*, memory.*, agent_router.*)
 ```
 
 - **IDENTITY** — who the agent is, who its owner is, what its operational rules are. Small (~6–8 KB total), loaded via `@include` at every session start.
 - **WARM (decisions.md)** — material decisions made in the last ~14 days. Compact (~2–4 KB). Always loaded so the agent never "forgets" what was decided last week.
 - **HOT (handoff.md)** — the last ~10 entries from `recent.md` (the full conversation log). Loaded at session start by the SessionStart hook. The full `recent.md` is **never** loaded — only the slice the hook extracts.
 - **COLD** — `MEMORY.md`, `LEARNINGS.md`, `TOOLS.md`, `AGENTS.md`. Not loaded automatically. The agent reads them with the `Read` tool when relevant. This keeps the startup payload under ~3% of a typical 400k working window.
-- **SHARED BRAIN** — everything in the second_brain vault. Accessed via the 3 MCP servers in `.mcp.json`. The agent calls `recall.recall("query")` to find anything across history, or `memory.create_decision_note(...)` to write a new entry into the shared brain alongside its local `decisions.md`.
+- **SHARED BRAIN** — everything in the second_brain vault. Accessed via the 3 MCP servers in `.mcp.json`. The agent calls `memory_router.recall("query")` to find anything across history, or `memory.create_decision_note(...)` to write a new entry into the shared brain alongside its local `decisions.md`.
 
 The agent does not "choose" which layer to use — the layers are wired so the right one is in front of it at the right time. CLAUDE.md is always in context. `handoff.md` is in context after SessionStart. `decisions.md` is in context always. `MEMORY.md` is one Read away. Second_brain is one `recall` call away.
 
 ### How workspaces consume the shared brain (MCP)
 
-The `.mcp.json` rendered at install time registers three MCP servers — one each for memory, recall, swarm:
+The `.mcp.json` rendered at install time registers three MCP servers — one each for memory, memory_router, agent_router:
 
 ```json
 {
@@ -374,12 +374,12 @@ The `.mcp.json` rendered at install time registers three MCP servers — one eac
       "url": "https://<MCP_HOST>/memory/mcp",
       "headers": { "Authorization": "Bearer <AGENT_BEARER>" }
     },
-    "second_brain-recall": {
-      "url": "https://<MCP_HOST>/recall/mcp",
+    "second_brain-memory_router": {
+      "url": "https://<MCP_HOST>/memory_router/mcp",
       "headers": { "Authorization": "Bearer <AGENT_BEARER>" }
     },
-    "second_brain-swarm": {
-      "url": "https://<MCP_HOST>/swarm/mcp",
+    "second_brain-agent_router": {
+      "url": "https://<MCP_HOST>/agent_router/mcp",
       "headers": { "Authorization": "Bearer <AGENT_BEARER>" }
     }
   }
@@ -388,7 +388,7 @@ The `.mcp.json` rendered at install time registers three MCP servers — one eac
 
 The bearer is per-agent (issued by `scripts/issue-agent-token.py --agent <agent-id> --scopes '...'`). The scope set the token has determines what the agent can write. A `coordinator-agent` token typically holds the full write set; a `researcher-agent` token might have an empty write set (recall only).
 
-Inside Claude Code, this surfaces as three groups of tools the agent can call: `second_brain-memory.create_decision_note(...)`, `second_brain-recall.recall(...)`, `second_brain-swarm.notify(...)`, etc. No HTTP plumbing — Claude Code handles the JSON-RPC and the Bearer.
+Inside Claude Code, this surfaces as three groups of tools the agent can call: `second_brain-memory.create_decision_note(...)`, `second_brain-memory_router.recall(...)`, `second_brain-agent_router.notify(...)`, etc. No HTTP plumbing — Claude Code handles the JSON-RPC and the Bearer.
 
 ### How hooks glue local memory to the shared brain
 
@@ -396,7 +396,7 @@ Three hooks live in each workspace's `hooks/` and are registered in `settings.js
 
 | Hook | Trigger | What it does |
 |---|---|---|
-| `session-start-hook.sh` | Claude Code session opens | Reads the last ~10 entries from `core/hot/recent.md` and writes them to `core/hot/handoff.md` so the next session starts with continuity. May also call `second_brain-recall.recent(scope='inbox')` and prepend the latest inbox items so the agent sees anything new since last session. |
+| `session-start-hook.sh` | Claude Code session opens | Reads the last ~10 entries from `core/hot/recent.md` and writes them to `core/hot/handoff.md` so the next session starts with continuity. May also call `second_brain-memory_router.recent(scope='inbox')` and prepend the latest inbox items so the agent sees anything new since last session. |
 | `stop-hook.sh` | Session ends (Claude Code emits Stop event) | Appends the latest assistant/user turns to `core/hot/recent.md` (the full chronological log). This is **the** capture step — without it, no memory ever rotates. |
 | `precompact-hook.sh` | Claude Code is about to auto-compact context | Snapshots the current session into a more compressed form so nothing material is lost when auto-compact discards old turns. Typically writes a one-line entry to `core/hot/recent.md` and (if a decision was made) optionally calls `second_brain-memory.create_decision_note(...)` to dual-write into the brain. |
 
@@ -407,7 +407,7 @@ The memory-rotation scripts in `scripts/` are run by cron, not by hooks. They ar
 - `trim-hot.sh` (hourly) — when `recent.md` exceeds a size threshold, summarise the oldest section with a Sonnet subagent call and append the summary to `core/warm/decisions.md`; move the original chunk to `core/hot/archive/<date>.md`.
 - `rotate-warm.sh` (daily, 03:30) — when an entry in `decisions.md` is older than ~14 days, move it to `core/MEMORY.md` under the relevant section header.
 - `compress-warm.sh` (weekly, Sunday 04:00) — re-summarise overgrown `decisions.md` sections to keep the always-loaded warm tier compact.
-- `second_brain-recall-on-start.sh` (called by SessionStart) — query the brain for any new entries since last session in scopes the agent cares about.
+- `second_brain-memory_router-on-start.sh` (called by SessionStart) — query the brain for any new entries since last session in scopes the agent cares about.
 
 ### Multi-agent scenarios
 
@@ -417,7 +417,7 @@ The whole point of Path B is that you can run multiple workspaces against one br
 - Each has its own Bearer in `agent_tokens`. `audit_log` attributes every write to the correct agent — never to a shared identity.
 - Each has its own write scopes. `coordinator-agent` writes decisions; `marketer-agent` writes external notes; `researcher-agent` writes nothing.
 - All read the **same** vault. A decision written by `coordinator-agent` shows up in `researcher-agent`'s recall the next time it queries.
-- All can use `swarm_mcp` to notify each other: `coordinator-agent` calls `second_brain-swarm.notify(to_agent='coder-agent', payload={...})`, `coder-agent` polls `list_my_pending()` and acks when done.
+- All can use `agent_router_mcp` to notify each other: `coordinator-agent` calls `second_brain-agent_router.notify(to_agent='coder-agent', payload={...})`, `coder-agent` polls `list_my_pending()` and acks when done.
 
 What multiple workspaces do **not** share locally: their own hot/warm/cold tiers. `coordinator-agent`'s `handoff.md` is private to its workspace. If two agents need to share a piece of state, it goes into the brain via `second_brain-memory`, not via the local memory layer.
 
@@ -438,7 +438,7 @@ You forward a YouTube URL to your Telegram bot at 14:00:
 5. **14:05:00** — Compile cron runs. Sees the raw file is compiled (`second_brain_id` present), skips.
 6. **14:05:01** — Another raw file from a different forward (a voice note) is found. Classifier routes it to `groq-voice`. Transcript is generated and written as a fresh `external` note via memory MCP.
 7. **VPS, async** — `memory_mcp.create_external_note` inserts the new file row into `documents` and enqueues an `embedding_jobs` row. The ingest worker picks the job up within a few seconds, chunks the body, embeds each chunk, and upserts rows into `chunks`. The note is now recallable.
-8. **15:00** — From your coordinator agent's MCP context, you call `recall.recent(scope='external', limit=10)`. The YouTube URL appears with `agent: inbox-agent`, score reflecting recency and scope weight.
+8. **15:00** — From your coordinator agent's MCP context, you call `memory_router.recent(scope='external', limit=10)`. The YouTube URL appears with `agent: inbox-agent`, score reflecting recency and scope weight.
 9. **Next morning 07:00** — Daily digest cron runs. Builds yesterday's recap. Bot sends it to you on Telegram.
 
 Total moving parts the user touches: forward a Telegram message. Everything else is automated.

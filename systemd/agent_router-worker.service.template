@@ -1,8 +1,8 @@
 [Unit]
-Description=second_brain Swarm Worker (delivery outbox -> agent gateways)
-After=postgresql.service network.target second_brain-swarm-mcp.service
+Description=second_brain Agent Router Worker (delivery outbox -> agent gateways)
+After=postgresql.service network.target second_brain-agent_router-mcp.service
 Wants=postgresql.service
-PartOf=second_brain-swarm-mcp.service
+PartOf=second_brain-agent_router-mcp.service
 
 [Service]
 Type=simple
@@ -15,7 +15,7 @@ Environment=MCP_PORT=0
 EnvironmentFile={{ETC_DIR}}/secrets.env
 # AGENT_GATEWAYS is a JSON map {"agent_name": "https://gateway.example/webhook"}.
 # Populate it via a drop-in (see systemd/README.md). Empty map = worker idles.
-ExecStart={{INSTALL_DIR}}/.venv/bin/python -m services.swarm_mcp.worker
+ExecStart={{INSTALL_DIR}}/.venv/bin/python -m services.agent_router_mcp.worker
 Restart=on-failure
 RestartSec=5
 

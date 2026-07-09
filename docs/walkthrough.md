@@ -148,8 +148,8 @@ permanent.
 
 You can read the full service breakdown in
 [services/memory_mcp/](../services/memory_mcp/),
-[services/recall_mcp/](../services/recall_mcp/), and
-[services/swarm_mcp/](../services/swarm_mcp/).
+[services/memory_router_mcp/](../services/memory_router_mcp/), and
+[services/agent_router_mcp/](../services/agent_router_mcp/).
 
 ## Memory Layers
 
@@ -300,7 +300,7 @@ Your agent, running inside Claude Code, calls
 `recall.recall(query="why did we switch from REST to gRPC?")`. Under
 the hood, Claude Code sends an MCP `tools/call` request over a
 streamable-HTTP transport to
-`https://mcp.your-domain.example/recall/mcp`, with the agent's bearer
+`https://mcp.your-domain.example/memory_router/mcp`, with the agent's bearer
 token in the `Authorization` header. Caddy terminates TLS and routes
 the request to the local recall process on its private port.
 

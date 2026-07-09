@@ -10,7 +10,7 @@ during ``register_tools()`` to decide whether to register a given tool. Tools th
 are skipped at registration time never appear in the MCP ``tools/list`` response
 and cannot be invoked, so the gating doubles as a security boundary, not just UX.
 
-Server names are exact strings: ``"memory_mcp"``, ``"recall_mcp"``, ``"swarm_mcp"``, ``"task_mcp"``.
+Server names are exact strings: ``"memory_mcp"``, ``"memory_router_mcp"``, ``"agent_router_mcp"``, ``"task_mcp"``.
 """
 from __future__ import annotations
 
@@ -32,14 +32,14 @@ CORE_TOOLS_BY_SERVER: dict[str, frozenset[str]] = {
         "create_personal_note",
         "create_project_note",
     }),
-    "recall_mcp": frozenset({
+    "memory_router_mcp": frozenset({
         "recall",
         "get",
         "related",
         "recent",
     }),
-    # Swarm has no "core-only" tools -- notify/ack are always-on instead.
-    "swarm_mcp": frozenset(),
+    # Agent router has no "core-only" tools -- notify/ack are always-on instead.
+    "agent_router_mcp": frozenset(),
     # Task board: CRUD + status transitions are always-on (core operational set).
     "task_mcp": frozenset({
         "task_create",
@@ -63,8 +63,8 @@ CORE_TOOLS_BY_SERVER: dict[str, frozenset[str]] = {
 # notify/ack are required for inter-agent operation in any deployment.
 ALWAYS_ON_TOOLS_BY_SERVER: dict[str, frozenset[str]] = {
     "memory_mcp": frozenset(),
-    "recall_mcp": frozenset(),
-    "swarm_mcp": frozenset({"notify", "ack"}),
+    "memory_router_mcp": frozenset(),
+    "agent_router_mcp": frozenset({"notify", "ack"}),
     "task_mcp": frozenset(),
 }
 
@@ -94,7 +94,7 @@ def should_register_tool(server_name: str, tool_name: str, tool_set: str) -> boo
     """Return True if the given tool should be registered in the given mode.
 
     Args:
-        server_name: One of ``"memory_mcp"``, ``"recall_mcp"``, ``"swarm_mcp"``, ``"task_mcp"``.
+        server_name: One of ``"memory_mcp"``, ``"memory_router_mcp"``, ``"agent_router_mcp"``, ``"task_mcp"``.
         tool_name: Function name of the MCP tool (matches the decorated function).
         tool_set: Resolved tool set, typically the output of :func:`parse_tool_set`.
 

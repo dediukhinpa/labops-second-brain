@@ -32,7 +32,7 @@ The `ingest_worker` service is **not** a filesystem watcher. The canonical write
 
 The ingest worker then pops the job, splits the body into chunks (word-window, currently `WINDOW_SIZE_DEFAULT=500` / `OVERLAP_DEFAULT=50`; token-aware chunking is a follow-up), computes a 1024-dim FastEmbed `multilingual-e5-large` vector per chunk, and upserts rows into `chunks` (one per slice) keyed by `(doc_id, position)` with `chunk_hash` for idempotent re-runs.
 
-Read-side queries (`recall_mcp.recall(...)`) combine vector cosine similarity over `chunks.embedding`, full-text rank over `documents.body_tsv`, and a scope weight. `error-patterns/` carries weight `3.0` so past incidents bubble to the top — this is the most useful signal for «have we hit this before?».
+Read-side queries (`memory_router_mcp.recall(...)`) combine vector cosine similarity over `chunks.embedding`, full-text rank over `documents.body_tsv`, and a scope weight. `error-patterns/` carries weight `3.0` so past incidents bubble to the top — this is the most useful signal for «have we hit this before?».
 
 > **Note:** files dropped directly onto the filesystem (`vim vault/decisions/foo.md`) will **not** appear in recall — there is no inotify watcher. Use `memory_mcp.update_document(path=...)` instead, or insert an `embedding_jobs` row by hand. See `docs/troubleshooting.md`.
 
@@ -74,7 +74,7 @@ Do **not** add folders ad hoc. If you genuinely need a new top-level scope:
 1. Pick a numeric prefix that fits the conceptual band (10 = strategic, 20 = ops, 30 = decisions, 40 = projects, 50 = external/knowledge, 60 = tasks, 70 = runbooks, 80 = errors, 90 = inbox).
 2. Create the folder with `.gitkeep` and `README.md` describing purpose + typical author.
 3. Update this README's table.
-4. Update `services/recall_mcp/source_weights.py` if the new folder needs a non-default weight.
+4. Update `services/memory_router_mcp/source_weights.py` if the new folder needs a non-default weight.
 5. Commit as a decision in `decisions/`.
 
 ## Git workflow

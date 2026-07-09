@@ -1,6 +1,6 @@
 """Tests for the shared tool gating policy and per-server registration filters.
 
-Covers shared policy and memory/recall registration; swarm coverage lives in test_swarm_mcp.py.
+Covers shared policy and memory/recall registration; agent_router coverage lives in test_agent_router_mcp.py.
 """
 from __future__ import annotations
 
@@ -111,37 +111,37 @@ def test_memory_all_tools_policy_includes_slots() -> None:
         assert should_register_tool("memory_mcp", name, "all") is True
 
 
-def test_recall_core_tools_policy() -> None:
+def test_memory_router_core_tools_policy() -> None:
     """Core mode allows recall, get, related, and recent only."""
     core_recall = {"recall", "get", "related", "recent"}
     for name in core_recall:
-        assert should_register_tool("recall_mcp", name, "core") is True
+        assert should_register_tool("memory_router_mcp", name, "core") is True
 
     for name in ["stats", "reindex_check"]:
-        assert should_register_tool("recall_mcp", name, "core") is False
+        assert should_register_tool("memory_router_mcp", name, "core") is False
 
 
-def test_recall_all_tools_policy_includes_stats() -> None:
+def test_memory_router_all_tools_policy_includes_stats() -> None:
     """All mode unlocks stats and reindex_check."""
     for name in ["recall", "get", "related", "recent", "stats", "reindex_check"]:
-        assert should_register_tool("recall_mcp", name, "all") is True
+        assert should_register_tool("memory_router_mcp", name, "all") is True
 
 
-def test_swarm_notify_ack_always_on() -> None:
+def test_agent_router_notify_ack_always_on() -> None:
     """notify and ack must register in both 'core' and 'all'."""
-    assert should_register_tool("swarm_mcp", "notify", "core") is True
-    assert should_register_tool("swarm_mcp", "ack", "core") is True
-    assert should_register_tool("swarm_mcp", "notify", "all") is True
-    assert should_register_tool("swarm_mcp", "ack", "all") is True
+    assert should_register_tool("agent_router_mcp", "notify", "core") is True
+    assert should_register_tool("agent_router_mcp", "ack", "core") is True
+    assert should_register_tool("agent_router_mcp", "notify", "all") is True
+    assert should_register_tool("agent_router_mcp", "ack", "all") is True
 
     # And they must be declared in the policy module, not just by accident.
-    always_on = ALWAYS_ON_TOOLS_BY_SERVER["swarm_mcp"]
+    always_on = ALWAYS_ON_TOOLS_BY_SERVER["agent_router_mcp"]
     assert "notify" in always_on
     assert "ack" in always_on
 
 
-def test_swarm_core_hides_non_operational_tools() -> None:
-    """In core mode, the non-operational swarm tools must not register."""
+def test_agent_router_core_hides_non_operational_tools() -> None:
+    """In core mode, the non-operational agent_router tools must not register."""
     hidden = [
         "broadcast",
         "escalate",
@@ -151,8 +151,8 @@ def test_swarm_core_hides_non_operational_tools() -> None:
         "list_my_pending",
     ]
     for name in hidden:
-        assert should_register_tool("swarm_mcp", name, "core") is False
-        assert should_register_tool("swarm_mcp", name, "all") is True
+        assert should_register_tool("agent_router_mcp", name, "core") is False
+        assert should_register_tool("agent_router_mcp", name, "all") is True
 
 
 def test_valid_tool_sets_constant() -> None:
@@ -164,8 +164,8 @@ def test_core_tools_by_server_constant_shape() -> None:
     """CORE_TOOLS_BY_SERVER must declare keys for all four servers."""
     assert set(CORE_TOOLS_BY_SERVER.keys()) == {
         "memory_mcp",
-        "recall_mcp",
-        "swarm_mcp",
+        "memory_router_mcp",
+        "agent_router_mcp",
         "task_mcp",
     }
 
@@ -173,8 +173,8 @@ def test_core_tools_by_server_constant_shape() -> None:
 # ---------------------------------------------------------------------------
 # Recall register_tools gating
 # ---------------------------------------------------------------------------
-def _make_recall_args() -> tuple[Any, ...]:
-    """Build placeholder callables for recall_mcp.search.register_tools."""
+def _make_memory_router_args() -> tuple[Any, ...]:
+    """Build placeholder callables for memory_router_mcp.search.register_tools."""
     return (
         lambda: None,  # get_pool_fn
         lambda: None,  # get_embed_fn
@@ -183,44 +183,44 @@ def _make_recall_args() -> tuple[Any, ...]:
     )
 
 
-def test_recall_register_tools_core_skips_stats_reindex() -> None:
+def test_memory_router_register_tools_core_skips_stats_reindex() -> None:
     """register_tools(tool_set='core') must NOT register stats/reindex_check."""
-    from services.recall_mcp.search import register_tools
+    from services.memory_router_mcp.search import register_tools
 
     rec = ToolRecorder()
-    register_tools(rec, *_make_recall_args(), tool_set="core")
+    register_tools(rec, *_make_memory_router_args(), tool_set="core")
 
     assert set(rec.registered.keys()) == {"recall", "get", "related", "recent"}
     assert "stats" not in rec.registered
     assert "reindex_check" not in rec.registered
 
 
-def test_recall_register_tools_all_registers_stats_reindex() -> None:
+def test_memory_router_register_tools_all_registers_stats_reindex() -> None:
     """register_tools(tool_set='all') must register all six recall tools."""
-    from services.recall_mcp.search import register_tools
+    from services.memory_router_mcp.search import register_tools
 
     rec = ToolRecorder()
-    register_tools(rec, *_make_recall_args(), tool_set="all")
+    register_tools(rec, *_make_memory_router_args(), tool_set="all")
 
     expected = {"recall", "get", "related", "recent", "stats", "reindex_check"}
     assert set(rec.registered.keys()) == expected
 
 
-def test_recall_register_tools_default_is_core() -> None:
+def test_memory_router_register_tools_default_is_core() -> None:
     """Default value of tool_set keyword is 'core' (matches policy default)."""
-    from services.recall_mcp.search import register_tools
+    from services.memory_router_mcp.search import register_tools
 
     rec = ToolRecorder()
-    register_tools(rec, *_make_recall_args())
+    register_tools(rec, *_make_memory_router_args())
     assert set(rec.registered.keys()) == {"recall", "get", "related", "recent"}
 
 
-def test_recall_tool_kwargs_preserved() -> None:
+def test_memory_router_tool_kwargs_preserved() -> None:
     """Registered recall tools keep their annotations (readOnlyHint)."""
-    from services.recall_mcp.search import register_tools
+    from services.memory_router_mcp.search import register_tools
 
     rec = ToolRecorder()
-    register_tools(rec, *_make_recall_args(), tool_set="all")
+    register_tools(rec, *_make_memory_router_args(), tool_set="all")
 
     for name in ["recall", "get", "related", "recent", "stats", "reindex_check"]:
         annotations = rec.registered[name]["kwargs"].get("annotations") or {}

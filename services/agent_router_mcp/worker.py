@@ -1,4 +1,4 @@
-"""swarm-mcp worker — polls delivery_outbox and POSTs to agent gateways.
+"""agent_router-mcp worker — polls delivery_outbox and POSTs to agent gateways.
 
 Transport: HTTP POST to URL from AGENT_GATEWAYS env (JSON map {agent: url}).
 HTTP 200/2xx → mark_acked. 5xx/timeout/network → mark_retry with backoff.
@@ -168,7 +168,7 @@ def _format_virtual_prompt(from_agent: str, to_agent: str, task_id: str, payload
     """Pack inter-agent payload into a chat-style prompt the agent will see.
 
     The receiving agent sees this as if it came from the owner via the
-    chat gateway (synthetic update). Agent must call swarm.ack(task_id) when done.
+    chat gateway (synthetic update). Agent must call agent_router.ack(task_id) when done.
 
     Loop-prevention gates:
     - Ack-only fast path for: (a) reports back to the coordinator (COORDINATOR_AGENT),
@@ -185,7 +185,7 @@ def _format_virtual_prompt(from_agent: str, to_agent: str, task_id: str, payload
         extra = f"\nEscalation reason: {reason}"
 
     # Hard loop gate: COORDINATOR_AGENT is the coordinator; it never needs a
-    # dual-report back to itself. Any swarm.notify(coordinator, ...) → ack-only.
+    # dual-report back to itself. Any agent_router.notify(coordinator, ...) → ack-only.
     # Plus explicit smoke pings (`_smoke=true`) for any target.
     is_to_coordinator = to_agent == COORDINATOR_AGENT
     is_smoke = bool(payload.get("_smoke"))
@@ -209,8 +209,8 @@ def _format_virtual_prompt(from_agent: str, to_agent: str, task_id: str, payload
             f"and smoke pings do not require a full chat report.\n"
             f"2. If meaningful, send the owner a 1-3 line note via the chat gateway. "
             f"Otherwise skip.\n"
-            f"3. DO NOT swarm.notify back (loop risk). Go straight to swarm.ack.\n"
-            f"4. swarm.ack(task_id=\"{task_id}\")."
+            f"3. DO NOT agent_router.notify back (loop risk). Go straight to agent_router.ack.\n"
+            f"4. agent_router.ack(task_id=\"{task_id}\")."
         )
 
     return (
@@ -237,14 +237,14 @@ def _format_virtual_prompt(from_agent: str, to_agent: str, task_id: str, payload
         f"\n"
         f"   Avoid one-liner 'done, acked' reports. The owner wants substance, "
         f"at least 5-10 lines.\n"
-        f"3. ALSO SEND A SHORT SUMMARY TO THE COORDINATOR via swarm.notify:\n"
-        f"   swarm.notify(to_agent=\"{COORDINATOR_AGENT}\", payload={{"
+        f"3. ALSO SEND A SHORT SUMMARY TO THE COORDINATOR via agent_router.notify:\n"
+        f"   agent_router.notify(to_agent=\"{COORDINATOR_AGENT}\", payload={{"
         f"\"title\": \"Report from {to_agent}: <task name>\", "
         f"\"body\": \"<2-4 bullets: what done + commit/path + gaps>\", "
         f"\"_origin_task\": \"{task_id}\"}})\n"
         f"   Without this step the coordinator cannot see your work or schedule "
-        f"follow-ups. Chat report = owner, swarm.notify = coordinator. Two recipients.\n"
-        f"4. Call swarm.ack(task_id=\"{task_id}\") at the very end."
+        f"follow-ups. Chat report = owner, agent_router.notify = coordinator. Two recipients.\n"
+        f"4. Call agent_router.ack(task_id=\"{task_id}\") at the very end."
     )
 
 
@@ -340,7 +340,7 @@ async def run() -> None:
     gateways = _load_gateways()
     auth_map = _load_gateway_auth()
     logger.info(
-        "swarm-worker started: gateways=%s auth_modes=%s recovered=%d poll=%ds",
+        "agent_router-worker started: gateways=%s auth_modes=%s recovered=%d poll=%ds",
         list(gateways.keys()),
         {a: v.mode for a, v in auth_map.items()},
         n_recovered,
@@ -395,7 +395,7 @@ async def run() -> None:
                 await asyncio.sleep(1)
 
     await close_pool()
-    logger.info("swarm-worker stopped")
+    logger.info("agent_router-worker stopped")
 
 
 def main() -> None:
@@ -409,5 +409,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    import services.swarm_mcp.worker as _self
+    import services.agent_router_mcp.worker as _self
     sys.exit(_self.main())

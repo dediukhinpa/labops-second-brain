@@ -170,10 +170,10 @@ def test_parse_signature_header_invalid_format() -> None:
 
 
 def _reload_worker(monkeypatch: pytest.MonkeyPatch):
-    """Reload services.swarm_mcp.worker after env mutation so module-level
+    """Reload services.agent_router_mcp.worker after env mutation so module-level
     constants (GATEWAY_TOKEN etc.) reflect the patched env.
     """
-    import services.swarm_mcp.worker as worker_mod
+    import services.agent_router_mcp.worker as worker_mod
 
     return importlib.reload(worker_mod)
 

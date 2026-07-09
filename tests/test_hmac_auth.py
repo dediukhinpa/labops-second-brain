@@ -529,8 +529,8 @@ async def test_memory_tool_accepts_hmac_contextvar(monkeypatch: pytest.MonkeyPat
 
 @pytest.mark.asyncio
 async def test_recall_tool_accepts_hmac_contextvar(monkeypatch: pytest.MonkeyPatch) -> None:
-    """recall_mcp._resolve_reader authenticates HMAC via the ContextVar."""
-    from services.recall_mcp.search import _REQUEST_AUTH, _resolve_reader
+    """memory_router_mcp._resolve_reader authenticates HMAC via the ContextVar."""
+    from services.memory_router_mcp.search import _REQUEST_AUTH, _resolve_reader
 
     secret = "s3cret-recall"
     monkeypatch.setenv("SECOND_BRAIN_HMAC_SECRETS_JSON", f'{{"iris": "{secret}"}}')
@@ -551,7 +551,7 @@ async def test_recall_tool_accepts_hmac_contextvar(monkeypatch: pytest.MonkeyPat
 @pytest.mark.asyncio
 async def test_recall_missing_auth_rejected() -> None:
     """ContextVar = None → _resolve_reader raises PermissionError."""
-    from services.recall_mcp.search import _REQUEST_AUTH, _resolve_reader
+    from services.memory_router_mcp.search import _REQUEST_AUTH, _resolve_reader
 
     pool = _FakePool()
     token = _REQUEST_AUTH.set(None)
@@ -564,8 +564,8 @@ async def test_recall_missing_auth_rejected() -> None:
 
 @pytest.mark.asyncio
 async def test_swarm_resolve_caller_accepts_hmac(monkeypatch: pytest.MonkeyPatch) -> None:
-    """swarm_mcp._resolve_caller returns the HMAC-authenticated agent."""
-    from services.swarm_mcp.server import _REQUEST_AUTH, _resolve_caller
+    """agent_router_mcp._resolve_caller returns the HMAC-authenticated agent."""
+    from services.agent_router_mcp.server import _REQUEST_AUTH, _resolve_caller
 
     secret = "s3cret-swarm"
     monkeypatch.setenv("SECOND_BRAIN_HMAC_SECRETS_JSON", f'{{"iris": "{secret}"}}')
@@ -631,7 +631,7 @@ def test_load_hmac_secrets_from_env_handles_unset(
 # ---------------------------------------------------------------------------
 # End-to-end audit_log attribution via _authenticate_request / _resolve_reader
 #
-# These guard the PRE-REVIEW FIX (Gap 2): existing memory_mcp / recall_mcp
+# These guard the PRE-REVIEW FIX (Gap 2): existing memory_mcp / memory_router_mcp
 # tool call sites must reach the HMAC-aware helpers, not the Bearer-only
 # path. If the wiring regresses, audit_log.agent would stamp the wrong
 # identity (or nova fallback). See DEVIATIONS.md → PRE-REVIEW FIX.
@@ -700,13 +700,13 @@ async def test_memory_mcp_create_decision_note_via_hmac_authenticates_correctly(
 
 
 @pytest.mark.asyncio
-async def test_recall_mcp_recall_via_hmac_authenticates_correctly(
+async def test_memory_router_mcp_recall_via_hmac_authenticates_correctly(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """An HMAC-authenticated request reaching the recall tool resolves to
     the HMAC agent via ``_resolve_reader``. Asserts the recall tool body
     now calls _resolve_reader at its top (Gap 2 wire-up)."""
-    from services.recall_mcp.search import _REQUEST_AUTH, _resolve_reader
+    from services.memory_router_mcp.search import _REQUEST_AUTH, _resolve_reader
 
     secret = "s3cret-iris-recall-e2e"
     monkeypatch.setenv("SECOND_BRAIN_HMAC_SECRETS_JSON", f'{{"iris": "{secret}"}}')
@@ -737,7 +737,7 @@ def test_recall_tools_actually_call_resolve_reader() -> None:
     from pathlib import Path as _P
 
     src = (_P(__file__).resolve().parent.parent
-           / "services" / "recall_mcp" / "search.py").read_text(encoding="utf-8")
+           / "services" / "memory_router_mcp" / "search.py").read_text(encoding="utf-8")
 
     # All 6 read-only tools registered by gated_tool().
     tool_names = ["recall", "recent", "related", "get", "stats", "reindex_check"]

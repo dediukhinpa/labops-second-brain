@@ -25,8 +25,8 @@ from services.memory_mcp.tools import (
     _validate_slot_limits,
     register_tools,
 )
-from services.recall_mcp.cache import RecallCache
-from services.recall_mcp.source_weights import temporal_decay
+from services.memory_router_mcp.cache import RecallCache
+from services.memory_router_mcp.source_weights import temporal_decay
 from services.shared.audit import log_audit
 from services.shared.auth import AgentContext, authenticate, check_write_scope
 
@@ -422,7 +422,7 @@ class TestRecallCache:
         cache = RecallCache()
         assert cache.get(("unknown", 5, ())) is None
 
-    @patch("services.recall_mcp.cache.time")
+    @patch("services.memory_router_mcp.cache.time")
     def test_ttl_expiry(self, mock_time: MagicMock) -> None:
         mock_time.monotonic.return_value = 1000.0
         cache = RecallCache(ttl_sec=30, max_entries=10)
@@ -484,7 +484,7 @@ class TestRecallCache:
         assert result is not None
         assert result[0]["new"] is True
 
-    @patch("services.recall_mcp.cache.time")
+    @patch("services.memory_router_mcp.cache.time")
     def test_expired_entry_removed_on_get(self, mock_time: MagicMock) -> None:
         mock_time.monotonic.return_value = 0.0
         cache = RecallCache(ttl_sec=10, max_entries=10)

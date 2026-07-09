@@ -74,7 +74,7 @@ The script is idempotent and takes 10–15 minutes. Watch the output. It will:
 7. Create `${VAULT_ROOT}` (default `/opt/second_brain/vault/`) and seed from `vault-template/`.
 8. Create a Python virtualenv at `/opt/second_brain/.venv/` and `pip install -r requirements.txt`.
 9. Install systemd unit files from `systemd/*.service.template` into `/etc/systemd/system/`, substituting `${INSTALL_DIR}` etc.
-10. `systemctl daemon-reload && systemctl enable --now second_brain-memory-mcp second_brain-recall-mcp second_brain-swarm-mcp second_brain-ingest-worker`.
+10. `systemctl daemon-reload && systemctl enable --now second_brain-memory-mcp second_brain-memory_router-mcp second_brain-agent_router-mcp second_brain-ingest-worker`.
 11. If you passed a domain via `--domain mcp.example.com`, install `caddy/Caddyfile.template` to `/etc/caddy/Caddyfile`, substitute the domain, `systemctl reload caddy`.
 12. Generate an initial **admin agent token**. **This is printed once.** Capture it now.
 
@@ -87,8 +87,8 @@ Admin agent token (save this, you will not see it again):
 
 Services running:
   second_brain-memory-mcp     active
-  second_brain-recall-mcp     active
-  second_brain-swarm-mcp      active
+  second_brain-memory_router-mcp     active
+  second_brain-agent_router-mcp      active
   second_brain-ingest-worker  active
 
 Next: run scripts/smoke-test.sh to verify auth and tools.
@@ -101,7 +101,7 @@ If the script exits with anything other than that — stop and read `docs/troubl
 ## Step 3: verify services are healthy
 
 ```bash
-systemctl status second_brain-memory-mcp second_brain-recall-mcp second_brain-swarm-mcp second_brain-ingest-worker --no-pager
+systemctl status second_brain-memory-mcp second_brain-memory_router-mcp second_brain-agent_router-mcp second_brain-ingest-worker --no-pager
 ```
 
 All four must say `active (running)`. If any says `failed`:
@@ -131,8 +131,8 @@ This should print:
 
 ```
 [1/5] GET / on memory_mcp        ... 200 ok
-[2/5] GET / on recall_mcp        ... 200 ok
-[3/5] GET / on swarm_mcp         ... 200 ok
+[2/5] GET / on memory_router_mcp        ... 200 ok
+[3/5] GET / on agent_router_mcp         ... 200 ok
 [4/5] tools/list with admin token... 9 tools
 [5/5] auth roundtrip             ... ok
 SMOKE TEST PASSED
@@ -140,7 +140,7 @@ SMOKE TEST PASSED
 
 If step 4 returns 401, the admin token in `ADMIN_AGENT_TOKEN` (or wherever the script reads it) does not match the sha256 stored. Re-run the issue-token flow.
 
-If step 5 fails, the AuthCaptureMiddleware is not loaded. Verify `services/memory_mcp/server.py` and `services/recall_mcp/server.py` both wrap `mcp.http_app()` in `AuthCaptureMiddleware` and use `uvicorn.run(...)`.
+If step 5 fails, the AuthCaptureMiddleware is not loaded. Verify `services/memory_mcp/server.py` and `services/memory_router_mcp/server.py` both wrap `mcp.http_app()` in `AuthCaptureMiddleware` and use `uvicorn.run(...)`.
 
 ---
 
@@ -184,13 +184,13 @@ mcp.example.com {
             header_up Host {upstream_hostport}
         }
     }
-    handle_path /recall/* {
+    handle_path /memory_router/* {
         reverse_proxy 127.0.0.1:8768 {
             flush_interval -1
             header_up Host {upstream_hostport}
         }
     }
-    handle_path /swarm/* {
+    handle_path /agent_router/* {
         reverse_proxy 127.0.0.1:8766 {
             flush_interval -1
             header_up Host {upstream_hostport}
@@ -224,7 +224,7 @@ You should see Caddy obtain a cert (look for `certificate obtained successfully`
 Test from outside:
 
 ```bash
-curl -sS https://mcp.example.com/recall/
+curl -sS https://mcp.example.com/memory_router/
 ```
 
 Should return the recall service banner.
@@ -410,12 +410,12 @@ Open `~/.claude-lab/<agent-id>/.claude/.mcp.json` and replace the `<AGENT_BEARER
       "url": "https://mcp.example.com/memory/mcp",
       "headers": { "Authorization": "Bearer <actual-token>" }
     },
-    "second_brain-recall": {
-      "url": "https://mcp.example.com/recall/mcp",
+    "second_brain-memory_router": {
+      "url": "https://mcp.example.com/memory_router/mcp",
       "headers": { "Authorization": "Bearer <actual-token>" }
     },
-    "second_brain-swarm": {
-      "url": "https://mcp.example.com/swarm/mcp",
+    "second_brain-agent_router": {
+      "url": "https://mcp.example.com/agent_router/mcp",
       "headers": { "Authorization": "Bearer <actual-token>" }
     }
   }
@@ -454,12 +454,12 @@ Expected behaviour:
 1. The CLI opens cleanly.
 2. The SessionStart hook runs (you can confirm via `tail ~/.claude-lab/<agent-id>/.claude/logs/session-start.log`).
 3. Ask the agent: "What is your role?" — it should respond with the role you set in step 11.
-4. Ask the agent: "Recall recent entries from scope external." — it should call `second_brain-recall.recent` and return results (at minimum, the URL you forwarded in step 10 of Path A).
+4. Ask the agent: "Recall recent entries from scope external." — it should call `second_brain-memory_router.recent` and return results (at minimum, the URL you forwarded in step 10 of Path A).
 
 If recall returns 0 results despite the brain having data:
 
 - Re-check the Bearer in `.mcp.json` — it must be the token issued in step 12, not the placeholder, not the inbox-agent's, not another agent's.
-- Test the brain directly: `curl -sS -H "Authorization: Bearer <token>" https://mcp.example.com/recall/mcp/`. Expect 406 with an MCP error body (live upstream). 401 → wrong token. Connection refused → firewall.
+- Test the brain directly: `curl -sS -H "Authorization: Bearer <token>" https://mcp.example.com/memory_router/mcp/`. Expect 406 with an MCP error body (live upstream). 401 → wrong token. Connection refused → firewall.
 - Check the token is alive: `psql -U second_brain -d second_brain -c "SELECT agent, can_write_scopes, revoked_at FROM agent_tokens WHERE agent='<agent-id>';"`. `revoked_at` should be `NULL`.
 
 Repeat steps 11–14 for every additional agent the user wants. Each one is independent — a failure in one workspace does not affect the others.

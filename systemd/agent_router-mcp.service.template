@@ -1,5 +1,5 @@
 [Unit]
-Description=second_brain Recall MCP (read-side)
+Description=second_brain Agent Router MCP (event bus)
 After=postgresql.service network.target
 Wants=postgresql.service
 
@@ -9,10 +9,9 @@ User={{SERVICE_USER}}
 Group={{SERVICE_USER}}
 WorkingDirectory={{INSTALL_DIR}}
 Environment=PYTHONPATH={{INSTALL_DIR}}
-Environment=MCP_PORT=8768
-Environment=FASTEMBED_CACHE_DIR={{STATE_DIR}}/fastembed
+Environment=MCP_PORT=8766
 EnvironmentFile={{ETC_DIR}}/secrets.env
-ExecStart={{INSTALL_DIR}}/.venv/bin/python -m services.recall_mcp.server
+ExecStart={{INSTALL_DIR}}/.venv/bin/python -m services.agent_router_mcp.server
 Restart=on-failure
 RestartSec=5
 
@@ -29,8 +28,8 @@ RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 LockPersonality=yes
 SystemCallFilter=@system-service
 SystemCallErrorNumber=EPERM
-# FastEmbed multilingual-e5-large is ~1.1GB resident + uvicorn overhead.
-MemoryMax=2G
+# MemoryDenyWriteExecute omitted — Python C-extensions require RWX on import.
+MemoryMax=1G
 
 [Install]
 WantedBy=multi-user.target

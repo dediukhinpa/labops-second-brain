@@ -12,7 +12,7 @@ at start using the ContextVar only, preserving public tool signatures."
 What I did instead:
 
 - Added `_authenticate_request` to `services/memory_mcp/tools.py` and
-  `_resolve_reader` to `services/recall_mcp/search.py`. Both are
+  `_resolve_reader` to `services/memory_router_mcp/search.py`. Both are
   fully tested via direct calls.
 - Left existing memory_mcp tool call sites using
   `_extract_token + authenticate` (Bearer-only). They continue to
@@ -41,7 +41,7 @@ Effect on acceptance criteria:
 - Acceptance 3 (Bearer agents unchanged) — preserved unchanged.
 - Acceptance 4 (operator can run issue-hmac-secret + curl per
   service) — partially preserved: memory/recall tool entry points
-  still require Bearer end-to-end, swarm_mcp `_resolve_caller`
+  still require Bearer end-to-end, agent_router_mcp `_resolve_caller`
   accepts HMAC end-to-end. The middleware + helpers are in place
   so a follow-up commit can wire call sites in ~10 lines per tool.
 
@@ -101,10 +101,10 @@ Stripe/Hermes scheme.
   format). Also exercises `verify_signature` as the third leg of the
   parity triangle.
 
-## Gap 2 — memory_mcp + recall_mcp tool call sites Bearer-only
+## Gap 2 — memory_mcp + memory_router_mcp tool call sites Bearer-only
 
 **Symptom:** subagent A added `_authenticate_request` (memory_mcp) and
-`_resolve_reader` (recall_mcp) helpers but did not wire existing tool
+`_resolve_reader` (memory_router_mcp) helpers but did not wire existing tool
 entry points to them. Bearer agents kept working; HMAC agents would
 reach the ASGI middleware capture but fail at the tool entry's
 Bearer-only `_extract_token + authenticate` path.
@@ -118,7 +118,7 @@ Bearer-only `_extract_token + authenticate` path.
     `append_daily_log`, `update_index`, `update_document`,
     `supersede_decision`).
   - All now call `agent_ctx = await _authenticate_request(ctx, pool)`.
-- `services/recall_mcp/search.py` — 6 read tools wired to
+- `services/memory_router_mcp/search.py` — 6 read tools wired to
   `_resolve_reader(pool)` at the top of each body: `recall`, `recent`,
   `related`, `get`, `stats`, `reindex_check`. Previously these tools
   had **no authentication at all** beyond the ASGI capture — caller
@@ -126,14 +126,14 @@ Bearer-only `_extract_token + authenticate` path.
 
 ### Tests updated for Gap 2
 
-- `tests/test_recall_mcp.py::test_recall_cache_key_includes_agent_filter` —
+- `tests/test_memory_router_mcp.py::test_recall_cache_key_includes_agent_filter` —
   added monkeypatch that stubs `authenticate_captured` to a fake
   `AgentContext` and sets a Bearer ContextVar. Reason: this test
   exercises cache-key semantics, not auth. Without auth stubbing the
   newly-wired `_resolve_reader` call raises `PermissionError` before
   the cache logic runs. Mock-only adaptation, semantic assertions
   unchanged.
-- `tests/test_recall_mcp.py::test_recall_cache_key_includes_source_types_sorted` —
+- `tests/test_memory_router_mcp.py::test_recall_cache_key_includes_source_types_sorted` —
   same adaptation for the same reason.
 
 ### Tests added for Gap 2
@@ -143,7 +143,7 @@ Bearer-only `_extract_token + authenticate` path.
   with `agent == "iris"`, then simulates the tool's `log_audit` write
   and asserts the captured audit row carries `agent="iris"`, not
   nova fallback.
-- `tests/test_hmac_auth.py::test_recall_mcp_recall_via_hmac_authenticates_correctly` —
+- `tests/test_hmac_auth.py::test_memory_router_mcp_recall_via_hmac_authenticates_correctly` —
   symmetric coverage for `_resolve_reader`.
 - `tests/test_hmac_auth.py::test_recall_tools_actually_call_resolve_reader` —
   static source-level guard: counts `_resolve_reader(pool)` invocations
@@ -369,7 +369,7 @@ no-secret-leak). Docs guard tests in
   `GatewayAuth.value` is now `field(repr=False)`.
 * **M5** `services.shared.auth._parse_signature` enforces exactly 64
   hex chars (matches `hmac_sign.parse_signature_header`).
-* **M6** `services/recall_mcp/server.py` docstring updated to state
+* **M6** `services/memory_router_mcp/server.py` docstring updated to state
   that read tools require token validation and enforce
   `can_read_scopes` via `_resolve_reader` + `restrict_read_scopes` /
   `check_read_scope`.
@@ -383,7 +383,7 @@ referenced it. All pre-existing tests that monkeypatched
 `_authenticate_request` still calls the module-level `authenticate`
 symbol on the Bearer path before falling back to the shared resolver.
 
-Two tests in `test_recall_mcp.py` previously monkeypatched
+Two tests in `test_memory_router_mcp.py` previously monkeypatched
 `authenticate_captured` directly; they now monkeypatch
 `resolve_request_identity`. Behaviorally identical (both stubs return
 the same `AgentContext`); the swap is purely mechanical.

@@ -103,7 +103,7 @@ After fixing, `sudo systemctl reload caddy` and watch logs.
 
 1. **Did the dual-write attempt succeed?** `tail -200 ${INBOX_AGENT_HOME}/logs/save-to-raw.log`. The hook logs the HTTP status returned by `memory_mcp.create_external_note`. A `200` means brain accepted it. A `401`/`403`/`5xx` means the brain rejected it — read the body to see why.
 2. **Is the `.mcp.json` Bearer correct?** `cat ${INBOX_AGENT_HOME}/.claude/.mcp.json | jq '.mcpServers["second_brain-memory"]'`. Confirm the URL matches your VPS (`https://mcp.<your-domain>/memory/mcp` or `http://<tailscale-ip>:8767/mcp`) and the bearer header is non-empty. If you see literal `${MCP_HOST}` / `${AGENT_TOKEN}` placeholders, re-run `bash scripts/install-local.sh` — `envsubst` did not substitute.
-3. **VPS reachability:** `curl -sS -H "Authorization: Bearer $(jq -r '.mcpServers["second_brain-memory"].headers.Authorization' ${INBOX_AGENT_HOME}/.claude/.mcp.json | cut -d' ' -f2)" https://mcp.<your-domain>/recall/mcp/` (or the Tailscale equivalent). Expect 406 with an MCP error body — that proves the upstream is alive and your token works. 401 → wrong token. Connection refused → firewall blocks 443 (or 8767 on Tailscale).
+3. **VPS reachability:** `curl -sS -H "Authorization: Bearer $(jq -r '.mcpServers["second_brain-memory"].headers.Authorization' ${INBOX_AGENT_HOME}/.claude/.mcp.json | cut -d' ' -f2)" https://mcp.<your-domain>/memory_router/mcp/` (or the Tailscale equivalent). Expect 406 with an MCP error body — that proves the upstream is alive and your token works. 401 → wrong token. Connection refused → firewall blocks 443 (or 8767 on Tailscale).
 4. **Did the embedding job run?** On the VPS: `psql -U second_brain -d second_brain -c "SELECT id, status, created_at FROM embedding_jobs ORDER BY id DESC LIMIT 5;"`. A `pending` job that hasn't moved in minutes means the ingest worker is stuck — see "ingest-worker is not embedding new files" above.
 5. **Scope check.** `recall.recent` filters by scope. The hook writes scope `external` by default — if your `classifier.yaml` rerouted the URL to `knowledge` or `inbox`, change the recall call accordingly.
 
@@ -140,7 +140,7 @@ After fixing, `sudo systemctl reload caddy` and watch logs.
 
 1. Pull the latest distro: `git pull` (or `rsync` again from your local clone).
 2. Run `sudo bash scripts/install.sh` on the VPS (idempotent — it will reinstall services).
-3. Restart: `sudo systemctl restart second_brain-memory-mcp second_brain-recall-mcp second_brain-swarm-mcp`.
+3. Restart: `sudo systemctl restart second_brain-memory-mcp second_brain-memory_router-mcp second_brain-agent_router-mcp`.
 4. Verify: `grep AuthCaptureMiddleware /opt/second_brain/services/*/server.py` — should match three files.
 5. Verify no fallback: `grep MCP-FALLBACK-TOKEN /opt/second_brain/services/` — should be empty.
 6. Re-run a smoke test from each agent's host. `audit_log.agent` should now reflect the correct identity.
@@ -184,12 +184,12 @@ Capture the printed token, add it to that agent's `.mcp.json` under each MCP ser
       "url": "https://mcp.example.com/memory/mcp",
       "headers": { "Authorization": "Bearer <token>" }
     },
-    "second_brain-recall": {
-      "url": "https://mcp.example.com/recall/mcp",
+    "second_brain-memory_router": {
+      "url": "https://mcp.example.com/memory_router/mcp",
       "headers": { "Authorization": "Bearer <token>" }
     },
-    "second_brain-swarm": {
-      "url": "https://mcp.example.com/swarm/mcp",
+    "second_brain-agent_router": {
+      "url": "https://mcp.example.com/agent_router/mcp",
       "headers": { "Authorization": "Bearer <token>" }
     }
   }
@@ -291,13 +291,13 @@ Hard-deleting markdown is supported but irreversible. Always back up before prun
 
 ## Q: I created an agent workspace but `recall` returns 0 results
 
-**Symptoms:** `agent-template/install.sh` finished, the workspace at `~/.claude-lab/<agent-id>/.claude/` opens, but every `second_brain-recall.*` call returns an empty list — even though the brain has data (you can see entries from the inbox-agent).
+**Symptoms:** `agent-template/install.sh` finished, the workspace at `~/.claude-lab/<agent-id>/.claude/` opens, but every `second_brain-memory_router.*` call returns an empty list — even though the brain has data (you can see entries from the inbox-agent).
 
 **Diagnosis chain:**
 
 1. **Bearer wrong.** Open `~/.claude-lab/<agent-id>/.claude/.mcp.json` and confirm the `Authorization: Bearer <token>` header is the actual token from `scripts/issue-agent-token.py --agent <agent-id> ...` — not the literal `<AGENT_BEARER>` placeholder, not the inbox-agent's token, not another agent's. Each agent has its own.
 2. **Bearer not in DB.** On the VPS: `psql -U second_brain -d second_brain -c "SELECT agent, can_write_scopes, can_read_scopes, revoked_at FROM agent_tokens WHERE agent='<agent-id>';"`. `revoked_at` should be `NULL`. Read scope should include `*` (default) or the scope you are querying.
-3. **Brain unreachable.** From the local workstation: `curl -sS -H "Authorization: Bearer <token>" https://<MCP_HOST>/recall/mcp/`. Expect HTTP 406 with an MCP error body — that proves both upstream and token are working. 401 → wrong token (or revoked). Connection refused → firewall, DNS, or Tailscale down.
+3. **Brain unreachable.** From the local workstation: `curl -sS -H "Authorization: Bearer <token>" https://<MCP_HOST>/memory_router/mcp/`. Expect HTTP 406 with an MCP error body — that proves both upstream and token are working. 401 → wrong token (or revoked). Connection refused → firewall, DNS, or Tailscale down.
 4. **Scope mismatch.** A `recall.recent(scope='decisions')` call returns nothing if no agent has written to `decisions` yet. Try `recall.recent(scope='external')` to see at minimum the inbox-agent's forwards.
 5. **Token issued but workspace cached the old config.** Restart the Claude Code session — `.mcp.json` is read on launch.
 
@@ -354,7 +354,7 @@ What you should not do: edit `~/.claude/CLAUDE.md` to add agent-specific rules (
 **Diagnosis:**
 
 1. `psql -U second_brain -d second_brain -c "\d chunks"` and `\d documents` — confirm an HNSW index on `chunks.embedding` and GIN indexes on `documents.body_tsv` / `chunks.content_tsv`.
-2. `EXPLAIN ANALYZE` your recall query (look at `services/recall_mcp/search.py` for the actual SQL). If a sequential scan appears, indexes are missing.
+2. `EXPLAIN ANALYZE` your recall query (look at `services/memory_router_mcp/search.py` for the actual SQL). If a sequential scan appears, indexes are missing.
 3. Vault size: how many rows? `SELECT count(*) FROM documents;` and `SELECT count(*) FROM chunks;`. Over 100k documents (≈500k+ chunks) starts to push the 8 GB box.
 4. Other processes on the VPS eating RAM: `htop`, look for whatever is hogging memory.
 

@@ -11,13 +11,13 @@ Handoffs between agents. State-machine messages.
 
 ## What does NOT go here
 
-- Real-time messaging — use the swarm-mcp `notify` tool for live delivery
+- Real-time messaging — use the agent_router-mcp `notify` tool for live delivery
 - Long-term knowledge — `knowledge/`
 - Decisions — `decisions/`
 
-## How it interacts with swarm-mcp
+## How it interacts with agent_router-mcp
 
-`inbox/` is the **durable** layer. `swarm_mcp` is the **delivery** layer. When you call `swarm.notify(to_agent='X', payload=...)`:
+`inbox/` is the **durable** layer. `agent_router_mcp` is the **delivery** layer. When you call `agent_router.notify(to_agent='X', payload=...)`:
 
 1. Worker writes the payload to `inbox/<recipient>/YYYY-MM-DD-<task-id>.md`
 2. Worker fires a webhook to the recipient's runtime (Telegram, Discord, etc.)

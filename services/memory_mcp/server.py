@@ -1,6 +1,6 @@
 """FastMCP server for memory-mcp (write-side), default port 8767.
 
-This server intentionally mirrors the swarm-mcp pattern: an ASGI
+This server intentionally mirrors the agent_router-mcp pattern: an ASGI
 AuthCaptureMiddleware captures the per-request auth (Bearer string OR
 :class:`services.shared.auth.HmacAuthValue`) into a ContextVar that
 tool handlers read via ``_authenticate_request`` →

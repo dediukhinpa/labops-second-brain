@@ -545,7 +545,7 @@ def register_tools(
     def gated_tool(tool_name: str, **kwargs: Any) -> Any:
         """Decorator: register on ``mcp`` only if gating policy allows the tool."""
         def wrapper(fn: Any) -> Any:
-            if should_register_tool("recall_mcp", tool_name, tool_set):
+            if should_register_tool("memory_router_mcp", tool_name, tool_set):
                 return mcp.tool(**kwargs)(fn)
             return fn
         return wrapper

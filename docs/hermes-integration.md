@@ -1,7 +1,7 @@
 # Hermes integration — HMAC auth for second_brain MCP
 
 `public-second_brain-agentos` accepts **two** authentication modes on every MCP
-endpoint (`memory_mcp`, `recall_mcp`, `swarm_mcp`):
+endpoint (`memory_mcp`, `memory_router_mcp`, `agent_router_mcp`):
 
 * **Bearer** — existing static-token mode used by all stock agents.
 * **HMAC** — Hermes-compatible per-request signature
@@ -122,7 +122,7 @@ SECOND_BRAIN_HMAC_AUTH_ENABLED=1
 Then restart the three MCP units so they pick up the new env:
 
 ```bash
-sudo systemctl restart second_brain-memory-mcp second_brain-recall-mcp second_brain-swarm-mcp
+sudo systemctl restart second_brain-memory-mcp second_brain-memory_router-mcp second_brain-agent_router-mcp
 ```
 
 Verify with the doctor:
@@ -147,13 +147,13 @@ mcp_servers:
     headers:
       Authorization: "Bearer ${iris_BEARER}"
 
-  second_brain_recall:
-    url: https://mcp.example.com/recall/mcp
+  second_brain_memory_router:
+    url: https://mcp.example.com/memory_router/mcp
     headers:
       Authorization: "Bearer ${iris_BEARER}"
 
-  second_brain_swarm:
-    url: https://mcp.example.com/swarm/mcp
+  second_brain_agent_router:
+    url: https://mcp.example.com/agent_router/mcp
     headers:
       Authorization: "Bearer ${iris_BEARER}"
 ```
@@ -193,7 +193,7 @@ mcp_servers:
 ```
 
 Run a second instance on a different port for each MCP service
-(recall :8768, swarm :8766) or use `systemd` templates.
+(memory_router :8768, agent_router :8766) or use `systemd` templates.
 
 Health check:
 
@@ -278,9 +278,9 @@ Notes:
 
 ---
 
-## 7. Outbound HMAC (swarm worker)
+## 7. Outbound HMAC (agent_router worker)
 
-The swarm worker can sign outbound webhooks with the same scheme. Configure
+The agent_router worker can sign outbound webhooks with the same scheme. Configure
 per-agent gateway auth via `AGENT_GATEWAY_AUTH` (JSON map):
 
 ```
@@ -388,7 +388,7 @@ the server log.)
 |-----------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------|
 | `401` on every signed request                 | Timestamp outside tolerance — check clock skew (`ntpdate`, `chronyc tracking`). Raise `HMAC_TIMESTAMP_TOLERANCE_SECONDS` only as last resort. |
 | `401` only on some requests                   | Body re-serialization by an HTTP middleware between Hermes and Caddy. Sign and post identical bytes; do not let proxies rewrite the body.    |
-| `401` immediately after rotation              | Env not reloaded — restart `second_brain-{memory,recall,swarm}-mcp`.                                                                                |
+| `401` immediately after rotation              | Env not reloaded — restart `second_brain-{memory,memory_router,agent_router}-mcp`.                                                                                |
 | Doctor reports `hmac_secret_health [FAIL]`    | DB and env disagree on the secret hash — re-run `issue-hmac-secret.py --rotate` and update env, or restore the previous env value.           |
 | Doctor reports `[WARN] N agent(s) missing`    | Agent has HMAC in DB but no entry in `SECOND_BRAIN_HMAC_SECRETS_JSON`. Add the entry or revoke the HMAC column.                                     |
 | Doctor reports `[WARN] N agent(s) ... no DB row` | Env carries an HMAC agent name that does not exist in `agent_tokens` — typo in the env JSON, or you forgot `issue-hmac-secret.py`.        |

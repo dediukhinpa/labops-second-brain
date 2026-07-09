@@ -1,6 +1,6 @@
 # Inter-agent webhooks — full reference
 
-Когда агент A автономно будит агента B с задачей, между ними должен быть машинный канал. У second_brain это **webhook поверх `swarm_mcp`**. Этот документ — полная reference на обе стороны: как отправлять (`swarm.notify` + worker) и как принимать (listener на стороне агента-получателя).
+Когда агент A автономно будит агента B с задачей, между ними должен быть машинный канал. У second_brain это **webhook поверх `agent_router_mcp`**. Этот документ — полная reference на обе стороны: как отправлять (`agent_router.notify` + worker) и как принимать (listener на стороне агента-получателя).
 
 Стартовая точка для high-level понимания и зачем оно нужно — раздел [«Триггеры между агентами»](../README.md#триггеры-между-агентами-inter-agent-webhooks) в корневом README. Здесь — глубже: code, env, debugging.
 
@@ -13,13 +13,13 @@
     │
     │ MCP-вызов: notify(to_agent="B", payload={"type":"task_assigned",...})
     ▼
-swarm_mcp (FastAPI/FastMCP на VPS, :8766)
+agent_router_mcp (FastAPI/FastMCP на VPS, :8766)
     │
     │ INSERT в delivery_outbox
     │ status=pending, attempts=0
     │ task_id="A::B::<hex>"
     ▼
-swarm_mcp worker (отдельный systemd unit, тот же VPS)
+agent_router_mcp worker (отдельный systemd unit, тот же VPS)
     │
     │ poll'ит outbox каждые ~2s
     │ берёт next pending → читает AGENT_GATEWAYS["B"] env
@@ -41,7 +41,7 @@ Webhook listener на стороне агента B
     ▼
 Сессия агента B получает trigger как новое сообщение
     │
-    │ обработка → ack: notify back ИЛИ task_review() ИЛИ swarm.ack(task_id)
+    │ обработка → ack: notify back ИЛИ task_review() ИЛИ agent_router.ack(task_id)
     ▼
 worker помечает outbox: status=acked, цикл закрыт
 ```
@@ -55,7 +55,7 @@ worker помечает outbox: status=acked, цикл закрыт
 ### MCP-вызов
 
 ```python
-result = mcp__second_brain-swarm__notify(
+result = mcp__second_brain-agent_router__notify(
     to_agent="vega",  # canonical agent id, без префиксов sa-/agent-
     payload={
         "type": "task_assigned",   # или ping, content_request, escalation, etc
@@ -77,7 +77,7 @@ result = mcp__second_brain-swarm__notify(
 ### Debugging доставки
 
 ```python
-delivery = mcp__second_brain-swarm__get_delivery(task_id="nova::vega::abc123")
+delivery = mcp__second_brain-agent_router__get_delivery(task_id="nova::vega::abc123")
 # returns:
 # {
 #   "task_id": "...",
@@ -100,11 +100,11 @@ delivery = mcp__second_brain-swarm__get_delivery(task_id="nova::vega::abc123")
 
 ## 3. Worker setup — AGENT_GATEWAYS env
 
-Worker — это systemd unit `second_brain-swarm-worker.service` на VPS (или эквивалент). Конфиг через drop-in:
+Worker — это systemd unit `second_brain-agent_router-worker.service` на VPS (или эквивалент). Конфиг через drop-in:
 
 ```bash
-sudo install -d /etc/systemd/system/second_brain-swarm-worker.service.d
-sudoedit /etc/systemd/system/second_brain-swarm-worker.service.d/webhook.conf
+sudo install -d /etc/systemd/system/second_brain-agent_router-worker.service.d
+sudoedit /etc/systemd/system/second_brain-agent_router-worker.service.d/webhook.conf
 ```
 
 Содержимое:
@@ -122,8 +122,8 @@ Environment="SECOND_BRAIN_HMAC_OUTBOUND_ENABLED=1"
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl restart second_brain-swarm-worker
-journalctl -u second_brain-swarm-worker -f  # tail для verify
+sudo systemctl restart second_brain-agent_router-worker
+journalctl -u second_brain-agent_router-worker -f  # tail для verify
 ```
 
 ### AGENT_GATEWAY_AUTH формат
@@ -336,15 +336,15 @@ Bearer pattern не имеет replay protection. Если боишься replay
 
 ```python
 # Проверь delivery status
-delivery = mcp__second_brain-swarm__get_delivery(task_id="...")
+delivery = mcp__second_brain-agent_router__get_delivery(task_id="...")
 print(delivery)  # status, attempts, last_error
 ```
 
 Если `status=pending, attempts=0` дольше 30s → worker не подбирает (либо worker умер, либо outbox lock). Проверь worker:
 
 ```bash
-ssh root@<vps> 'systemctl status second_brain-swarm-worker --no-pager | head -10'
-ssh root@<vps> 'journalctl -u second_brain-swarm-worker --since "5 min ago" --no-pager | tail -30'
+ssh root@<vps> 'systemctl status second_brain-agent_router-worker --no-pager | head -10'
+ssh root@<vps> 'journalctl -u second_brain-agent_router-worker --since "5 min ago" --no-pager | tail -30'
 ```
 
 ### Доставка failed с `last_error`
@@ -385,13 +385,13 @@ journalctl -u hermes-webhook -f
 
 ## 9. Идемпотентность и replay
 
-`swarm.notify` с тем же `task_id` (или без него — auto-generated unique) — **не идемпотентен** на уровне outbox: каждый вызов создаёт новую запись. Однако если ты явно передаёшь `task_id`, повторный вызов с тем же значением вернёт ту же запись (на уровне Postgres UNIQUE constraint).
+`agent_router.notify` с тем же `task_id` (или без него — auto-generated unique) — **не идемпотентен** на уровне outbox: каждый вызов создаёт новую запись. Однако если ты явно передаёшь `task_id`, повторный вызов с тем же значением вернёт ту же запись (на уровне Postgres UNIQUE constraint).
 
 Для ручного replay failed delivery:
 
 ```python
 # Опция 1: новый notify с тем же payload (новый task_id)
-new = mcp__second_brain-swarm__notify(to_agent=delivery.to_agent, payload=delivery.payload)
+new = mcp__second_brain-agent_router__notify(to_agent=delivery.to_agent, payload=delivery.payload)
 
 # Опция 2: вручную через psql (для админа)
 # UPDATE delivery_outbox SET status='pending', attempts=0, next_retry_at=NOW()
@@ -407,7 +407,7 @@ Listener должен быть idempotent — если worker делает retry
 - Корневой README раздел: [«Триггеры между агентами»](../README.md#триггеры-между-агентами-inter-agent-webhooks)
 - jarvis-channel plugin (Claude Code receiver): [`dediukhinpa/labops-tg-plugin`](https://github.com/dediukhinpa/labops-tg-plugin)
 - Hermes outgoing HMAC + sidecar proxy: [`docs/hermes-integration.md`](hermes-integration.md)
-- Worker AGENT_GATEWAYS spec: [`docs/hermes-integration.md` §7](hermes-integration.md#7-outbound-hmac-swarm-worker)
+- Worker AGENT_GATEWAYS spec: [`docs/hermes-integration.md` §7](hermes-integration.md#7-outbound-hmac-agent_router-worker)
 - Reference listener: [`agent-template/scripts/webhook_listener.py`](../agent-template/scripts/webhook_listener.py)
 - Architecture overview: [`docs/architecture.md`](architecture.md)
 - Security model: [`docs/security.md`](security.md)

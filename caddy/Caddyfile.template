@@ -22,16 +22,16 @@ mcp.{$DOMAIN} {
         }
     }
 
-    @recall path /recall/*
-    handle @recall {
+    @memory_router path /memory_router/*
+    handle @memory_router {
         reverse_proxy 127.0.0.1:8768 {
             flush_interval -1
             header_up Host {upstream_hostport}
         }
     }
 
-    @swarm path /swarm/*
-    handle @swarm {
+    @agent_router path /agent_router/*
+    handle @agent_router {
         reverse_proxy 127.0.0.1:8766 {
             flush_interval -1
             header_up Host {upstream_hostport}
@@ -40,7 +40,7 @@ mcp.{$DOMAIN} {
 
     # Default: friendly banner for browser hits and uptime probes.
     handle {
-        respond "second_brain MCP gateway: /memory/mcp /recall/mcp /swarm/mcp" 200
+        respond "second_brain MCP gateway: /memory/mcp /memory_router/mcp /agent_router/mcp" 200
     }
 
     log {

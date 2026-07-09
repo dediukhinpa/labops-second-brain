@@ -69,7 +69,7 @@ Earlier MCP server versions read the `Authorization` header inside the tool hand
 
 The fallback path in those versions was an `MCP-FALLBACK-TOKEN` env variable. If no header arrived, the call was attributed to a single fallback agent. Result: every other agent looked like the fallback agent in the audit log, in the `agent` column of `documents`, in the `from_agent` column of `delivery_outbox`. Six agents could all be writing, but `audit_log` would show them all as one.
 
-This distribution ships with `AuthCaptureMiddleware` in `memory_mcp/server.py`, `recall_mcp/server.py`, and `swarm_mcp/server.py`. The middleware:
+This distribution ships with `AuthCaptureMiddleware` in `memory_mcp/server.py`, `memory_router_mcp/server.py`, and `agent_router_mcp/server.py`. The middleware:
 
 1. Runs at the ASGI layer (before FastMCP's HTTP app).
 2. Reads `Authorization` from `scope['headers']`.
@@ -82,7 +82,7 @@ To verify the middleware is in place:
 
 ```bash
 grep -l 'AuthCaptureMiddleware' services/*/server.py
-# Should list: memory_mcp/server.py, recall_mcp/server.py, swarm_mcp/server.py
+# Should list: memory_mcp/server.py, memory_router_mcp/server.py, agent_router_mcp/server.py
 
 grep -l 'MCP-FALLBACK-TOKEN\|FALLBACK-AGENT' services/
 # Should be empty.
@@ -177,7 +177,7 @@ LIMIT 50;
 
 If you see writes from an agent you do not expect, or scope violations (`result_status = 403`), investigate immediately — either rotate the token or revoke it.
 
-Recall calls are NOT in `audit_log` by default (read-only, high volume). If you need read auditing, modify `services/recall_mcp/` to write a separate `recall_log` table.
+Recall calls are NOT in `audit_log` by default (read-only, high volume). If you need read auditing, modify `services/memory_router_mcp/` to write a separate `recall_log` table.
 
 ---
 

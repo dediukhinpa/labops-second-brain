@@ -1,4 +1,4 @@
-"""Smoke tests for swarm-mcp.
+"""Smoke tests for agent_router-mcp.
 
 Unit smoke covers:
 - AuthCaptureMiddleware ContextVar is exposed (server.py imports it)
@@ -16,23 +16,23 @@ import importlib
 
 import pytest
 
-from services.swarm_mcp.outbox import (
+from services.agent_router_mcp.outbox import (
     BACKOFF_BASE_SEC,
     BACKOFF_CAP_SEC,
     compute_backoff_seconds,
     make_task_id,
 )
-from services.swarm_mcp.server import _REQUEST_AUTH
-from services.swarm_mcp.worker import _format_virtual_prompt, _load_gateways
+from services.agent_router_mcp.server import _REQUEST_AUTH
+from services.agent_router_mcp.worker import _format_virtual_prompt, _load_gateways
 
 
 # --- Tool-gating helpers -----------------------------------------------------
 
-# Swarm tools that must be registered regardless of SECOND_BRAIN_TOOLS value.
-_ALWAYS_ON_SWARM_TOOLS = {"notify", "ack"}
+# Agent router tools that must be registered regardless of SECOND_BRAIN_TOOLS value.
+_ALWAYS_ON_AGENT_ROUTER_TOOLS = {"notify", "ack"}
 
-# Swarm tools that are only registered in `all` mode.
-_ALL_ONLY_SWARM_TOOLS = {
+# Agent router tools that are only registered in `all` mode.
+_ALL_ONLY_AGENT_ROUTER_TOOLS = {
     "broadcast",
     "escalate",
     "stats",
@@ -41,7 +41,7 @@ _ALL_ONLY_SWARM_TOOLS = {
     "list_my_pending",
 }
 
-_ALL_SWARM_TOOLS = _ALWAYS_ON_SWARM_TOOLS | _ALL_ONLY_SWARM_TOOLS
+_ALL_AGENT_ROUTER_TOOLS = _ALWAYS_ON_AGENT_ROUTER_TOOLS | _ALL_ONLY_AGENT_ROUTER_TOOLS
 
 
 def _registered_tool_names(mcp_instance) -> set[str]:
@@ -55,15 +55,15 @@ def _registered_tool_names(mcp_instance) -> set[str]:
     return set(tools)
 
 
-def _reload_swarm_server_with_tool_set(
+def _reload_agent_router_server_with_tool_set(
     monkeypatch: pytest.MonkeyPatch, tool_set: str
 ):
-    """Reload services.swarm_mcp.server with SECOND_BRAIN_TOOLS=<tool_set>.
+    """Reload services.agent_router_mcp.server with SECOND_BRAIN_TOOLS=<tool_set>.
 
     Returns the freshly reloaded module so callers can inspect its `mcp`.
     """
     monkeypatch.setenv("SECOND_BRAIN_TOOLS", tool_set)
-    import services.swarm_mcp.server as server_mod
+    import services.agent_router_mcp.server as server_mod
 
     return importlib.reload(server_mod)
 
@@ -122,7 +122,7 @@ def test_format_virtual_prompt_coordinator_fast_path(monkeypatch: pytest.MonkeyP
     # Re-import to pick up env var change.
     import importlib
 
-    import services.swarm_mcp.worker as worker_mod
+    import services.agent_router_mcp.worker as worker_mod
     importlib.reload(worker_mod)
 
     prompt = worker_mod._format_virtual_prompt(
@@ -132,7 +132,7 @@ def test_format_virtual_prompt_coordinator_fast_path(monkeypatch: pytest.MonkeyP
         payload={"title": "Report from agent-1: X", "body": "did X"},
     )
     assert "ack-only fast path" in prompt
-    assert "swarm.ack" in prompt
+    assert "agent_router.ack" in prompt
     # Hard rule: coordinator-targeted prompts must not instruct a second notify.
     assert "ALSO SEND A SHORT SUMMARY" not in prompt
 
@@ -146,7 +146,7 @@ def test_format_virtual_prompt_regular_path() -> None:
         payload={"title": "Do thing", "body": "details"},
     )
     assert "ACTIONS" in prompt
-    assert "swarm.ack" in prompt
+    assert "agent_router.ack" in prompt
 
 
 def test_format_virtual_prompt_smoke_short_circuits() -> None:
@@ -183,59 +183,59 @@ def test_load_gateways_happy_path(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.integration
-def test_swarm_mcp_lists_tools_with_valid_auth() -> None:
+def test_agent_router_mcp_lists_tools_with_valid_auth() -> None:
     """End-to-end: valid Bearer should yield a non-empty tool list."""
-    pytest.skip("swarm-mcp integration smoke not yet implemented")
+    pytest.skip("agent_router-mcp integration smoke not yet implemented")
 
 
 @pytest.mark.integration
-def test_swarm_mcp_missing_auth_returns_401() -> None:
+def test_agent_router_mcp_missing_auth_returns_401() -> None:
     """End-to-end: no Authorization header → middleware rejects."""
-    pytest.skip("swarm-mcp integration smoke not yet implemented")
+    pytest.skip("agent_router-mcp integration smoke not yet implemented")
 
 
 @pytest.mark.integration
-def test_swarm_mcp_bad_auth_returns_401() -> None:
+def test_agent_router_mcp_bad_auth_returns_401() -> None:
     """End-to-end: unknown Bearer token → server rejects."""
-    pytest.skip("swarm-mcp integration smoke not yet implemented")
+    pytest.skip("agent_router-mcp integration smoke not yet implemented")
 
 
 # --- Tool-gating tests -------------------------------------------------------
 
 
-def test_swarm_register_decorators_skipped_in_core(
+def test_agent_router_register_decorators_skipped_in_core(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """In core mode, non-always-on swarm tools must NOT be registered."""
-    server_mod = _reload_swarm_server_with_tool_set(monkeypatch, "core")
+    """In core mode, non-always-on agent_router tools must NOT be registered."""
+    server_mod = _reload_agent_router_server_with_tool_set(monkeypatch, "core")
     names = _registered_tool_names(server_mod.mcp)
 
     # Always-on tools are present.
-    assert _ALWAYS_ON_SWARM_TOOLS.issubset(names), (
+    assert _ALWAYS_ON_AGENT_ROUTER_TOOLS.issubset(names), (
         f"notify/ack must be in core mode, got {names}"
     )
     # All-only tools are absent.
-    leaked = names & _ALL_ONLY_SWARM_TOOLS
+    leaked = names & _ALL_ONLY_AGENT_ROUTER_TOOLS
     assert not leaked, f"core mode leaked all-only tools: {leaked}"
 
 
-def test_swarm_register_decorators_present_in_all(
+def test_agent_router_register_decorators_present_in_all(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """In all mode, every swarm tool must be registered."""
-    server_mod = _reload_swarm_server_with_tool_set(monkeypatch, "all")
+    """In all mode, every agent_router tool must be registered."""
+    server_mod = _reload_agent_router_server_with_tool_set(monkeypatch, "all")
     names = _registered_tool_names(server_mod.mcp)
 
-    missing = _ALL_SWARM_TOOLS - names
-    assert not missing, f"all mode missing swarm tools: {missing}"
+    missing = _ALL_AGENT_ROUTER_TOOLS - names
+    assert not missing, f"all mode missing agent_router tools: {missing}"
 
 
-def test_swarm_notify_ack_always_on_both_modes(
+def test_agent_router_notify_ack_always_on_both_modes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """notify and ack are registered in both core and all modes."""
     for tool_set in ("core", "all"):
-        server_mod = _reload_swarm_server_with_tool_set(monkeypatch, tool_set)
+        server_mod = _reload_agent_router_server_with_tool_set(monkeypatch, tool_set)
         names = _registered_tool_names(server_mod.mcp)
         assert "notify" in names, (
             f"notify missing in tool_set={tool_set}; registered={names}"
@@ -249,7 +249,7 @@ def test_swarm_notify_ack_always_on_both_modes(
 # Hermes HMAC: _REQUEST_AUTH now holds AuthValue (str|HmacAuthValue|None)
 # ---------------------------------------------------------------------------
 def test_request_auth_accepts_hmac_value() -> None:
-    """The swarm ContextVar must round-trip HmacAuthValue without typing errors."""
+    """The agent_router ContextVar must round-trip HmacAuthValue without typing errors."""
     from services.shared.auth import HmacAuthValue
 
     av = HmacAuthValue(signature="sha256=00", timestamp="1700000000", body=b"x")
@@ -261,8 +261,8 @@ def test_request_auth_accepts_hmac_value() -> None:
 
 
 def test_auth_capture_middleware_uses_shared_helper() -> None:
-    """swarm AuthCaptureMiddleware subclasses HermesAwareAuthMiddleware."""
+    """agent_router AuthCaptureMiddleware subclasses HermesAwareAuthMiddleware."""
     from services.shared.asgi_auth import HermesAwareAuthMiddleware
-    from services.swarm_mcp.server import AuthCaptureMiddleware
+    from services.agent_router_mcp.server import AuthCaptureMiddleware
 
     assert issubclass(AuthCaptureMiddleware, HermesAwareAuthMiddleware)

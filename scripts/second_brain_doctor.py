@@ -403,8 +403,8 @@ async def check_mcp_livez(
                         "systemctl",
                         "restart",
                         "second_brain-memory-mcp",
-                        "second_brain-recall-mcp",
-                        "second_brain-swarm-mcp",
+                        "second_brain-memory_router-mcp",
+                        "second_brain-agent_router-mcp",
                     ],
                     check=True,
                     timeout=30,
@@ -417,7 +417,7 @@ async def check_mcp_livez(
             name="mcp_livez",
             status="fail",
             message=f"unreachable: {', '.join(failed)}",
-            remediation="sudo systemctl restart second_brain-memory-mcp second_brain-recall-mcp second_brain-swarm-mcp",
+            remediation="sudo systemctl restart second_brain-memory-mcp second_brain-memory_router-mcp second_brain-agent_router-mcp",
             auto_fix=_autofix,
         )
     return CheckResult(
@@ -831,7 +831,7 @@ async def maybe_autofix(
         if r.name == "mcp_livez" and not getattr(args, "yes", False):
             if not _confirm_autofix(
                 "[fix] mcp_livez autofix will run "
-                "`systemctl restart second_brain-{memory,recall,swarm}-mcp`. "
+                "`systemctl restart second_brain-{memory,memory_router,agent_router}-mcp`. "
                 "Continue? [y/N] "
             ):
                 print(

@@ -19,7 +19,7 @@ import os
 import uvicorn
 
 from services.memory_mcp import server as memory_server
-from services.swarm_mcp import server as swarm_server
+from services.agent_router_mcp import server as agent_router_server
 from services.task_mcp import server as task_server
 
 logger = logging.getLogger("second_brain-core-mcp")
@@ -28,7 +28,7 @@ logger = logging.getLogger("second_brain-core-mcp")
 # `AuthCaptureMiddleware`; tools are registered at import time.
 _SERVICES = [
     ("memory", memory_server, memory_server.DEFAULT_PORT),
-    ("swarm", swarm_server, swarm_server.DEFAULT_PORT),
+    ("agent_router", agent_router_server, agent_router_server.DEFAULT_PORT),
     ("task", task_server, task_server.DEFAULT_PORT),
 ]
 
