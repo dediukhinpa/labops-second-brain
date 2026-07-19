@@ -305,7 +305,7 @@ sudo bash scripts/install.sh
 **Зависимость от других репо:**
 - Канонический порядок установки: `labops-agent-architecture` → `labops-tg-plugin` → `labops-second-brain` — но это три **отдельных** скрипта `install.sh`, каждый запускает оператор. `install.sh` из `labops-agent-architecture` только **клонирует** этот репо в `~/labops-second-brain` — `scripts/install.sh` он за вас НЕ запускает. Ставите этот репо сами: либо вручную (`sudo bash scripts/install.sh`), либо отдав Claude Code агенту с промптом из `AGENT.md` — см. шаг 1 выше.
 - Если этот репо (или любой из трёх `labops-*`) приватный — при клонировании вручную (или через `labops-agent-architecture`) на машине без `gh` CLI и без SSH-ключа потребуется переменная `GITHUB_TOKEN` (fine-grained PAT, права `Contents: Read` на этот репо, выдаётся от аккаунта владельца репо на GitHub).
-- Если на машине **уже есть агенты** (поставлен [`labops-agent-architecture`](#часть-labops)) — установщик до-регистрирует их токены (`issue-agent-token.py`), не перетирая существующие.
+- Если на машине **уже есть агенты** (поставлен [`labops-agent-architecture`](#часть-labops)) — установщик подключает их автоматически через `scripts/connect-agents.sh`: каждому воркспейсу под `~/.claude-lab/*/.claude`, где всё ещё стоит плейсхолдер `CHANGE_ME`, выдаётся реальный токен (scopes берутся из `agent.env` агента) и патчатся **оба** файла — `agent.env` и `.mcp.json` (с бэкапами `*.bak-connect`; агентов с реальным токеном скрипт не трогает). После этого перезапустите службы агентов (`systemctl restart claude-agent-<name>`). Отключить: `SKIP_AGENT_CONNECT=1`; повторить отдельно: `sudo bash scripts/connect-agents.sh`.
 
 Установка считается успешной только при зелёном **smoke-test** в конце.
 

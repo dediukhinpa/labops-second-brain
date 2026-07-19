@@ -45,6 +45,15 @@ if [ "$(id -u)" -ne 0 ]; then
   die "must run as root (sudo bash scripts/install.sh)"
 fi
 
+# RAM sanity: the embedding model is ~1.1 GB resident inside ingest-worker
+# (MemoryMax=2G) on top of Postgres + 3 MCP services. Below ~3 GB total the
+# worker is likely to be OOM-killed and recall silently degrades to
+# lexical-only — warn loudly up front instead of failing mysteriously later.
+MEM_TOTAL_KB="$(awk '/^MemTotal:/{print $2}' /proc/meminfo 2>/dev/null || echo 0)"
+if [ "${MEM_TOTAL_KB:-0}" -gt 0 ] && [ "$MEM_TOTAL_KB" -lt 3000000 ]; then
+  log "WARNING: only $((MEM_TOTAL_KB / 1024)) MB RAM — ingest-worker (FastEmbed, ~1.1 GB resident) may be OOM-killed; recall would degrade to lexical-only. 4 GB+ recommended."
+fi
+
 # ---------------------------------------------------------------------------
 # 2. Load .env
 # ---------------------------------------------------------------------------
@@ -479,10 +488,29 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 15. Done
+# 15. Connect existing agents (agent-architecture installed first)
 # ---------------------------------------------------------------------------
 
-note "15. done"
+note "15. connect existing agents"
+
+# Agents scaffolded BEFORE second_brain existed carry the CHANGE_ME bearer in
+# agent.env AND .mcp.json — issue real tokens and patch both, so a sequential
+# install of the two repos needs no manual token plumbing.
+if [ "${SKIP_AGENT_CONNECT:-0}" = "1" ]; then
+  log "SKIP_AGENT_CONNECT=1 — skipping agent auto-connect"
+elif [ -x "$INSTALL_DIR/scripts/connect-agents.sh" ] || [ -f "$INSTALL_DIR/scripts/connect-agents.sh" ]; then
+  SB_HOME="$INSTALL_DIR" SB_ETC="$ETC_DIR" SERVICE_USER="$SERVICE_USER" \
+    bash "$INSTALL_DIR/scripts/connect-agents.sh" \
+    || log "WARNING: agent auto-connect had failures — run scripts/connect-agents.sh manually"
+else
+  log "connect-agents.sh missing — issue per-agent tokens manually (see Next steps)"
+fi
+
+# ---------------------------------------------------------------------------
+# 16. Done
+# ---------------------------------------------------------------------------
+
+note "16. done"
 
 cat <<EOF
 
@@ -500,7 +528,9 @@ cat <<EOF
 
 Next steps:
   1. Verify services are listening:  ss -tlnp | grep -E '500[0-3]'
-  2. Issue per-agent tokens:         $INSTALL_DIR/.venv/bin/python $INSTALL_DIR/scripts/issue-agent-token.py --agent <name> --scopes 'read,write'
+  2. Agent tokens: existing agents were auto-connected above (scripts/connect-agents.sh).
+     Restart them to pick up tokens:  systemctl restart claude-agent-<name>
+     For future/remote agents:        $INSTALL_DIR/.venv/bin/python $INSTALL_DIR/scripts/issue-agent-token.py --agent <name> --scopes 'decisions,external,knowledge,inbox'
   3. Point your local agents at:     http://<host>:$MCP_MEMORY_PORT/mcp (memory), :$MCP_MEMORY_ROUTER_PORT/mcp (memory_router), :$MCP_AGENT_ROUTER_PORT/mcp (agent_router)
   4. Set up the inbox-agent locally: bash $INSTALL_DIR/scripts/install-local.sh
   5. Review $ETC_DIR/secrets.env and add provider API keys you want available.
