@@ -80,6 +80,25 @@ env_val() {  # $1=file $2=key
     | sed -E "s/^(export +)?$2=//" | sed -e 's/^"//' -e 's/"$//'
 }
 
+# token_valid <raw-token> — существует ли токен в БД и не отозван.
+# echo: 1 (валиден) / 0 (нет в БД или revoked) / '' (не смогли проверить БД).
+# Токены хранятся как plain sha256(token) в agent_tokens.token_sha256
+# (см. issue-agent-token.py / auth.py). Нужно на пере-установке second-brain:
+# БД пересоздаётся, старые токены становятся невалидными.
+token_valid() {  # $1=token
+  local sha out
+  sha="$(printf '%s' "$1" | sha256sum | awk '{print $1}')"
+  if out="$(PGPASSWORD="$PG_PASSWORD" sudo -E -u "$SERVICE_USER" psql \
+              -h "${PG_HOST:-/var/run/postgresql}" -p "${PG_PORT:-5432}" \
+              -d "$PG_DATABASE" -tAc \
+              "SELECT 1 FROM agent_tokens WHERE token_sha256='$sha' AND revoked_at IS NULL LIMIT 1" \
+              2>/dev/null)"; then
+    [ "$(printf '%s' "$out" | tr -d '[:space:]')" = "1" ] && echo 1 || echo 0
+  else
+    echo ''   # psql недоступен / ошибка соединения — не знаем
+  fi
+}
+
 connected=0; skipped=0; failed=0
 for ws in "$AGENT_LAB_DIR"/*/.claude; do
   [ -d "$ws" ] || continue
@@ -90,8 +109,23 @@ for ws in "$AGENT_LAB_DIR"/*/.claude; do
 
   current="$(env_val "$agent_env" AGENT_BEARER)"
   if [ -n "$current" ] && [ "$current" != "$PLACEHOLDER" ] && [ "${FORCE_REISSUE:-0}" != "1" ]; then
-    log "$agent: already has a real token — skipping (FORCE_REISSUE=1 to reissue)"
-    skipped=$((skipped+1)); continue
+    # Не просто «есть непустой токен» — ПРОВЕРЯЕМ его в БД. При пере-установке
+    # second-brain БД пересоздаётся и старые токены становятся невалидными;
+    # проверка только на CHANGE_ME пропустила бы агента и оставила recall тихо
+    # сломанным. Переиздаём ТОЛЬКО когда БД доказала, что токена нет/отозван;
+    # если проверить не смогли — сохраняем прежнее поведение (skip), чтобы не
+    # дёргать возможно рабочего агента.
+    v="$(token_valid "$current")"
+    if [ "$v" = "1" ]; then
+      log "$agent: токен валиден в БД — skipping (FORCE_REISSUE=1 чтобы переиздать)"
+      skipped=$((skipped+1)); continue
+    elif [ -z "$v" ]; then
+      warn "$agent: токен есть, но проверка БД не удалась — skipping (проверьте вручную / FORCE_REISSUE=1)"
+      skipped=$((skipped+1)); continue
+    else
+      log "$agent: токена нет в БД (устарел после пере-установки?) — переиздаю"
+      # проваливаемся ниже к выдаче нового токена
+    fi
   fi
 
   scopes="$(env_val "$agent_env" AGENT_SCOPES)"
