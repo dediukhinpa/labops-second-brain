@@ -27,18 +27,25 @@ SB_ETC="${SB_ETC:-/etc/second_brain}"
 SECRETS="${SECRETS:-$SB_ETC/secrets.env}"
 VENV_PY="${VENV_PY:-$SB_HOME/.venv/bin/python}"
 # optional: set to a real agent token to additionally run an authenticated MCP
-# probe (tokens are stored hashed, so verify cannot mint one itself).
+# probe (tokens are stored hashed, so verify cannot mint one itself). When unset,
+# falls back to the admin token written by install.sh — so a standard install
+# gets the authenticated probe automatically.
 VERIFY_BEARER="${VERIFY_BEARER:-}"
+ADMIN_TOKEN_FILE="${ADMIN_TOKEN_FILE:-$SB_HOME/secrets/admin.token}"
 
-# MCP endpoints to probe: "unit:port:path". Standard consolidated topology
-# (memory/agent_router/task live in one core process, memory_router is separate). Edit the
-# ports here only if you changed them at install time.
+# MCP endpoints to probe: "unit:port:path". This MUST mirror what
+# scripts/install.sh actually deploys: SEPARATE units per service (there is no
+# consolidated core unit in systemd/ and install.sh never enables task-mcp).
+# Edit the ports here only if you changed them at install time.
 MCP_ENDPOINTS=(
-  "second_brain-core-mcp:5001:/mcp"    # memory
-  "second_brain-core-mcp:5000:/mcp"    # agent_router
-  "second_brain-core-mcp:5003:/mcp"    # task
-  "second_brain-memory_router-mcp:5002:/mcp"  # memory_router
+  "second_brain-memory-mcp:5001:/mcp"         # memory (write-side)
+  "second_brain-agent_router-mcp:5000:/mcp"   # agent_router
+  "second_brain-memory_router-mcp:5002:/mcp"  # memory_router (recall)
 )
+# task-mcp (:5003) is optional — probed only if its unit is actually installed.
+if systemctl list-unit-files 'second_brain-task-mcp.service' 2>/dev/null | grep -q '^second_brain-task-mcp'; then
+  MCP_ENDPOINTS+=( "second_brain-task-mcp:5003:/mcp" )
+fi
 WORKER_UNITS=( second_brain-ingest-worker second_brain-agent_router-worker )
 REQUIRED_SECRET_KEYS=( PG_HOST PG_PORT PG_DATABASE PG_USER PG_PASSWORD \
                        VAULT_ROOT LOG_DIR STATE_DIR FASTEMBED_CACHE_DIR )
@@ -176,16 +183,29 @@ case "$n" in
   0) warn "no agents registered yet — deploy at least one and create its token" ;;
   *) pass "$n active agent token(s) registered" ;;
 esac
-# Optional positive auth probe: set VERIFY_BEARER=<an agent's token> to confirm an
-# authenticated tool call succeeds end-to-end (tokens are stored hashed, so verify
-# cannot mint one itself).
+# Positive auth probe. Auth is enforced at tool-call level, so `initialize`
+# alone proves nothing — we must exercise an AUTHENTICATED method. Bearer source:
+# VERIFY_BEARER env, else the admin token install.sh wrote (auto-probe on a
+# standard install).
+if [ -z "$VERIFY_BEARER" ]; then
+  if [ -r "$ADMIN_TOKEN_FILE" ]; then VERIFY_BEARER="$(head -1 "$ADMIN_TOKEN_FILE" | tr -d '[:space:]')"
+  else VERIFY_BEARER="$(sudo cat "$ADMIN_TOKEN_FILE" 2>/dev/null | head -1 | tr -d '[:space:]')"; fi
+fi
 if [ -n "$VERIFY_BEARER" ]; then
-  IFS=: read -r _ port path <<<"${MCP_ENDPOINTS[0]}"
-  code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 -X POST "http://127.0.0.1:$port$path" \
-    -H "Authorization: Bearer $VERIFY_BEARER" -H 'Content-Type: application/json' \
-    -H 'Accept: application/json, text/event-stream' -d "$init" 2>/dev/null)"
-  [ "$code" = "200" ] && pass "authenticated MCP probe OK (:$port)" \
-                      || fail "authenticated MCP probe got HTTP $code (:$port)"
+  tools_list='{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
+  for spec in "${MCP_ENDPOINTS[@]}"; do
+    IFS=: read -r unit port path <<<"$spec"
+    body="$(curl -s --max-time 8 -X POST "http://127.0.0.1:$port$path" \
+      -H "Authorization: Bearer $VERIFY_BEARER" -H 'Content-Type: application/json' \
+      -H 'Accept: application/json, text/event-stream' -d "$tools_list" 2>/dev/null)"
+    if echo "$body" | grep -q '"tools"'; then
+      pass "authenticated tools/list OK on :$port ($unit)"
+    else
+      fail "authenticated tools/list FAILED on :$port ($unit) — bearer rejected or gating broken"
+    fi
+  done
+else
+  warn "no bearer available (VERIFY_BEARER unset, $ADMIN_TOKEN_FILE unreadable) — authenticated probe skipped"
 fi
 
 # ===================================================== env drift & full tests ==
