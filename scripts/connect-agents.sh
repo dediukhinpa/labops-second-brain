@@ -122,8 +122,26 @@ for ws in "$AGENT_LAB_DIR"/*/.claude; do
   fi
 
   log "$agent: connected (scopes=$scopes, token=${token:0:6}…, backups: *.bak-connect)"
-  log "$agent: restart to pick up: systemctl restart claude-agent-$agent"
   connected=$((connected+1))
+
+  # Рестарт агента, чтобы он ПОДХВАТИЛ токен: живая сессия прочитала agent.env/
+  # .mcp.json на старте (ещё с CHANGE_ME) — без рестарта recall не включится, и
+  # оператору пришлось бы делать это вручную. Только если: юнит под systemd,
+  # мы root (иначе systemctl не сработает) и не задан SKIP_AGENT_RESTART.
+  unit="claude-agent-$agent.service"
+  if [ "${SKIP_AGENT_RESTART:-0}" = "1" ]; then
+    log "$agent: SKIP_AGENT_RESTART=1 — рестарт вручную: systemctl restart $unit"
+  elif [ "$(id -u)" -ne 0 ]; then
+    log "$agent: не root — рестарт вручную: sudo systemctl restart $unit"
+  elif systemctl cat "$unit" >/dev/null 2>&1; then
+    if systemctl restart "$unit" 2>/dev/null; then
+      log "$agent: перезапущен $unit — токен подхвачен, recall активен"
+    else
+      warn "$agent: не удалось перезапустить $unit — вручную: systemctl restart $unit"
+    fi
+  else
+    log "$agent: нет systemd-юнита $unit — перезапустите сессию агента вручную, чтобы подхватить токен"
+  fi
 done
 
 log "done: $connected connected, $skipped already ok, $failed failed"
