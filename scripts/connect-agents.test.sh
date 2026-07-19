@@ -43,6 +43,15 @@ done
 exec "$@"
 EOF
 chmod +x "$TMP/bin/sudo"
+
+# stub psql for token_valid(): echo "1" (token present) when FAKE_TOKEN_VALID=1,
+# else empty (0 rows = stale/absent). exit 0 either way = query succeeded.
+cat > "$TMP/bin/psql" <<'EOF'
+#!/usr/bin/env bash
+[ "${FAKE_TOKEN_VALID:-1}" = "1" ] && echo 1
+exit 0
+EOF
+chmod +x "$TMP/bin/psql"
 export PATH="$TMP/bin:$PATH"
 
 mk_agent() {  # $1=name $2=bearer
@@ -76,10 +85,17 @@ echo "$out" | grep -q 'tok_dev_AbCdEf123456' \
 echo "$out" | grep -q 'scopes=decisions,knowledge' \
   && ok "scopes taken from agent.env" || bad "scopes not from agent.env"
 
-# ---- case 2: idempotent — second run skips ----------------------------------
-out="$(run_sut 2>&1)"
-echo "$out" | grep -q 'dev: already has a real token' \
-  && ok "second run skips connected agent" || bad "not idempotent: $out"
+# ---- case 2: idempotent — valid token in DB → skip --------------------------
+out="$(FAKE_TOKEN_VALID=1 run_sut 2>&1)"
+echo "$out" | grep -q 'dev: токен валиден в БД' \
+  && ok "valid token in DB → skip" || bad "not idempotent on valid token: $out"
+
+# ---- case 2b: stale token (not in DB, e.g. after reinstall) → reissue --------
+out="$(FAKE_TOKEN_VALID=0 run_sut 2>&1)"
+echo "$out" | grep -q 'dev: токена нет в БД' \
+  && ok "stale token → reissue path" || bad "stale token not reissued: $out"
+grep -q 'AGENT_BEARER="tok_dev_' "$TMP/lab/dev/.claude/agent.env" \
+  && ok "stale token: agent.env re-patched" || bad "stale token: agent.env not patched"
 
 # ---- case 3: issuance failure → exit 1, others still processed --------------
 mk_agent broken CHANGE_ME
