@@ -61,40 +61,46 @@ for ep in "${ENDPOINTS[@]}"; do
   name="${ep%%:*}"
   url="${ep#*:}"
 
-  body='{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
+  # Probe with `initialize`, NOT `tools/list`: the MCP Streamable-HTTP transport
+  # is session-based — a bare tools/list without a prior initialize handshake
+  # returns http 400 "Missing session ID" regardless of the bearer, so it can
+  # never pass as a one-shot curl. `initialize` is stateless, needs no session
+  # and no auth (open by MCP design), returns serverInfo, and proves the service
+  # is up and speaking MCP — the right liveness gate. Deep auth/tools coverage
+  # lives in pytest (a real MCP client), not this smoke.
+  body='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"smoke","version":"1"}}}'
 
-  resp=$(curl -sS \
-    --max-time 8 \
-    -w '\n__HTTP__:%{http_code}' \
-    -X POST "$url" \
-    -H "Content-Type: application/json" \
-    -H "Accept: application/json, text/event-stream" \
-    "${AUTH_HDR[@]}" \
-    -d "$body" 2>&1 || true)
-
-  http_code="${resp##*__HTTP__:}"
-  payload="${resp%__HTTP__:*}"
-
-  # Mask any accidental token echo
-  masked_payload="$(printf '%s' "$payload" | sed 's/Bearer [A-Za-z0-9_-]\{20,\}/Bearer ***/g')"
-
-  if [ "$http_code" != "200" ]; then
-    fail "$name $url http=$http_code"
-    printf '  response: %s\n' "$(printf '%s' "$masked_payload" | head -c 200)"
-    failures=$((failures + 1))
-    continue
-  fi
-
-  # Look for non-empty tools array — works for both SSE and plain JSON responses
-  if printf '%s' "$payload" | grep -qE '"tools"\s*:\s*\['; then
-    if printf '%s' "$payload" | grep -qE '"name"\s*:\s*"[^"]+"'; then
-      log "$name OK ($url)"
-    else
-      fail "$name returned empty tools list ($url)"
-      failures=$((failures + 1))
+  # Poll, don't single-shot: MCP services (Python + FastMCP; memory_router also
+  # warms embedding/rerank models) take 10-30s to bind their port after
+  # `systemctl start`. install.sh only sleeps a few seconds before smoke, so a
+  # single probe races a healthy-but-slow start and reports a false FAIL (all
+  # three units were active/NRestarts=0, just not listening yet). Retry ~40s.
+  attempts="${SMOKE_ATTEMPTS:-20}"; interval="${SMOKE_INTERVAL:-2}"
+  ok_ep=0; http_code=""; masked_payload=""
+  for _a in $(seq 1 "$attempts"); do
+    resp=$(curl -sS \
+      --max-time 8 \
+      -w '\n__HTTP__:%{http_code}' \
+      -X POST "$url" \
+      -H "Content-Type: application/json" \
+      -H "Accept: application/json, text/event-stream" \
+      "${AUTH_HDR[@]}" \
+      -d "$body" 2>&1 || true)
+    http_code="${resp##*__HTTP__:}"
+    payload="${resp%__HTTP__:*}"
+    # Mask any accidental token echo
+    masked_payload="$(printf '%s' "$payload" | sed 's/Bearer [A-Za-z0-9_-]\{20,\}/Bearer ***/g')"
+    # Success = HTTP 200 + serverInfo (service is up and speaks MCP).
+    if [ "$http_code" = "200" ] && printf '%s' "$payload" | grep -q '"serverInfo"'; then
+      ok_ep=1; break
     fi
+    sleep "$interval"
+  done
+
+  if [ "$ok_ep" = "1" ]; then
+    log "$name OK ($url)"
   else
-    fail "$name response missing 'tools' field ($url)"
+    fail "$name $url — MCP не ответил serverInfo (http=$http_code) за ~$((attempts * interval))s"
     printf '  response: %s\n' "$(printf '%s' "$masked_payload" | head -c 200)"
     failures=$((failures + 1))
   fi

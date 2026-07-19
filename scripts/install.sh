@@ -132,7 +132,14 @@ if [ ! -f /etc/apt/sources.list.d/pgdg.list ]; then
   install -d /usr/share/keyrings
   curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
     | gpg --dearmor -o /usr/share/keyrings/postgresql-archive-keyring.gpg
-  echo "deb [signed-by=/usr/share/keyrings/postgresql-archive-keyring.gpg] https://apt.postgresql.org/pub/repos/apt jammy-pgdg main" \
+  # Кодовое имя дистрибутива — из системы, а НЕ хардкод: на noble (24.04)
+  # репозиторий jammy тянет libicu70/libldap-2.5-0, которых на noble нет →
+  # "postgresql-16 : Depends: libicu70 ... not installable". PGDG отдаёт свои
+  # сборки под каждый LTS-codename (jammy, noble, ...), берём именно свой.
+  PG_CODENAME="$(. /etc/os-release 2>/dev/null; echo "${VERSION_CODENAME:-}")"
+  [ -n "$PG_CODENAME" ] || PG_CODENAME="$(lsb_release -cs 2>/dev/null || echo jammy)"
+  log "PGDG codename: ${PG_CODENAME}-pgdg"
+  echo "deb [signed-by=/usr/share/keyrings/postgresql-archive-keyring.gpg] https://apt.postgresql.org/pub/repos/apt ${PG_CODENAME}-pgdg main" \
     > /etc/apt/sources.list.d/pgdg.list
   apt-get update -y
 fi
