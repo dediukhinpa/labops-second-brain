@@ -75,7 +75,11 @@ for ep in "${ENDPOINTS[@]}"; do
   # `systemctl start`. install.sh only sleeps a few seconds before smoke, so a
   # single probe races a healthy-but-slow start and reports a false FAIL (all
   # three units were active/NRestarts=0, just not listening yet). Retry ~40s.
-  attempts="${SMOKE_ATTEMPTS:-20}"; interval="${SMOKE_INTERVAL:-2}"
+  # ~80s окно с запасом: memory_router на холодном старте греет эмбеддинги +
+  # реранкер, а во время установки идёт контеншн (ingest-worker тоже грузит
+  # модель), поэтому 40с бывает впритык. Окно тратится только на реально
+  # мёртвый сервис — на живом цикл выходит сразу после первого serverInfo.
+  attempts="${SMOKE_ATTEMPTS:-40}"; interval="${SMOKE_INTERVAL:-2}"
   ok_ep=0; http_code=""; masked_payload=""
   for _a in $(seq 1 "$attempts"); do
     resp=$(curl -sS \
