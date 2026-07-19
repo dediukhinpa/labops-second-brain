@@ -52,15 +52,22 @@
 > [!TIP]
 > Если читать некогда — вот необходимый и достаточный набор.
 
-**1. Запустить установщик** на чистом Ubuntu 22.04+ под root. Postgres 16 + pgvector он ставит сам из `apt.postgresql.org`. Выберите один из вариантов:
+**1. Получить репо и запустить установщик** на чистом Ubuntu 22.04+ под root. Postgres 16 + pgvector он ставит сам из `apt.postgresql.org`.
 
 ```bash
+# Если сначала поставили labops-agent-architecture — этот репо УЖЕ лежит в
+# ~/labops-second-brain (его установщик склонировал, но НЕ установил).
+# Иначе склонируйте сами:
+git clone https://github.com/dediukhinpa/labops-second-brain.git ~/labops-second-brain
+
+cd ~/labops-second-brain    # установщик использует относительные пути — запускать из корня репо
+
 # а) вручную:
 sudo bash scripts/install.sh
 
 # б) или отдать Claude Code агенту (он следует AGENT.md и спрашивает
 #    подтверждение на разрушительных шагах — root-провижининг, systemd-юниты и т.д.):
-cd labops-second-brain && claude
+claude
 #   в сессии вставьте:
 #   «Прочитай и выполни инструкции из AGENT.md — разверни Second Brain,
 #    Path A (VPS + inbox-agent). Подтверждай со мной каждый деструктивный шаг.»

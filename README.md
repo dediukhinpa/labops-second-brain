@@ -52,15 +52,22 @@ A single agent remembers its own session. A team of agents does not: knowledge g
 > [!TIP]
 > If you have no time to read — this is the necessary and sufficient set.
 
-**1. Run the installer** on a clean Ubuntu 22.04+ host as root. It installs Postgres 16 + pgvector from `apt.postgresql.org` for you. Pick one:
+**1. Get the repo, then run the installer** on a clean Ubuntu 22.04+ host as root. It installs Postgres 16 + pgvector from `apt.postgresql.org` for you.
 
 ```bash
+# If you installed labops-agent-architecture first, this repo is ALREADY at
+# ~/labops-second-brain (its installer cloned it — but did NOT install it).
+# Otherwise clone it yourself:
+git clone https://github.com/dediukhinpa/labops-second-brain.git ~/labops-second-brain
+
+cd ~/labops-second-brain    # the installer uses relative paths — run it from the repo root
+
 # a) manually:
 sudo bash scripts/install.sh
 
 # b) or hand it to a Claude Code agent (it follows AGENT.md and asks you to
 #    confirm destructive steps — root-level provisioning, systemd units, etc.):
-cd labops-second-brain && claude
+claude
 #   in the session, paste:
 #   "Прочитай и выполни инструкции из AGENT.md — разверни Second Brain,
 #    Path A (VPS + inbox-agent). Подтверждай со мной каждый деструктивный шаг."
