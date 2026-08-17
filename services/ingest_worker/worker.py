@@ -45,6 +45,16 @@ SQL_UPDATE_STATUS = """
     WHERE id = $1
 """
 
+# embedding_jobs.UNIQUE(doc_id, status) means re-embedding an already-completed
+# doc (edit, or a model-change requeue) inserts a fresh 'pending' row that
+# coexists fine -- until it reaches the SAME terminal status a prior job for
+# that doc_id already holds, which then violates the constraint. Job history
+# isn't needed past the current attempt, so the current job supersedes it:
+# delete every other row for this doc_id right before recording our own status.
+SQL_CLEAR_STALE_JOBS = """
+    DELETE FROM embedding_jobs WHERE doc_id = $1 AND id <> $2
+"""
+
 SQL_DELETE_CHUNKS = """
     DELETE FROM chunks WHERE doc_id = $1
 """
@@ -161,6 +171,7 @@ async def _process_job(
             _vec_to_str(embedding),
         )
 
+    await conn.execute(SQL_CLEAR_STALE_JOBS, doc_id, job_id)
     await conn.execute(SQL_UPDATE_STATUS, job_id, "completed")
     logger.info(
         "Job %d completed: %d chunks embedded for doc %d",
@@ -215,6 +226,9 @@ async def run_worker() -> None:
                                     "Job %d failed", row["id"]
                                 )
                                 await sp.rollback()
+                                await conn.execute(
+                                    SQL_CLEAR_STALE_JOBS, row["doc_id"], row["id"]
+                                )
                                 await conn.execute(
                                     SQL_UPDATE_STATUS,
                                     row["id"],
