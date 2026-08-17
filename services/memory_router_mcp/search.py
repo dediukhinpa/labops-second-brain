@@ -31,16 +31,18 @@ _QUERY_VEC_CACHE: "OrderedDict[str, list[float]]" = OrderedDict()
 _QUERY_VEC_CACHE_MAX = 256
 
 
-def _embed_query_cached(embed_model: Any, query: str) -> list[float]:
+def _embed_query_cached(embed_model: Any, query: str, use_e5_prefix: bool) -> list[float]:
     """Return the query's embedding, memoized by query text (bounded LRU)."""
     cached = _QUERY_VEC_CACHE.get(query)
     if cached is not None:
         _QUERY_VEC_CACHE.move_to_end(query)
         return cached
     # e5 instruction prefix: multilingual-e5-large expects "query: " on queries
-    # and "passage: " on documents (the latter applied at ingest). Cache key
+    # and "passage: " on documents (the latter applied at ingest). Other models
+    # (e.g. mpnet) were never trained with it, hence use_e5_prefix. Cache key
     # stays the raw query; the prefix only steers the embedding.
-    vec = list(embed_model.embed([f"query: {query}"]))[0].tolist()
+    text = f"query: {query}" if use_e5_prefix else query
+    vec = list(embed_model.embed([text]))[0].tolist()
     _QUERY_VEC_CACHE[query] = vec
     if len(_QUERY_VEC_CACHE) > _QUERY_VEC_CACHE_MAX:
         _QUERY_VEC_CACHE.popitem(last=False)
@@ -525,6 +527,7 @@ def register_tools(
     rerank_scorer: Any = None,
     rerank_candidates: int = 30,
     rerank_max_chars: int = 512,
+    use_e5_prefix: bool = True,
 ) -> None:
     """Register all second_brain MCP tools on the server.
 
@@ -539,6 +542,8 @@ def register_tools(
         rrf_weight_vec: Weight for the vector stream in RRF.
         diversify_max: If > 0, cap the number of results per scope in the
             first diversification pass before fill-back.
+        use_e5_prefix: Whether to prepend the e5 "query: " instruction before
+            embedding queries — see services.shared.config.fastembed_uses_e5_prefix.
     """
 
     # In skip-mode the function still lives in the closure but is NOT recorded on `mcp` — clients cannot invoke it.
@@ -600,7 +605,7 @@ def register_tools(
         # Embed query (memoized by text). FastEmbed.embed is sync/CPU-bound;
         # offload to a thread to avoid blocking the event loop. The cache makes a
         # repeated query skip the e5-large forward pass entirely.
-        vec = await asyncio.to_thread(_embed_query_cached, embed_model, query)
+        vec = await asyncio.to_thread(_embed_query_cached, embed_model, query, use_e5_prefix)
 
         # Build filters (param offset 2 because $1 is vec/query)
         extra_where, extra_params = _build_scope_filter(

@@ -30,7 +30,7 @@ The `ingest_worker` service is **not** a filesystem watcher. The canonical write
 3. Upserts the `documents` row (path, body, body_tsv generated, sha256, source_type, agent, scope, frontmatter JSONB).
 4. Enqueues an `embedding_jobs` row.
 
-The ingest worker then pops the job, splits the body into chunks (word-window, currently `WINDOW_SIZE_DEFAULT=500` / `OVERLAP_DEFAULT=50`; token-aware chunking is a follow-up), computes a 1024-dim FastEmbed `multilingual-e5-large` vector per chunk, and upserts rows into `chunks` (one per slice) keyed by `(doc_id, position)` with `chunk_hash` for idempotent re-runs.
+The ingest worker then pops the job, splits the body into chunks (word-window, currently `WINDOW_SIZE_DEFAULT=500` / `OVERLAP_DEFAULT=50`; token-aware chunking is a follow-up), computes a 768-dim FastEmbed `paraphrase-multilingual-mpnet-base-v2` vector per chunk, and upserts rows into `chunks` (one per slice) keyed by `(doc_id, position)` with `chunk_hash` for idempotent re-runs.
 
 Read-side queries (`memory_router_mcp.recall(...)`) combine vector cosine similarity over `chunks.embedding`, full-text rank over `documents.body_tsv`, and a scope weight. `error-patterns/` carries weight `3.0` so past incidents bubble to the top — this is the most useful signal for «have we hit this before?».
 

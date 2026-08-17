@@ -40,7 +40,7 @@ sudo journalctl -u second_brain-ingest-worker -n 100 --no-pager
 
 Common causes:
 
-- **FastEmbed model not downloaded.** First start downloads ~1GB. If the network was flaky, it may have failed silently. Look for `huggingface_hub` errors in the log. Fix: `sudo -u second_brain /opt/second_brain/.venv/bin/python -c "from fastembed import TextEmbedding; TextEmbedding('intfloat/multilingual-e5-large')"` to force the download with visible output.
+- **FastEmbed model not downloaded.** First start downloads ~1GB. If the network was flaky, it may have failed silently. Look for `huggingface_hub` errors in the log. Fix: `sudo -u second_brain /opt/second_brain/.venv/bin/python -c "from fastembed import TextEmbedding; TextEmbedding('sentence-transformers/paraphrase-multilingual-mpnet-base-v2')"` to force the download with visible output.
 
 - **You wrote the file directly to the filesystem.** The ingest worker is **not** a filesystem watcher — it polls the `embedding_jobs` table, and only `memory_mcp` writes jobs to that table. A file dropped into `${VAULT_ROOT}/external/test.md` by hand is invisible to the worker. Fix: either call `memory_mcp.update_document(path=...)` from an authenticated agent, or insert the job manually: `psql -U second_brain -d second_brain -c "INSERT INTO documents(path, body, source_type, agent, scope) VALUES ('<path>', '<body>', 'external', 'admin', 'external') RETURNING id;"` followed by `INSERT INTO embedding_jobs(doc_id, status) VALUES (<id>, 'pending') ON CONFLICT DO NOTHING;`.
 

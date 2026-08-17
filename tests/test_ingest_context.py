@@ -14,14 +14,19 @@ from services.ingest_worker.context import (
 )
 
 
-def test_to_passage_inputs_prefixes_each_chunk() -> None:
-    out = to_passage_inputs(["alpha", "beta"])
+def test_to_passage_inputs_prefixes_each_chunk_for_e5() -> None:
+    out = to_passage_inputs(["alpha", "beta"], use_e5_prefix=True)
     assert out == ["passage: alpha", "passage: beta"]
     assert all(c.startswith(PASSAGE_PREFIX) for c in out)
 
 
 def test_to_passage_inputs_empty() -> None:
-    assert to_passage_inputs([]) == []
+    assert to_passage_inputs([], use_e5_prefix=True) == []
+
+
+def test_to_passage_inputs_leaves_chunks_unprefixed_for_non_e5_model() -> None:
+    out = to_passage_inputs(["alpha", "beta"], use_e5_prefix=False)
+    assert out == ["alpha", "beta"]
 
 
 def test_prefix_includes_source_agent_date_title_tags() -> None:

@@ -5,6 +5,8 @@ from collections import OrderedDict
 
 from fastembed import TextEmbedding
 
+from services.shared.config import fastembed_uses_e5_prefix
+
 logger = logging.getLogger(__name__)
 
 BATCH_SIZE = 32
@@ -27,6 +29,7 @@ class Embedder:
         self._model_name = model_name
         self._model: TextEmbedding | None = None
         self._cache: OrderedDict[str, list[float]] = OrderedDict()
+        self.uses_e5_prefix = fastembed_uses_e5_prefix(model_name)
 
     def _ensure_model(self) -> TextEmbedding:
         """Load model on first use."""

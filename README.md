@@ -182,7 +182,7 @@ flowchart LR
 ```
 
 - **MCP servers** — the entry points for agents (HTTP, authenticated with a Bearer token or an HMAC signature).
-- **ingest-worker** — watches the vault for changes, splits documents into context-aware chunks and computes embeddings (FastEmbed `multilingual-e5-large`).
+- **ingest-worker** — watches the vault for changes, splits documents into context-aware chunks and computes embeddings (FastEmbed `paraphrase-multilingual-mpnet-base-v2`).
 - **agent_router-worker** — asynchronously delivers inter-agent webhooks with retries.
 - **core-mcp** — a mode that aggregates memory+agent_router+task in a single process (see tool-gating below).
 
@@ -307,7 +307,7 @@ Requirements: **Ubuntu 22.04**, root/sudo. No Docker — native (apt + venv + sy
 sudo bash scripts/install.sh
 ```
 
-Idempotent steps: platform check → apt (Python 3.11, Postgres 16 + pgvector) → system user `second_brain` → `/opt/second_brain` + venv → role/DB + `vector` extension → secrets (0600) → migrations → preload the embedding model (`multilingual-e5-large`, ~1.3 GB) → render and install the systemd units → `systemctl enable --now` → **smoke-test** → print the admin token.
+Idempotent steps: platform check → apt (Python 3.11, Postgres 16 + pgvector) → system user `second_brain` → `/opt/second_brain` + venv → role/DB + `vector` extension → secrets (0600) → migrations → preload the embedding model (`paraphrase-multilingual-mpnet-base-v2`, ~1.0 GB) → render and install the systemd units → `systemctl enable --now` → **smoke-test** → print the admin token.
 
 **Dependency on the other repos:**
 - The canonical install order is `labops-agent-architecture` → `labops-tg-plugin` → `labops-second-brain` — but these are three **separate** `install.sh` scripts, each run by the operator. `labops-agent-architecture`'s `install.sh` only **clones** this repo to `~/labops-second-brain`; it does **not** run `scripts/install.sh` for you. You install this repo yourself, either manually (`sudo bash scripts/install.sh`) or by handing it to a Claude Code agent with the `AGENT.md` prompt — see step 1 above.
@@ -373,7 +373,7 @@ The only outbound network calls are one-time model downloads from the configured
 
 | Endpoint | Purpose | When |
 |---|---|---|
-| `huggingface.co` / `cdn-lfs.huggingface.co` | Download the embedding model (`intfloat/multilingual-e5-large`) and the reranker (`jinaai/jina-reranker-v2-base-multilingual`) via FastEmbed / `huggingface_hub` | First run only — then cached and served offline |
+| `huggingface.co` / `cdn-lfs.huggingface.co` | Download the embedding model (`sentence-transformers/paraphrase-multilingual-mpnet-base-v2`) and the reranker (`jinaai/jina-reranker-v2-base-multilingual`) via FastEmbed / `huggingface_hub` | First run only — then cached and served offline |
 | Operator-configured agent gateways (`AGENT_GATEWAYS`) | HMAC-signed inter-agent webhooks for swarm coordination | Optional; only to hosts you configure (typically localhost / your own agents) |
 
 After the models are downloaded, embeddings and reranking run **fully locally** on the host CPU — recall never sends note text to an external service. There is no LLM-provider call: contextual chunking is computed locally without an API (see `services/ingest_worker/context.py`).

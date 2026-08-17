@@ -64,8 +64,8 @@ class _CountingEmbed:
 def test_embed_query_cached_memoizes_repeated_query():
     _QUERY_VEC_CACHE.clear()
     m = _CountingEmbed()
-    v1 = _embed_query_cached(m, "память агентов")
-    v2 = _embed_query_cached(m, "память агентов")
+    v1 = _embed_query_cached(m, "память агентов", use_e5_prefix=True)
+    v2 = _embed_query_cached(m, "память агентов", use_e5_prefix=True)
     assert m.calls == 1                  # second call served from cache
     assert v1 == v2 == [1.0, 2.0, 3.0]
 
@@ -73,17 +73,25 @@ def test_embed_query_cached_memoizes_repeated_query():
 def test_embed_query_cached_applies_e5_query_prefix():
     _QUERY_VEC_CACHE.clear()
     m = _CountingEmbed()
-    _embed_query_cached(m, "память агентов")
+    _embed_query_cached(m, "память агентов", use_e5_prefix=True)
     assert m.seen == ["query: память агентов"]   # e5 instruction prefix on embed input
     assert "память агентов" in _QUERY_VEC_CACHE   # cache key stays the raw query
+    _QUERY_VEC_CACHE.clear()
+
+
+def test_embed_query_cached_skips_prefix_for_non_e5_model():
+    _QUERY_VEC_CACHE.clear()
+    m = _CountingEmbed()
+    _embed_query_cached(m, "память агентов", use_e5_prefix=False)
+    assert m.seen == ["память агентов"]   # no instruction prefix — model wasn't trained with one
     _QUERY_VEC_CACHE.clear()
 
 
 def test_embed_query_cached_distinct_queries_each_embed():
     _QUERY_VEC_CACHE.clear()
     m = _CountingEmbed()
-    _embed_query_cached(m, "a")
-    _embed_query_cached(m, "b")
+    _embed_query_cached(m, "a", use_e5_prefix=True)
+    _embed_query_cached(m, "b", use_e5_prefix=True)
     assert m.calls == 2
 
 
@@ -91,7 +99,7 @@ def test_embed_query_cached_evicts_beyond_max():
     _QUERY_VEC_CACHE.clear()
     m = _CountingEmbed()
     for i in range(_QUERY_VEC_CACHE_MAX + 10):
-        _embed_query_cached(m, f"q{i}")
+        _embed_query_cached(m, f"q{i}", use_e5_prefix=True)
     assert len(_QUERY_VEC_CACHE) == _QUERY_VEC_CACHE_MAX
     assert "q0" not in _QUERY_VEC_CACHE   # oldest evicted
     _QUERY_VEC_CACHE.clear()

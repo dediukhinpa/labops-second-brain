@@ -144,7 +144,7 @@ async def _process_job(
     # Embed with the e5 "passage: " instruction prefix, but store the chunks
     # WITHOUT it: the prefix only steers the embedding, while `content` feeds
     # FTS + rerank and must stay clean.
-    embeddings = embedder.embed(to_passage_inputs(chunks))
+    embeddings = embedder.embed(to_passage_inputs(chunks, embedder.uses_e5_prefix))
 
     await conn.execute(SQL_DELETE_CHUNKS, doc_id)
 

@@ -137,7 +137,7 @@ If the user is undecided after reading this section, default to Path A and expli
               |     agent_tokens (one row per agent),           |
               |     audit_log, delivery_outbox,                 |
               |     documents (body + body_tsv) +               |
-              |     chunks (content + embedding vector(1024))   |
+              |     chunks (content + embedding vector(768))    |
               |                                                 |
               |   vault/  (12 markdown folders)                 |
               +-------------------------------------------------+
@@ -153,7 +153,7 @@ If the user is undecided after reading this section, default to Path A and expli
 
 **Auth:** each agent gets a Bearer token. Token sha256 is stored in `agent_tokens.token_sha256`. Each request's `Authorization: Bearer <token>` header is captured by `AuthCaptureMiddleware` and the token resolves to an agent identity with scoped write permissions. No header → 401. No silent fallback. Ever. **In Path B, each personal agent workspace gets its own distinct Bearer** — never share tokens between agents.
 
-**Recall:** hybrid search combines (a) pgvector cosine over FastEmbed `multilingual-e5-large` (1024-dim) embeddings stored per chunk in `chunks.embedding` and (b) Postgres full-text search over `chunks.content_tsv` / `documents.body_tsv`. Results are fused with Reciprocal Rank Fusion (RRF), then re-ranked by temporal decay and a source_weights map (e.g. `error-patterns` × 3.0, `inbox` × 0.5).
+**Recall:** hybrid search combines (a) pgvector cosine over FastEmbed `paraphrase-multilingual-mpnet-base-v2` (768-dim) embeddings stored per chunk in `chunks.embedding` and (b) Postgres full-text search over `chunks.content_tsv` / `documents.body_tsv`. Results are fused with Reciprocal Rank Fusion (RRF), then re-ranked by temporal decay and a source_weights map (e.g. `error-patterns` × 3.0, `inbox` × 0.5).
 
 ---
 
