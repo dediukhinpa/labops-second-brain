@@ -236,6 +236,11 @@ async def run_worker() -> None:
                                 )
 
             if not rows and not _shutdown.requested:
+                # Очередь пуста -- отпускаем веса модели (~1.4 ГБ анонимной
+                # памяти на 8-гигабайтном хосте). Следующая задача поднимет их
+                # заново: пауза на загрузку для фоновой индексации дешевле, чем
+                # держать пятую часть ОЗУ занятой круглые сутки.
+                embedder.unload_if_idle(config.ingest_model_idle_unload_sec)
                 await asyncio.sleep(POLL_SLEEP_SEC)
 
     finally:

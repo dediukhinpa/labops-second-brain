@@ -205,6 +205,13 @@ class Config:
             "FASTEMBED_MODEL", "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
         )
     )
+    # Сколько секунд простоя модели терпит ingest-воркер, прежде чем выгрузить
+    # её из памяти. 0 -- не выгружать (поведение до 2026-09).
+    ingest_model_idle_unload_sec: int = field(
+        default_factory=lambda: _env_int(
+            "INGEST_MODEL_IDLE_UNLOAD_SEC", "900", min_value=0
+        )
+    )
     mcp_host: str = field(
         default_factory=lambda: os.environ.get("MCP_HOST", "0.0.0.0")
     )
