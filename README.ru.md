@@ -182,7 +182,7 @@ flowchart LR
 ```
 
 - **MCP-серверы** — точки входа для агентов (HTTP, аутентификация Bearer-токеном или HMAC-подписью).
-- **ingest-worker** — следит за изменениями vault, режет документы на чанки с контекстом и считает эмбеддинги (FastEmbed `multilingual-e5-large`).
+- **ingest-worker** — следит за изменениями vault, режет документы на чанки с контекстом и считает эмбеддинги (FastEmbed `paraphrase-multilingual-mpnet-base-v2`).
 - **agent_router-worker** — асинхронно доставляет inter-agent webhooks с ретраями.
 - **core-mcp** — режим, агрегирующий memory+agent_router+task в одном процессе (см. tool-gating ниже).
 
@@ -307,7 +307,7 @@ Recall: `recall(...)`. Координация: `agent_router_*`. Задачи: `
 sudo bash scripts/install.sh
 ```
 
-Идемпотентные шаги: проверка платформы → apt (Python 3.11, Postgres 16 + pgvector) → системный пользователь `second_brain` → `/opt/second_brain` + venv → роль/БД + расширение `vector` → секреты (0600) → миграции → предзагрузка модели эмбеддингов (`multilingual-e5-large`, ~1.3 ГБ) → рендер и установка systemd-юнитов → `systemctl enable --now` → **smoke-test** → печать admin-токена.
+Идемпотентные шаги: проверка платформы → apt (Python 3.11, Postgres 16 + pgvector) → системный пользователь `second_brain` → `/opt/second_brain` + venv → роль/БД + расширение `vector` → секреты (0600) → миграции → предзагрузка модели эмбеддингов (`paraphrase-multilingual-mpnet-base-v2`, ~1.0 ГБ) → рендер и установка systemd-юнитов → `systemctl enable --now` → **smoke-test** → печать admin-токена.
 
 **Зависимость от других репо:**
 - Канонический порядок установки: `labops-agent-architecture` → `labops-tg-plugin` → `labops-second-brain` — но это три **отдельных** скрипта `install.sh`, каждый запускает оператор. `install.sh` из `labops-agent-architecture` только **клонирует** этот репо в `~/labops-second-brain` — `scripts/install.sh` он за вас НЕ запускает. Ставите этот репо сами: либо вручную (`sudo bash scripts/install.sh`), либо отдав Claude Code агенту с промптом из `AGENT.md` — см. шаг 1 выше.
@@ -373,7 +373,7 @@ python -m pytest tests/ -q
 
 | Endpoint | Назначение | Когда |
 |---|---|---|
-| `huggingface.co` / `cdn-lfs.huggingface.co` | Загрузка модели эмбеддингов (`intfloat/multilingual-e5-large`) и реранкера (`jinaai/jina-reranker-v2-base-multilingual`) через FastEmbed / `huggingface_hub` | Только при первом запуске — затем кэшируется и работает офлайн |
+| `huggingface.co` / `cdn-lfs.huggingface.co` | Загрузка модели эмбеддингов (`sentence-transformers/paraphrase-multilingual-mpnet-base-v2`) и реранкера (`jinaai/jina-reranker-v2-base-multilingual`) через FastEmbed / `huggingface_hub` | Только при первом запуске — затем кэшируется и работает офлайн |
 | Настроенные оператором шлюзы агентов (`AGENT_GATEWAYS`) | HMAC-подписанные межагентные вебхуки для координации роя | Опционально; только к хостам, которые вы сами настроили (обычно localhost / ваши собственные агенты) |
 
 После загрузки моделей эмбеддинги и реранкинг считаются **полностью локально** на CPU хоста — recall никогда не отправляет текст заметок во внешний сервис. Прямого вызова LLM-провайдера нет: контекстный чанкинг вычисляется локально без API (см. `services/ingest_worker/context.py`).

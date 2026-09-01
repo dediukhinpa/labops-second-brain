@@ -199,6 +199,7 @@ register_tools(
     rerank_scorer=(_rerank_scorer if config.rerank_enabled else None),
     rerank_candidates=config.rerank_candidates,
     rerank_max_chars=config.rerank_max_chars,
+    use_e5_prefix=config.uses_e5_prefix,
 )
 
 

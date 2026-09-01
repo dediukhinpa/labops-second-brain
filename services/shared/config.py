@@ -25,6 +25,16 @@ def _require_pg_password() -> str:
     return pw
 
 
+def fastembed_uses_e5_prefix(model_name: str) -> bool:
+    """Whether ``model_name`` was trained with e5 "query: "/"passage: " prefixes.
+
+    intfloat/multilingual-e5-* needs them (unprefixed input degrades recall);
+    other embedding models (e.g. sentence-transformers/mpnet) were never
+    trained with them, so adding the prefix text would only dilute the input.
+    """
+    return "e5" in model_name.lower()
+
+
 def _env_float(name: str, default: str, min_value: float = 0.0) -> float:
     """Parse a float env var with a default and a lower bound.
 
@@ -189,7 +199,10 @@ class Config:
     )
     fastembed_model: str = field(
         default_factory=lambda: os.environ.get(
-            "FASTEMBED_MODEL", "intfloat/multilingual-e5-large"
+            # mpnet-base-v2: ~1.0GB resident vs. e5-large's ~2.9GB (VPS RAM is
+            # shared with Postgres + both agent sessions; e5-large alone sat
+            # at the MemoryMax cgroup ceiling within minutes of a cold start).
+            "FASTEMBED_MODEL", "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
         )
     )
     mcp_host: str = field(
@@ -260,6 +273,11 @@ class Config:
     hmac_auth_enabled: bool = field(
         default_factory=lambda: _env_bool("SECOND_BRAIN_HMAC_AUTH_ENABLED", "1")
     )
+
+    @property
+    def uses_e5_prefix(self) -> bool:
+        """See :func:`fastembed_uses_e5_prefix` — derived from ``fastembed_model``."""
+        return fastembed_uses_e5_prefix(self.fastembed_model)
 
     def __post_init__(self) -> None:
         """Cross-field validation.

@@ -310,7 +310,7 @@ Recall does four things in sequence. First, it resolves the bearer to
 an agent identity at the API boundary (the same middleware that
 protects every other call). Second, it computes a query embedding
 using a local embeddings model — `FastEmbed` with
-`multilingual-e5-large` is the default, no external API needed.
+`paraphrase-multilingual-mpnet-base-v2` is the default, no external API needed.
 Third, it runs a hybrid search in Postgres: vector similarity via
 `pgvector`, full-text via Postgres's built-in tsvector, and a fusion
 step that combines the two with reciprocal-rank fusion plus a small

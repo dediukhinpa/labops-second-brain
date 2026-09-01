@@ -14,6 +14,13 @@ Environment=MCP_PORT=5002
 # never by opening the raw MCP port to the world.
 Environment=MCP_HOST=127.0.0.1
 Environment=FASTEMBED_CACHE_DIR={{STATE_DIR}}/fastembed
+# huggingface_hub's xet transfer backend writes its own log/dedup cache to
+# ~/.cache/huggingface/xet regardless of FASTEMBED_CACHE_DIR, which sits
+# outside ReadWritePaths under ProtectHome=yes — a fresh (uncached) model
+# download crash-loops on "Read-only file system". Xet is a performance-only
+# transfer optimization; disabling it falls back to plain HTTP, which does
+# respect FASTEMBED_CACHE_DIR.
+Environment=HF_HUB_DISABLE_XET=1
 EnvironmentFile={{ETC_DIR}}/secrets.env
 ExecStart={{INSTALL_DIR}}/.venv/bin/python -m services.memory_router_mcp.server
 Restart=on-failure
@@ -32,7 +39,7 @@ RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 LockPersonality=yes
 SystemCallFilter=@system-service
 SystemCallErrorNumber=EPERM
-# FastEmbed multilingual-e5-large is ~1.1GB resident + uvicorn overhead.
+# FastEmbed paraphrase-multilingual-mpnet-base-v2 is ~1GB resident + uvicorn overhead.
 MemoryMax=2G
 
 [Install]

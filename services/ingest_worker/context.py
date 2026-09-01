@@ -70,14 +70,19 @@ def build_context_prefix(
 
 # e5 instruction prefix for stored passages. multilingual-e5-large was trained
 # with "query: " / "passage: " prefixes; embedding without them degrades
-# retrieval quality. The prefix goes ONLY on the text handed to the embedder —
-# never on the stored content, which feeds FTS + rerank and must stay clean.
-# The matching "query: " prefix lives in memory_router_mcp.search (query side).
+# retrieval quality. Other embedding models (e.g. mpnet) were never trained
+# with these prefixes, so ``use_e5_prefix`` (derived from FASTEMBED_MODEL,
+# see services.shared.config.fastembed_uses_e5_prefix) gates it off for them.
+# The prefix goes ONLY on the text handed to the embedder — never on the
+# stored content, which feeds FTS + rerank and must stay clean. The matching
+# "query: " prefix lives in memory_router_mcp.search (query side).
 PASSAGE_PREFIX = "passage: "
 
 
-def to_passage_inputs(chunks: list[str]) -> list[str]:
-    """Prefix each chunk with the e5 ``passage: `` instruction for embedding."""
+def to_passage_inputs(chunks: list[str], use_e5_prefix: bool) -> list[str]:
+    """Prefix each chunk with the e5 ``passage: `` instruction, if applicable."""
+    if not use_e5_prefix:
+        return list(chunks)
     return [PASSAGE_PREFIX + c for c in chunks]
 
 

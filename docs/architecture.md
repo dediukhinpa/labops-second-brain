@@ -191,7 +191,7 @@ HTTP request --> AuthCaptureMiddleware --> FastMCP HTTP app --> tool handler
 
 ### Step 1: two parallel candidate sets
 
-**Vector candidates:** embed the query with the same FastEmbed model used for ingestion (`multilingual-e5-large`, 1024 dims). Cosine search against `chunks.embedding` (one row per chunk, vector(1024)) using the HNSW index, joined back to `documents` by `chunks.doc_id`. Take top 50 documents (deduped on doc_id, keeping the best-scoring chunk).
+**Vector candidates:** embed the query with the same FastEmbed model used for ingestion (`paraphrase-multilingual-mpnet-base-v2`, 768 dims). Cosine search against `chunks.embedding` (one row per chunk, vector(768)) using the HNSW index, joined back to `documents` by `chunks.doc_id`. Take top 50 documents (deduped on doc_id, keeping the best-scoring chunk).
 
 **Lexical candidates:** convert the query to a `tsquery` (`websearch_to_tsquery`). Match against `documents.body_tsv` (and/or `chunks.content_tsv`) using the GIN index. Rank by `ts_rank_cd`. Take top 50.
 
@@ -249,7 +249,7 @@ A separate process (`second_brain-ingest-worker.service`) that consumes the `emb
 2. For each job, look up the matching `documents` row (`doc_id`).
 3. Parse frontmatter (`agent`, `scope`, `title`, `created_at`) — already stored as `documents.frontmatter` JSONB.
 4. Chunk the body — current implementation splits the body into word-windows (defaults: `WINDOW_SIZE_DEFAULT=500` words, `OVERLAP_DEFAULT=50`). Token-level chunking via FastEmbed's tokenizer is a known follow-up.
-5. Embed each chunk with FastEmbed `multilingual-e5-large` (1024 dims).
+5. Embed each chunk with FastEmbed `paraphrase-multilingual-mpnet-base-v2` (768 dims).
 6. Upsert into `chunks` keyed by `(doc_id, position)`; store `chunk_hash` to make re-runs idempotent.
 7. Mark the job `status = 'done'` and sleep until the next poll.
 
@@ -259,7 +259,7 @@ A separate process (`second_brain-ingest-worker.service`) that consumes the `emb
 
 **Failure handling:** embedding failures (e.g. model not downloaded, OOM) are logged and the file is skipped — the next loop retries. Postgres failures retry with exponential backoff.
 
-**FastEmbed model:** `intfloat/multilingual-e5-large`, 1024 dims, runs on CPU. First start downloads ~1GB into the FastEmbed cache. Subsequent starts are instant.
+**FastEmbed model:** `sentence-transformers/paraphrase-multilingual-mpnet-base-v2`, 768 dims, runs on CPU (switched from `multilingual-e5-large` — see the "pin embedding model" decision note above; e5-large's ~2.9GB resident sat at the service's MemoryMax ceiling within minutes of a cold start, mpnet-base-v2 needs ~1.0GB). First start downloads the model into the FastEmbed cache. Subsequent starts are instant.
 
 ---
 
