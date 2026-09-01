@@ -85,21 +85,6 @@ class Embedder:
         logger.info("FastEmbed model unloaded (idle)")
         return True
 
-    def unload_if_idle(self, idle_sec: float) -> bool:
-        """Выгрузить модель, если она простаивает дольше порога.
-
-        Args:
-            idle_sec: Порог простоя в секундах; ``<= 0`` -- выгрузка выключена.
-
-        Returns:
-            ``True``, если модель была выгружена этим вызовом.
-        """
-        if idle_sec <= 0 or self._model is None:
-            return False
-        if self.idle_seconds() < idle_sec:
-            return False
-        return self.unload()
-
     def _cache_get(self, text: str) -> list[float] | None:
         """Get cached embedding, updating LRU order."""
         key = _cache_key(text)

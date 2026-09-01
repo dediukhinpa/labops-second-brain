@@ -4,6 +4,7 @@ import hashlib
 import json
 import logging
 import os
+from pathlib import Path
 import signal
 import sys
 
@@ -27,6 +28,41 @@ logger = logging.getLogger(__name__)
 
 POLL_BATCH_SIZE = 10
 POLL_SLEEP_SEC = 5
+
+# Порог, по которому файл в кэше считается весами модели, а не служебным
+# json токенизатора: настоящие веса -- сотни мегабайт.
+MODEL_WEIGHTS_MIN_BYTES = 10 * 1024 * 1024
+
+
+def weights_are_cached_on_disk(cache_dir: str | None) -> bool:
+    """Лежат ли веса модели на диске, чтобы их можно было перечитать.
+
+    ЗАЧЕМ: выгрузка модели из памяти имеет смысл, только если следующая
+    загрузка возьмёт веса с диска. Замер 2026-09-01 на живом хосте: в
+    FASTEMBED_CACHE_DIR не было ни одного файла с весами -- работающие сервисы
+    держали модель только в ОЗУ. В такой ситуации выгрузка превращает
+    перезагрузку модели в скачивание с HuggingFace, а при недоступности сети --
+    в отказ индексации. Поэтому без кэша на диске модель не отпускаем.
+
+    Args:
+        cache_dir: Каталог кэша FastEmbed; ``None`` или пусто -- считаем, что
+            кэша нет.
+
+    Returns:
+        ``True``, если в каталоге нашёлся хотя бы один достаточно крупный файл.
+    """
+    if not cache_dir:
+        return False
+    root = Path(cache_dir)
+    if not root.is_dir():
+        return False
+    for path in root.rglob("*"):
+        try:
+            if path.is_file() and path.stat().st_size >= MODEL_WEIGHTS_MIN_BYTES:
+                return True
+        except OSError:
+            continue
+    return False
 
 SQL_FETCH_JOBS = """
     SELECT ej.id, ej.doc_id, d.body, d.path,
@@ -181,11 +217,33 @@ async def _process_job(
     )
 
 
+def model_is_idle_enough(
+    model_loaded: bool, idle_seconds: float, idle_unload_sec: int
+) -> bool:
+    """Пора ли отпускать веса модели.
+
+    Args:
+        model_loaded: Загружена ли модель сейчас.
+        idle_seconds: Сколько секунд она не использовалась.
+        idle_unload_sec: Порог простоя; ``0`` -- выгрузка выключена.
+
+    Returns:
+        ``True``, если модель загружена и простаивает не меньше порога.
+    """
+    if idle_unload_sec <= 0 or not model_loaded:
+        return False
+    return idle_seconds >= idle_unload_sec
+
+
 async def run_worker() -> None:
     """Main worker loop -- poll queue, process jobs, handle shutdown."""
     config = Config()
     pool = await get_pool(config)
     embedder = Embedder(model_name=config.fastembed_model)
+    idle_unload_sec = config.ingest_model_idle_unload_sec
+    cache_dir = os.environ.get("FASTEMBED_CACHE_DIR")
+    # Предупреждаем об отсутствующем кэше один раз, а не каждые пять секунд.
+    cache_warning_shown = False
 
     logger.info("Ingest worker started, polling for jobs")
 
@@ -240,7 +298,20 @@ async def run_worker() -> None:
                 # памяти на 8-гигабайтном хосте). Следующая задача поднимет их
                 # заново: пауза на загрузку для фоновой индексации дешевле, чем
                 # держать пятую часть ОЗУ занятой круглые сутки.
-                embedder.unload_if_idle(config.ingest_model_idle_unload_sec)
+                if model_is_idle_enough(
+                    embedder.model_loaded,
+                    embedder.idle_seconds(),
+                    idle_unload_sec,
+                ):
+                    if weights_are_cached_on_disk(cache_dir):
+                        embedder.unload()
+                    elif not cache_warning_shown:
+                        logger.warning(
+                            "Модель не выгружаю: в кэше %r нет весов, "
+                            "перезагрузка потребовала бы скачивания",
+                            cache_dir or "<не задан>",
+                        )
+                        cache_warning_shown = True
                 await asyncio.sleep(POLL_SLEEP_SEC)
 
     finally:

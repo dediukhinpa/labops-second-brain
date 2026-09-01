@@ -76,31 +76,6 @@ def test_new_work_reloads_the_model(monkeypatch) -> None:
     assert emb.model_loaded is True
 
 
-def test_idle_unload_waits_for_the_threshold(monkeypatch) -> None:
-    emb = _make_embedder(monkeypatch)
-    emb.embed(["привет"])
-    monkeypatch.setattr(emb, "idle_seconds", lambda: 899.0)
-    assert emb.unload_if_idle(900) is False
-    assert emb.model_loaded is True
-    monkeypatch.setattr(emb, "idle_seconds", lambda: 901.0)
-    assert emb.unload_if_idle(900) is True
-    assert emb.model_loaded is False
-
-
-def test_idle_unload_disabled_by_zero(monkeypatch) -> None:
-    emb = _make_embedder(monkeypatch)
-    emb.embed(["привет"])
-    monkeypatch.setattr(emb, "idle_seconds", lambda: 10_000.0)
-    assert emb.unload_if_idle(0) is False
-    assert emb.model_loaded is True
-
-
-def test_idle_unload_on_unloaded_model_is_a_noop(monkeypatch) -> None:
-    emb = _make_embedder(monkeypatch)
-    assert emb.unload_if_idle(1) is False
-    assert emb.idle_seconds() == 0.0
-
-
 def test_idle_seconds_counts_from_last_model_use(monkeypatch) -> None:
     emb = _make_embedder(monkeypatch)
     clock = [1000.0]
@@ -120,3 +95,40 @@ def test_config_exposes_the_idle_threshold(monkeypatch) -> None:
     assert Config().ingest_model_idle_unload_sec == 900
     monkeypatch.setenv("INGEST_MODEL_IDLE_UNLOAD_SEC", "0")
     assert Config().ingest_model_idle_unload_sec == 0
+
+
+def test_weights_are_cached_detects_real_weights(tmp_path) -> None:
+    from services.ingest_worker.worker import (
+        MODEL_WEIGHTS_MIN_BYTES,
+        weights_are_cached_on_disk,
+    )
+
+    model_dir = tmp_path / "models" / "mpnet"
+    model_dir.mkdir(parents=True)
+    (model_dir / "tokenizer.json").write_bytes(b"x" * 1024)
+    # Только мелочь -- весов нет.
+    assert weights_are_cached_on_disk(str(tmp_path)) is False
+
+    (model_dir / "model.onnx").write_bytes(b"x" * MODEL_WEIGHTS_MIN_BYTES)
+    assert weights_are_cached_on_disk(str(tmp_path)) is True
+
+
+def test_weights_are_cached_handles_missing_or_unset_dir(tmp_path) -> None:
+    from services.ingest_worker.worker import weights_are_cached_on_disk
+
+    assert weights_are_cached_on_disk(None) is False
+    assert weights_are_cached_on_disk("") is False
+    assert weights_are_cached_on_disk(str(tmp_path / "нет-такого")) is False
+    # Каталог есть, но пуст -- ровно случай живого хоста 2026-09-01.
+    assert weights_are_cached_on_disk(str(tmp_path)) is False
+
+
+def test_model_is_idle_enough_respects_threshold_and_switch() -> None:
+    from services.ingest_worker.worker import model_is_idle_enough
+
+    assert model_is_idle_enough(True, 900.0, 900) is True
+    assert model_is_idle_enough(True, 899.0, 900) is False
+    # Выгрузка выключена порогом 0 -- сколько бы модель ни простаивала.
+    assert model_is_idle_enough(True, 10_000.0, 0) is False
+    # Модель не загружена -- выгружать нечего.
+    assert model_is_idle_enough(False, 10_000.0, 900) is False
