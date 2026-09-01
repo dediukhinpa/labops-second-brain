@@ -20,6 +20,7 @@ from services.shared.auth import (
 )
 from services.shared.config import Config
 from services.shared.db import close_pool, get_pool
+from services.shared.mcp_http import build_http_app
 from services.shared.audit import log_audit
 from services.shared.tool_gating import parse_tool_set, should_register_tool
 
@@ -231,6 +232,8 @@ if __name__ == "__main__":
     port = int(os.environ.get("MCP_PORT", str(DEFAULT_PORT)))
     host = os.environ.get("MCP_HOST", "0.0.0.0")
     logger.info("Starting agent_router-mcp on %s:%d (with auth middleware)", host, port)
-    app = mcp.http_app(transport="streamable-http")
+    # Собираем через хелпер: он же включает протухание брошенных сессий
+    # (FastMCP этого не делает, а без него утекает 56 КБ на сессию).
+    app = build_http_app(mcp)
     app = AuthCaptureMiddleware(app)
     uvicorn.run(app, host=host, port=port, log_level="info")

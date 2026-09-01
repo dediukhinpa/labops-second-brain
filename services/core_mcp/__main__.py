@@ -21,6 +21,7 @@ import uvicorn
 from services.memory_mcp import server as memory_server
 from services.agent_router_mcp import server as agent_router_server
 from services.task_mcp import server as task_server
+from services.shared.mcp_http import build_http_app
 
 logger = logging.getLogger("second_brain-core-mcp")
 
@@ -37,9 +38,9 @@ async def _serve_all() -> None:
     host = os.environ.get("MCP_HOST", "0.0.0.0")
     servers = []
     for _label, mod, port in _SERVICES:
-        app = mod.AuthCaptureMiddleware(
-            mod.mcp.http_app(transport="streamable-http")
-        )
+        # build_http_app вместо mcp.http_app: включает протухание брошенных
+        # MCP-сессий, иначе они копятся на сервере до перезапуска.
+        app = mod.AuthCaptureMiddleware(build_http_app(mod.mcp))
         cfg = uvicorn.Config(app, host=host, port=port, log_level="info")
         servers.append(uvicorn.Server(cfg))
     logger.info(

@@ -23,6 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from services.shared.asgi_auth import HermesAwareAuthMiddleware
 from services.shared.config import Config
 from services.shared.db import close_pool, get_pool
+from services.shared.mcp_http import build_http_app
 
 from .tools import _REQUEST_AUTH, register_tools
 
@@ -93,7 +94,9 @@ def main() -> None:
     port = int(os.environ.get("MCP_PORT", str(DEFAULT_PORT)))
     host = os.environ.get("MCP_HOST", "0.0.0.0")
     logger.info("Starting memory-mcp on %s:%d (with auth middleware)", host, port)
-    app = mcp.http_app(transport="streamable-http")
+    # Собираем через хелпер: он же включает протухание брошенных сессий
+    # (FastMCP этого не делает, а без него утекает 56 КБ на сессию).
+    app = build_http_app(mcp)
     app = AuthCaptureMiddleware(app)
     uvicorn.run(app, host=host, port=port, log_level="info")
 
