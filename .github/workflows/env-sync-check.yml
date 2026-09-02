@@ -1,0 +1,30 @@
+name: env-sync
+
+# Сверка .env.example с кодом в обе стороны: переменная, которую читает код, но
+# не описывает пример, и наоборот -- описанная, но никем не читаемая.
+#
+# Воркфлоу назван в docstring tests/test_check_env_sync.py как «контракт,
+# который держит CI», но самого файла в репозитории не было. Из-за этого
+# проверка держалась только на том, что кто-нибудь вручную запустит pytest, и
+# дрейф на 11 переменных прожил незамеченным (CI тут был один gitleaks).
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  env-sync:
+    name: .env.example is in sync with the code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      # Скрипт на стандартной библиотеке: ставить зависимости репозитория
+      # (asyncpg, fastembed) ради него не нужно.
+      - name: check
+        run: python scripts/check_env_sync.py --repo-root . --include-bash --strict --no-color
