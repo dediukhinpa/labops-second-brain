@@ -205,6 +205,15 @@ class Config:
             "FASTEMBED_MODEL", "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
         )
     )
+    # Куда FastEmbed кладёт веса. Передаётся в TextEmbedding явным аргументом:
+    # сама библиотека читает переменную FASTEMBED_CACHE_PATH, а не наш
+    # FASTEMBED_CACHE_DIR, и без явной передачи молча уходит в
+    # tempfile.gettempdir()/fastembed_cache. Под systemd с PrivateTmp=yes это
+    # приватный tmpfs, который стирается при каждом рестарте -- сервис заново
+    # качал ~1.1 ГБ с HuggingFace и держал их в оперативке вместо диска.
+    fastembed_cache_dir: str | None = field(
+        default_factory=lambda: os.environ.get("FASTEMBED_CACHE_DIR") or None
+    )
     # Сколько секунд простоя модели терпит ingest-воркер, прежде чем выгрузить
     # её из памяти. 0 -- не выгружать (поведение до 2026-09).
     ingest_model_idle_unload_sec: int = field(

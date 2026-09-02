@@ -27,8 +27,15 @@ class Embedder:
     Cache uses OrderedDict as LRU with maxsize check.
     """
 
-    def __init__(self, model_name: str = "intfloat/multilingual-e5-large") -> None:
+    def __init__(
+        self,
+        model_name: str = "intfloat/multilingual-e5-large",
+        cache_dir: str | None = None,
+    ) -> None:
         self._model_name = model_name
+        # Каталог весов передаём явно: fastembed читает FASTEMBED_CACHE_PATH,
+        # а не наш FASTEMBED_CACHE_DIR, и без аргумента уходит в /tmp.
+        self._cache_dir = cache_dir
         self._model: TextEmbedding | None = None
         self._cache: OrderedDict[str, list[float]] = OrderedDict()
         self.uses_e5_prefix = fastembed_uses_e5_prefix(model_name)
@@ -40,7 +47,9 @@ class Embedder:
         """Load model on first use."""
         if self._model is None:
             logger.info("Loading FastEmbed model: %s", self._model_name)
-            self._model = TextEmbedding(model_name=self._model_name)
+            self._model = TextEmbedding(
+                model_name=self._model_name, cache_dir=self._cache_dir
+            )
             logger.info("FastEmbed model loaded")
         self._model_last_used = time.monotonic()
         return self._model

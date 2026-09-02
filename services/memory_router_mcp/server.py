@@ -101,7 +101,11 @@ async def lifespan(server: FastMCP) -> AsyncIterator[dict[str, Any]]:
 
     logger.info("Loading FastEmbed model: %s", config.fastembed_model)
     from fastembed import TextEmbedding
-    _embed_model = TextEmbedding(config.fastembed_model)
+    # cache_dir обязателен: без него fastembed уходит в /tmp, который под
+    # PrivateTmp=yes стирается на каждом рестарте -- и веса качаются заново.
+    _embed_model = TextEmbedding(
+        config.fastembed_model, cache_dir=config.fastembed_cache_dir
+    )
 
     # Optional second-stage cross-encoder reranker. Best-effort: a load failure
     # degrades recall to first-stage fusion rather than blocking startup.
@@ -113,9 +117,9 @@ async def lifespan(server: FastMCP) -> AsyncIterator[dict[str, Any]]:
             _reranker = _load_reranker(
                 config.rerank_model,
                 config.rerank_onnx_file,
-                # TextCrossEncoder ignores FASTEMBED_CACHE_DIR (unlike TextEmbedding)
-                # and defaults to /tmp (non-persistent); pin the service cache.
-                os.environ.get("FASTEMBED_CACHE_DIR") or None,
+                # И реранкер, и эмбеддер уходят в непостоянный /tmp, если не
+                # передать каталог явно.
+                config.fastembed_cache_dir,
             )
         except Exception:
             logger.exception(

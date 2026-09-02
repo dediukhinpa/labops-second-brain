@@ -26,9 +26,10 @@ class _FakeModel:
 
     loads = 0
 
-    def __init__(self, model_name: str) -> None:
+    def __init__(self, model_name: str, cache_dir: str | None = None) -> None:
         type(self).loads += 1
         self.model_name = model_name
+        self.cache_dir = cache_dir
 
     def embed(self, batch: list[str]) -> list[_FakeVector]:
         return [_FakeVector([float(len(t))]) for t in batch]

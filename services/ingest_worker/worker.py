@@ -239,9 +239,11 @@ async def run_worker() -> None:
     """Main worker loop -- poll queue, process jobs, handle shutdown."""
     config = Config()
     pool = await get_pool(config)
-    embedder = Embedder(model_name=config.fastembed_model)
+    embedder = Embedder(
+        model_name=config.fastembed_model, cache_dir=config.fastembed_cache_dir
+    )
     idle_unload_sec = config.ingest_model_idle_unload_sec
-    cache_dir = os.environ.get("FASTEMBED_CACHE_DIR")
+    cache_dir = config.fastembed_cache_dir
     # Предупреждаем об отсутствующем кэше один раз, а не каждые пять секунд.
     cache_warning_shown = False
 
