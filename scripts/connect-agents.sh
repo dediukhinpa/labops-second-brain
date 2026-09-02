@@ -30,7 +30,11 @@ SB_ETC="${SB_ETC:-/etc/second_brain}"
 SECRETS="${SECRETS:-$SB_ETC/secrets.env}"
 VENV_PY="$SB_HOME/.venv/bin/python"
 ISSUE_PY="$SB_HOME/scripts/issue-agent-token.py"
-DEFAULT_SCOPES="${DEFAULT_SCOPES:-decisions,external,knowledge,inbox}"
+# task-board -- доска задач (task_mcp::TASKS_WRITE_SCOPE): без него агент видит
+# задачу, но не может её взять и закрыть. error-patterns -- CLAUDE.md агента
+# прямо велит писать «decisions/error-patterns to memory», а права не было.
+# Оба доливались вручную после установки; здесь они и должны выдаваться.
+DEFAULT_SCOPES="${DEFAULT_SCOPES:-decisions,external,knowledge,inbox,error-patterns,task-board}"
 PLACEHOLDER="CHANGE_ME"
 
 log()  { printf '[connect-agents] %s\n' "$*"; }
