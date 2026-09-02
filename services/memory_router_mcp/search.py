@@ -702,12 +702,15 @@ def register_tools(
     async def recent(
         scope: str,
         limit: int = 10,
+        body_contains: list[str] | None = None,
     ) -> list[dict[str, Any]]:
         """Return last N documents from a given scope, ordered by updated_at.
 
         Args:
             scope: Scope to filter by.
             limit: Max results to return.
+            body_contains: Substrings that must ALL appear in the body
+                (case-insensitive). Applied before ``limit``.
 
         Returns:
             List of recent documents with path, source_type, agent, timestamps, snippet.
@@ -719,17 +722,33 @@ def register_tools(
             raise PermissionError(
                 f"Agent '{agent_ctx.agent}' cannot read scope '{scope}'"
             )
+        # ЗАЧЕМ ФИЛЬТР В SQL, А НЕ У КЛИЕНТА: поллер задач берёт recent(scope=
+        # "decisions", limit=30) и отбирает свои строки уже у себя. Но scope
+        # "decisions" общий -- туда пишут все агенты и консолидация памяти.
+        # Стоит появиться тридцати заметкам после задачи, и она вываливается из
+        # окна НАВСЕГДА: поллер её больше не увидит и никакой ошибки при этом
+        # не будет. С отбором на стороне БД limit применяется уже к своим
+        # строкам, и переполнить его может только реальная очередь задач.
+        needles = [s for s in (body_contains or []) if s]
         rows = await pool.fetch(
             """
             SELECT path, source_type, agent, created_at, updated_at,
                    substring(body, 1, 200) AS snippet
             FROM documents
             WHERE scope = $1
+              AND (
+                    cardinality($3::text[]) = 0
+                    OR body ILIKE ALL (
+                        SELECT '%' || needle || '%'
+                        FROM unnest($3::text[]) AS needle
+                    )
+                  )
             ORDER BY updated_at DESC
             LIMIT $2
             """,
             scope,
             limit,
+            needles,
         )
         return [
             {
