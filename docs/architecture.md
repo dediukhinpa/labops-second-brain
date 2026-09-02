@@ -317,32 +317,49 @@ The skeleton:
 ~/.claude-lab/<agent-id>/.claude/
 ├── CLAUDE.md              # SOUL — identity, role, style, boundaries (always loaded)
 ├── settings.json          # env vars, hooks registration, permissions
-├── .mcp.json              # MCP server config — brain memory/memory_router/agent_router + Bearer
+├── .mcp.json              # MCP config — memory/memory_router/agent_router/tasks + Bearer
+├── SECONDBRAIN_WRITE_RULES.md  # Write policy for the shared brain (always loaded)
+├── AGENT_ROUTER.md        # How to take and close tasks from the board (always loaded)
 ├── core/
 │   ├── USER.md            # Owner profile (always loaded via @include)
 │   ├── rules.md           # Operational rules (always loaded via @include)
 │   ├── AGENTS.md          # Agent directory (Read tool, NOT loaded at startup)
 │   ├── MEMORY.md          # Cold memory, lessons index (Read on demand)
 │   ├── LEARNINGS.md       # Lesson archive from mistakes (Read on demand)
-│   ├── warm/
-│   │   └── decisions.md   # Key decisions, last ~14 days (always loaded)
-│   └── hot/
-│       ├── handoff.md     # Last ~10 entries from conversation log (always loaded)
-│       ├── recent.md      # Full conversation log (NOT loaded into session)
-│       └── archive/       # Old logs rotated out by date
+│   ├── passive/
+│   │   ├── decisions.md   # Key decisions (always loaded)
+│   │   ├── errors.md      # Error patterns distilled by consolidation
+│   │   ├── insights.md    # Generalisations worth keeping
+│   │   └── .consolidated-at   # Watermark: how far consolidation has got
+│   ├── active/
+│   │   ├── handoff.md     # Continuity between sessions (always loaded)
+│   │   ├── working-set.md # Materialised recall, rebuilt at every session start
+│   │   ├── episodic.md    # Full turn log, append-only (NOT loaded into session)
+│   │   ├── requests/      # Pending consolidation requests (created on demand)
+│   │   └── pre-compact/   # Snapshots taken before auto-compaction
+│   └── archived/
+│       ├── episodic/      # Monthly rolls of episodic.md (archive-roll.sh)
+│       └── superseded/    # Notes replaced by a newer decision
 ├── tools/
 │   └── TOOLS.md           # Tool/service directory (Read on demand)
-├── skills/                # Skills bundle (subset of repo `skills/`)
+├── skills/                # Skills bundle (symlink to the repo's `skills/`)
 ├── hooks/                 # Shell scripts triggered by Claude Code events
 │   ├── stop-hook.sh
 │   ├── session-start-hook.sh
-│   └── precompact-hook.sh
-├── scripts/               # Memory-rotation scripts (run by cron)
-│   ├── memory-rotate.sh
-│   ├── trim-hot.sh
-│   ├── rotate-warm.sh
-│   ├── compress-warm.sh
-│   └── second_brain-memory_router-on-start.sh
+│   ├── precompact-hook.sh
+│   ├── user-prompt-submit-hook.sh
+│   └── heartbeat-hook.sh
+├── scripts/               # Memory + delivery scripts (driven by hooks and the watchdog)
+│   ├── active-writer.sh   # Salience-tagged append into episodic.md
+│   ├── working-set-build.sh   # Rebuilds working-set.md from recall
+│   ├── reflect-nudge.sh   # Asks the session to consolidate active → passive
+│   ├── brain-flush.sh     # Safety-net dual-write before compaction
+│   ├── decay-sweep.sh     # Ages out low-salience entries
+│   ├── archive-roll.sh    # Rolls oversized layers into core/archived/
+│   ├── mcp-call.sh        # MCP handshake helper (initialize → call → DELETE)
+│   ├── task-poller.sh     # Thin supervisor for the board poller
+│   └── task_poller.py     # Long-lived daemon: one MCP session, 5s polling
+├── state/                 # heartbeat, housekeeping markers
 └── logs/                  # Per-script log files (chmod 600)
 ```
 
@@ -354,23 +371,23 @@ Within a workspace, memory lives in four tiers from fastest to slowest. The spli
 
 ```
 IDENTITY ───── always in context  (CLAUDE.md + core/USER.md + core/rules.md)
-WARM 14d ───── always in context  (core/warm/decisions.md)
-HOT ────────── handoff at startup (core/hot/handoff.md, last ~10 entries)
+PASSIVE ────── always in context  (core/passive/decisions.md)
+ACTIVE ─────── at startup         (core/active/handoff.md + core/active/working-set.md)
 COLD ───────── Read tool on demand (core/MEMORY.md, core/LEARNINGS.md, tools/TOOLS.md)
-SHARED BRAIN ─ MCP on demand     (second_brain via .mcp.json — memory_router.*, memory.*, agent_router.*)
+SHARED BRAIN ─ MCP on demand     (second_brain via .mcp.json — memory_router.*, memory.*, agent_router.*, tasks.*)
 ```
 
-- **IDENTITY** — who the agent is, who its owner is, what its operational rules are. Small (~6–8 KB total), loaded via `@include` at every session start.
-- **WARM (decisions.md)** — material decisions made in the last ~14 days. Compact (~2–4 KB). Always loaded so the agent never "forgets" what was decided last week.
-- **HOT (handoff.md)** — the last ~10 entries from `recent.md` (the full conversation log). Loaded at session start by the SessionStart hook. The full `recent.md` is **never** loaded — only the slice the hook extracts.
+- **IDENTITY** — who the agent is, who its owner is, what its operational rules are. Small (~6–8 KB total), loaded via `@include` at every session start. Includes `SECONDBRAIN_WRITE_RULES.md` and `AGENT_ROUTER.md`, copied into the workspace at scaffold time.
+- **PASSIVE (`core/passive/`)** — what consolidation distilled out of raw turns: `decisions.md`, `errors.md`, `insights.md`. Only `decisions.md` is always loaded; the rest are read on demand. A `.consolidated-at` watermark records how far consolidation has got, so a restarted session does not redo old work.
+- **ACTIVE (`core/active/`)** — the current working set. `episodic.md` is the full append-only turn log and is **never** loaded whole; `handoff.md` carries continuity between sessions; `working-set.md` is materialised recall, rebuilt at every session start.
 - **COLD** — `MEMORY.md`, `LEARNINGS.md`, `TOOLS.md`, `AGENTS.md`. Not loaded automatically. The agent reads them with the `Read` tool when relevant. This keeps the startup payload under ~3% of a typical 400k working window.
 - **SHARED BRAIN** — everything in the second_brain vault. Accessed via the 3 MCP servers in `.mcp.json`. The agent calls `memory_router.recall("query")` to find anything across history, or `memory.create_decision_note(...)` to write a new entry into the shared brain alongside its local `decisions.md`.
 
-The agent does not "choose" which layer to use — the layers are wired so the right one is in front of it at the right time. CLAUDE.md is always in context. `handoff.md` is in context after SessionStart. `decisions.md` is in context always. `MEMORY.md` is one Read away. Second_brain is one `recall` call away.
+The agent does not "choose" which layer to use — the layers are wired so the right one is in front of it at the right time. CLAUDE.md is always in context. `handoff.md` and `working-set.md` are in context after SessionStart. `decisions.md` is in context always. `MEMORY.md` is one Read away. Second_brain is one `recall` call away.
 
 ### How workspaces consume the shared brain (MCP)
 
-The `.mcp.json` rendered at install time registers three MCP servers — one each for memory, memory_router, agent_router:
+The `.mcp.json` rendered at install time registers four MCP servers — memory, memory_router, agent_router and tasks (the task board):
 
 ```json
 {
@@ -386,6 +403,10 @@ The `.mcp.json` rendered at install time registers three MCP servers — one eac
     "second_brain-agent_router": {
       "url": "https://<MCP_HOST>/agent_router/mcp",
       "headers": { "Authorization": "Bearer <AGENT_BEARER>" }
+    },
+    "second_brain-tasks": {
+      "url": "https://<MCP_HOST>/tasks/mcp",
+      "headers": { "Authorization": "Bearer <AGENT_BEARER>" }
     }
   }
 }
@@ -393,26 +414,33 @@ The `.mcp.json` rendered at install time registers three MCP servers — one eac
 
 The bearer is per-agent (issued by `scripts/issue-agent-token.py --agent <agent-id> --scopes '...'`). The scope set the token has determines what the agent can write. A `coordinator-agent` token typically holds the full write set; a `researcher-agent` token might have an empty write set (recall only).
 
-Inside Claude Code, this surfaces as three groups of tools the agent can call: `second_brain-memory.create_decision_note(...)`, `second_brain-memory_router.recall(...)`, `second_brain-agent_router.notify(...)`, etc. No HTTP plumbing — Claude Code handles the JSON-RPC and the Bearer.
+Inside Claude Code, this surfaces as four groups of tools the agent can call: `second_brain-memory.create_decision_note(...)`, `second_brain-memory_router.recall(...)`, `second_brain-agent_router.notify(...)`, `second_brain-tasks.task_claim(...)`, etc. No HTTP plumbing — Claude Code handles the JSON-RPC and the Bearer.
+
+The default scope set an agent is issued is `decisions,external,knowledge,inbox,error-patterns,task-board`. The last two are not optional in practice: `task-board` gates every write on the board (`task_mcp/server.py::TASKS_WRITE_SCOPE`), and the agent's own `CLAUDE.md` instructs it to write `decisions/error-patterns` into shared memory.
 
 ### How hooks glue local memory to the shared brain
 
-Three hooks live in each workspace's `hooks/` and are registered in `settings.json`. They fire on Claude Code lifecycle events:
+Five hooks live in each workspace's `hooks/` and are registered in `settings.json`. They fire on Claude Code lifecycle events:
 
 | Hook | Trigger | What it does |
 |---|---|---|
-| `session-start-hook.sh` | Claude Code session opens | Reads the last ~10 entries from `core/hot/recent.md` and writes them to `core/hot/handoff.md` so the next session starts with continuity. May also call `second_brain-memory_router.recent(scope='inbox')` and prepend the latest inbox items so the agent sees anything new since last session. |
-| `stop-hook.sh` | Session ends (Claude Code emits Stop event) | Appends the latest assistant/user turns to `core/hot/recent.md` (the full chronological log). This is **the** capture step — without it, no memory ever rotates. |
-| `precompact-hook.sh` | Claude Code is about to auto-compact context | Snapshots the current session into a more compressed form so nothing material is lost when auto-compact discards old turns. Typically writes a one-line entry to `core/hot/recent.md` and (if a decision was made) optionally calls `second_brain-memory.create_decision_note(...)` to dual-write into the brain. |
+| `session-start-hook.sh` | Claude Code session opens | Rebuilds `core/active/working-set.md` via `scripts/working-set-build.sh` — materialised recall that fuses shared-brain results with local passive lexical recall. Self-gates the shared half: with no credentials it still does the local half. Never edits `episodic.md`. |
+| `stop-hook.sh` | Session ends (Claude Code emits Stop event) | Appends a salience-tagged entry to `core/active/episodic.md` via `scripts/active-writer.sh`, plus a raw JSON line to `logs/verbose-<date>.jsonl`. This is **the** capture step. It also counts turns and nudges consolidation every N turns, and runs housekeeping (`decay-sweep.sh` + `archive-roll.sh`) at most once a day. |
+| `precompact-hook.sh` | Claude Code is about to auto-compact context | Snapshots `episodic.md` into `core/active/pre-compact/` (keeps the newest N) and calls `scripts/brain-flush.sh` — a safety-net dual-write to the shared brain **before** compaction can drop context. |
+| `user-prompt-submit-hook.sh` | Operator sends a prompt | Records the incoming turn so the delivery side can tell a real message from text merely drawn in the pane. |
+| `heartbeat-hook.sh` | Any tool event | Writes an epoch timestamp to `state/heartbeat` so the watchdog can tell a live session from a hung one. |
 
-The Stop hook is the critical one. If it fails silently (a known antipattern in some headless `claude -p` modes), nothing rotates and the agent's memory drifts. Verify Stop hook output lands in `core/hot/recent.md` after every session by tailing the file or watching its `mtime`.
+Every hook short-circuits (exit 0, no side effects) when invoked as an Agent SDK child — `CLAUDE_SDK_CHILD=1`, or `entrypoint=sdk-ts` on stdin for the Stop hook. Without that guard a spawned child would write memory on the parent's behalf and re-trigger the hooks. Regression-guarded by `agent-template/hooks/sdk-guard.test.sh`.
 
-The memory-rotation scripts in `scripts/` are run by cron, not by hooks. They are the "slow loop":
+The Stop hook is the critical one. If it fails silently, nothing is captured and the agent's memory drifts. Verify its output lands in `core/active/episodic.md` after every session by tailing the file or watching its `mtime`.
 
-- `trim-hot.sh` (hourly) — when `recent.md` exceeds a size threshold, summarise the oldest section with a Sonnet subagent call and append the summary to `core/warm/decisions.md`; move the original chunk to `core/hot/archive/<date>.md`.
-- `rotate-warm.sh` (daily, 03:30) — when an entry in `decisions.md` is older than ~14 days, move it to `core/MEMORY.md` under the relevant section header.
-- `compress-warm.sh` (weekly, Sunday 04:00) — re-summarise overgrown `decisions.md` sections to keep the always-loaded warm tier compact.
-- `second_brain-memory_router-on-start.sh` (called by SessionStart) — query the brain for any new entries since last session in scopes the agent cares about.
+Rotation is **not** cron any more — it is wired into the Stop hook's housekeeping, so it is a default rather than advice the installer prints:
+
+- `decay-sweep.sh` — ages out entries whose salience no longer justifies their place in the active tier.
+- `archive-roll.sh` — rolls oversized layers into `core/archived/`.
+- `reflect-nudge.sh` — asks the live session to consolidate `active → passive`. Fired on a turn checkpoint by the Stop hook, and on idle by the watchdog (`MEMORY_IDLE_CONSOLIDATE_MIN`, default 10 min).
+
+All of these talk to the brain through `scripts/mcp-call.sh`, which performs the MCP handshake (`initialize` → `mcp-session-id` → call → `DELETE`). A bare POST is rejected with `400 Bad Request: Missing session ID`, and a session left unclosed leaks server-side memory.
 
 ### Multi-agent scenarios
 

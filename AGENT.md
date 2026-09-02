@@ -178,7 +178,7 @@ test -x agent-template/install.sh || { echo "agent-template/install.sh missing o
 ls agent-template/templates/ agent-template/scripts/ agent-template/hooks/ agent-template/docs/
 ```
 
-You should see template files (`CLAUDE.md.template`, `rules.md.template`, `mcp.json.template`, etc.), workspace scripts (`memory-rotate.sh`, `trim-hot.sh`, `rotate-warm.sh`, `compress-warm.sh`, `second_brain-memory_router-on-start.sh`), hooks (`stop-hook.sh`, `session-start-hook.sh`, `precompact-hook.sh`), and docs (`ARCHITECTURE.md`, `MEMORY.md`, `HOOKS.md`, `MULTI-AGENT.md`, `TOKEN-OPTIMIZATION.md`, `SETUP-GUIDE.md`).
+You should see template files (`CLAUDE.md.template`, `rules.md.template`, `mcp.json.template`, etc.), workspace scripts (`active-writer.sh`, `working-set-build.sh`, `reflect-nudge.sh`, `brain-flush.sh`, `decay-sweep.sh`, `archive-roll.sh`, `mcp-call.sh`, `task-poller.sh`, `task_poller.py`), hooks (`stop-hook.sh`, `session-start-hook.sh`, `precompact-hook.sh`, `user-prompt-submit-hook.sh`, `heartbeat-hook.sh`), and docs (`ARCHITECTURE.md`, `MEMORY.md`, `HOOKS.md`, `MULTI-AGENT.md`, `TOKEN-OPTIMIZATION.md`, `SETUP-GUIDE.md`).
 
 If any of those are missing → STOP and ask the user to re-clone. Path B cannot proceed without a complete `agent-template/`.
 
@@ -488,10 +488,10 @@ The script is **interactive**. It will prompt for:
 
 The script will:
 
-1. Create `~/.claude-lab/<agent-id>/.claude/` with the full skeleton: `CLAUDE.md`, `core/USER.md`, `core/rules.md`, `core/MEMORY.md`, `core/LEARNINGS.md`, `core/AGENTS.md`, `core/warm/decisions.md`, `core/hot/handoff.md`, `core/hot/recent.md`, `tools/TOOLS.md`, `settings.json`, `hooks/`, `scripts/`, `skills/`.
+1. Create `~/.claude-lab/<agent-id>/.claude/` with the full skeleton: `CLAUDE.md`, `core/USER.md`, `core/rules.md`, `core/MEMORY.md`, `core/LEARNINGS.md`, `core/AGENTS.md`, `core/passive/decisions.md`, `core/active/handoff.md`, `core/active/episodic.md`, `tools/TOOLS.md`, `settings.json`, `hooks/`, `scripts/`, `skills/`.
 2. Render each `*.template` file with the user's answers using a `sed_i` helper that works on both macOS and Linux.
 3. Copy hook shell scripts (`stop-hook.sh`, `session-start-hook.sh`, `precompact-hook.sh`) into `hooks/` and `chmod +x` them.
-4. Copy memory-rotation scripts (`memory-rotate.sh`, `trim-hot.sh`, `rotate-warm.sh`, `compress-warm.sh`, `second_brain-memory_router-on-start.sh`) into `scripts/` and `chmod +x` them.
+4. Copy the workspace scripts (`active-writer.sh`, `working-set-build.sh`, `reflect-nudge.sh`, `brain-flush.sh`, `decay-sweep.sh`, `archive-roll.sh`, `mcp-call.sh`, `task-poller.sh`, `task_poller.py`) into `scripts/` and `chmod +x` them, and copy `SECONDBRAIN_WRITE_RULES.md` + `AGENT_ROUTER.md` into the workspace root.
 5. Write `.mcp.json` from `agent-template/templates/mcp.json.template`, leaving the `Authorization: Bearer <AGENT_BEARER>` placeholder in place.
 6. Print the path to the new workspace and the next step (issue token + fill `.mcp.json`).
 
@@ -507,12 +507,15 @@ ls -la "$WORKSPACE"
 test -f "$WORKSPACE/CLAUDE.md"
 test -f "$WORKSPACE/core/rules.md"
 test -f "$WORKSPACE/core/USER.md"
-test -f "$WORKSPACE/core/warm/decisions.md"
-test -f "$WORKSPACE/core/hot/handoff.md"
+test -f "$WORKSPACE/core/passive/decisions.md"
+test -f "$WORKSPACE/core/active/handoff.md"
 test -f "$WORKSPACE/.mcp.json"
 test -x "$WORKSPACE/hooks/stop-hook.sh"
 test -x "$WORKSPACE/hooks/session-start-hook.sh"
-test -x "$WORKSPACE/scripts/trim-hot.sh"
+test -x "$WORKSPACE/scripts/active-writer.sh"
+test -x "$WORKSPACE/scripts/task-poller.sh"
+test -f "$WORKSPACE/AGENT_ROUTER.md"
+test -f "$WORKSPACE/SECONDBRAIN_WRITE_RULES.md"
 ```
 
 All `test` calls must succeed. If any fails, the template rendering had an issue — read `agent-template/install.sh`'s last output to find which file failed, fix, and re-run install for that agent.
@@ -554,24 +557,22 @@ For each agent, edit `~/.claude-lab/<agent-id>/.claude/.mcp.json` and replace th
 
 Then `chmod 600` the file.
 
-### Step 16: Set up per-workspace crontab entries
+### Step 16: Nothing to schedule — rotation is wired in
 
-Each workspace ships its own memory-rotation scripts. They need cron entries appended (not replaced) to the user's crontab. For each workspace:
+**There is no crontab step any more.** Rotation used to be an *optional* cron block the installer printed as text; if the operator never set it up, nothing bounded memory growth. It is now driven by the workspace itself, so it is a default rather than advice:
+
+- **Housekeeping** — `stop-hook.sh` runs `decay-sweep.sh` and `archive-roll.sh` in the background at most once a day (`MEMORY_HOUSEKEEPING_INTERVAL_SEC`, default 86400), tracked by `state/last-housekeeping`.
+- **Consolidation** — `reflect-nudge.sh` asks the live session to distil `core/active/` into `core/passive/`. Fired on a turn checkpoint by `stop-hook.sh` (`MEMORY_CHECKPOINT_EVERY_N_TURNS`, default 20) and on idle by the watchdog (`MEMORY_IDLE_CONSOLIDATE_MIN`, default 10 minutes).
+
+Verify it is actually running instead of checking `crontab -l`:
 
 ```bash
 WORKSPACE=~/.claude-lab/<agent-id>/.claude
-(crontab -l 2>/dev/null; cat <<EOF
-# memory rotation for <agent-id>
-0 * * * *  /bin/bash -lc "$WORKSPACE/scripts/trim-hot.sh         >> $WORKSPACE/logs/trim-hot.log 2>&1"
-30 3 * * * /bin/bash -lc "$WORKSPACE/scripts/rotate-warm.sh      >> $WORKSPACE/logs/rotate-warm.log 2>&1"
-0 4 * * 0  /bin/bash -lc "$WORKSPACE/scripts/compress-warm.sh    >> $WORKSPACE/logs/compress-warm.log 2>&1"
-EOF
-) | crontab -
-
-crontab -l | grep "<agent-id>"
+cat "$WORKSPACE/core/passive/.consolidated-at"   # watermark should not be ancient
+tail -5 "$WORKSPACE/logs/hooks.log"              # look for "notify queued"
 ```
 
-You should see three new lines per agent. If the user has many agents (say 5), the crontab grows but stays manageable. Do not bundle multiple agents into a single cron line — keep them independent so one agent's failing rotation does not silently take down another's.
+An empty watermark on an agent that has been running for days means consolidation never fired — start from `logs/hooks.log`, not from cron.
 
 ### Step 17: Verify the workspace boots and recalls
 
@@ -585,7 +586,7 @@ claude --project ~/.claude-lab/<agent-id>/.claude
 
 1. The CLI opens without errors.
 2. The SessionStart hook (`hooks/session-start-hook.sh`) runs and writes a fresh top-of-handoff entry.
-3. The first turn loads CLAUDE.md, `core/rules.md`, `core/warm/decisions.md`, `core/hot/handoff.md` — confirm by asking the agent: "What is your role?". It should answer with the role you set in step 12.
+3. The first turn loads CLAUDE.md, `core/rules.md`, `core/passive/decisions.md`, `core/active/handoff.md` — confirm by asking the agent: "What is your role?". It should answer with the role you set in step 12.
 4. Ask the agent: "Recall recent entries from scope external." The agent should call `recall.recent` against the brain and return results (at minimum, the URL forwarded in Path A step 10).
 
 If recall returns 0 results despite the brain having data:
@@ -696,7 +697,7 @@ For each agent in the user's list:
 - [ ] `.mcp.json` has all three second_brain entries (memory / memory_router / agent_router), each with that agent's Bearer (not the placeholder, not the inbox-agent token, not another agent's token).
 - [ ] `claude --project ~/.claude-lab/<agent-id>/.claude` opens without errors and reports the role you set.
 - [ ] From inside that agent, `recall.recent(scope='external')` returns results (at minimum, the URL forwarded in Path A step 10).
-- [ ] `crontab -l | grep <agent-id>` shows three rotation entries (trim-hot, rotate-warm, compress-warm).
+- [ ] `cat <workspace>/core/passive/.consolidated-at` shows a recent watermark — consolidation is firing (there is no crontab to check: rotation and consolidation are driven by the Stop hook and the watchdog).
 - [ ] Per-agent token is in `agent_tokens` with the right scopes: `psql -U second_brain -d second_brain -c "SELECT agent, can_write_scopes FROM agent_tokens WHERE agent='<agent-id>' AND revoked_at IS NULL;"`.
 
 Once all are checked, tell the user: "Deployment complete. The brain is running on `<VPS_IP>`, the inbox-agent is running locally, end-to-end capture is verified, and N personal agent workspaces are ready under `~/.claude-lab/`."

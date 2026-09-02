@@ -16,12 +16,12 @@ cp systemd/task-mcp.service.template /etc/systemd/system/second_brain-task-mcp.s
 systemctl daemon-reload
 systemctl enable --now second_brain-task-mcp
 
-# 3. Verify
-curl -s -X POST http://127.0.0.1:5003/mcp \
-  -H 'Content-Type: application/json' \
-  -H 'Accept: application/json, text/event-stream' \
-  -H 'Authorization: Bearer <your-agent-token>' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
+# 3. Verify -- FastMCP needs a handshake: a bare POST is answered with
+#    400 "Bad Request: Missing session ID". Use the workspace helper, which
+#    does initialize -> call -> DELETE (an unclosed session leaks server-side).
+source ~/.claude-lab/<agent-id>/.claude/scripts/mcp-call.sh
+mcp_tools_call http://127.0.0.1:5003/mcp "<your-agent-token>" \
+  '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
 ```
 
 ## Port
@@ -37,7 +37,9 @@ Same dual Bearer + HMAC model as other second_brain services:
 
 ### Write scope
 
-Task write operations (create, update, start, review, done, block, reopen) require the `task-board` scope in `can_write_scopes`:
+Task write operations (create, update, claim, start, review, done, block, reopen) require the `task-board` scope in `can_write_scopes`.
+
+Since 2026-09-02 this scope is part of the **default** set issued by `scripts/connect-agents.sh` (`decisions,external,knowledge,inbox,error-patterns,task-board`), so a freshly connected agent already has it. The SQL below is only for topping up an agent issued before that:
 
 ```bash
 # Add task write scope to an existing agent token
@@ -67,7 +69,7 @@ Add to your agent's `.mcp.json`:
 }
 ```
 
-## Tools (13 total)
+## Tools (14 total)
 
 ### Task CRUD (10 tools)
 
@@ -77,6 +79,7 @@ Add to your agent's `.mcp.json`:
 | `task_update` | Update task fields (title, description, assignee, priority, metadata) | yes |
 | `task_get` | Fetch single task by ID | no |
 | `task_list` | List tasks with optional filters (assignee, status) | no |
+| `task_claim` | Atomically claim a `new` task (`new -> progress`), sets you as assignee and takes a lease. Without `task_id` claims the highest-priority oldest one; two agents never get the same task | yes |
 | `task_start` | Transition: new/blocked -> progress | yes |
 | `task_review` | Transition: progress -> review | yes |
 | `task_done` | Transition: review -> done (terminal) | yes |
@@ -103,6 +106,17 @@ blocked   blocked   progress (reopen/reject)
  v
 new (reopen)
 ```
+
+## How an agent actually receives a task
+
+The board does not push. Each agent workspace runs `scripts/task_poller.py` — a long-lived daemon (supervised by `scripts/task-poller.sh`, started by the watchdog) that holds **one** MCP session open and polls `task_list(assignee=<agent>, status=new)` every 5 seconds. On a hit it types a delivery line straight into the agent's tmux pane telling it to `task_claim` the task, do the work in a background subagent, and close it via `task_review` -> `task_done`.
+
+Two consequences worth knowing:
+
+- **`progress -> done` is rejected.** The poller's delivery text says `claim -> review -> done` for that reason.
+- **No headless `claude -p` is involved.** Delivery is typed into the live subscription session, so it costs no SDK credits.
+
+The agent-side contract lives in `labops-ai-assistant/agent-architecture/AGENT_ROUTER.md`, which is copied into every workspace at scaffold time.
 
 ## CLI wrapper
 
