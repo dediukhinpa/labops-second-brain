@@ -1,11 +1,14 @@
 """FastEmbed wrapper with LRU cache."""
+import gc
 import hashlib
 import logging
+import time
 from collections import OrderedDict
 
 from fastembed import TextEmbedding
 
 from services.shared.config import fastembed_uses_e5_prefix
+from services.shared.embed_model import load_text_embedding
 
 logger = logging.getLogger(__name__)
 
@@ -25,19 +28,74 @@ class Embedder:
     Cache uses OrderedDict as LRU with maxsize check.
     """
 
-    def __init__(self, model_name: str = "intfloat/multilingual-e5-large") -> None:
+    def __init__(
+        self,
+        model_name: str = "intfloat/multilingual-e5-large",
+        cache_dir: str | None = None,
+        onnx_file: str | None = None,
+    ) -> None:
         self._model_name = model_name
+        self._onnx_file = onnx_file
+        # Каталог весов передаём явно: fastembed читает FASTEMBED_CACHE_PATH,
+        # а не наш FASTEMBED_CACHE_DIR, и без аргумента уходит в /tmp.
+        self._cache_dir = cache_dir
         self._model: TextEmbedding | None = None
         self._cache: OrderedDict[str, list[float]] = OrderedDict()
         self.uses_e5_prefix = fastembed_uses_e5_prefix(model_name)
+        # Монотонные часы: время последнего обращения к МОДЕЛИ (не к кэшу) --
+        # по нему решается, что модель простаивает и её пора выгрузить.
+        self._model_last_used: float | None = None
 
     def _ensure_model(self) -> TextEmbedding:
         """Load model on first use."""
         if self._model is None:
             logger.info("Loading FastEmbed model: %s", self._model_name)
-            self._model = TextEmbedding(model_name=self._model_name)
+            self._model = load_text_embedding(
+                self._model_name, self._onnx_file, self._cache_dir
+            )
             logger.info("FastEmbed model loaded")
+        self._model_last_used = time.monotonic()
         return self._model
+
+    @property
+    def model_loaded(self) -> bool:
+        """Загружена ли сейчас модель в память."""
+        return self._model is not None
+
+    def idle_seconds(self, now: float | None = None) -> float:
+        """Сколько секунд модель не использовалась.
+
+        Args:
+            now: Отсчёт монотонных часов (по умолчанию ``time.monotonic()``).
+
+        Returns:
+            Секунды простоя; ``0.0``, если модель не загружена.
+        """
+        if self._model is None or self._model_last_used is None:
+            return 0.0
+        return (time.monotonic() if now is None else now) - self._model_last_used
+
+    def unload(self) -> bool:
+        """Выгрузить модель из памяти, сохранив кэш эмбеддингов.
+
+        Веса модели -- анонимная память (~1.4 ГБ у mpnet на этом хосте, замер
+        через ``/proc/<pid>/statm``: file-backed всего 29 МБ). Ядро может лишь
+        вытеснить её в swap, но не отбросить, поэтому простаивающий воркер
+        держал впустую пятую часть ОЗУ хоста. Кэш остаётся: он маленький
+        (512 записей) и переживает перезагрузку модели.
+
+        Returns:
+            ``True``, если модель была загружена и выгружена.
+        """
+        if self._model is None:
+            return False
+        self._model = None
+        self._model_last_used = None
+        # Явный сбор: у модели циклические ссылки, без него сессия ONNX
+        # доживёт до следующего цикла GC и память не вернётся ОС.
+        gc.collect()
+        logger.info("FastEmbed model unloaded (idle)")
+        return True
 
     def _cache_get(self, text: str) -> list[float] | None:
         """Get cached embedding, updating LRU order."""
@@ -64,8 +122,6 @@ class Embedder:
         Returns:
             List of embedding vectors in same order as input.
         """
-        model = self._ensure_model()
-
         results: list[list[float] | None] = [None] * len(texts)
         uncached_indices: list[int] = []
         uncached_texts: list[str] = []
@@ -79,6 +135,9 @@ class Embedder:
                 uncached_texts.append(text)
 
         if uncached_texts:
+            # Модель поднимаем ТОЛЬКО когда есть что считать: иначе полностью
+            # закэшированная пачка заново тянула бы в память выгруженные веса.
+            model = self._ensure_model()
             all_embeddings: list[list[float]] = []
             for batch_start in range(0, len(uncached_texts), BATCH_SIZE):
                 batch = uncached_texts[batch_start:batch_start + BATCH_SIZE]

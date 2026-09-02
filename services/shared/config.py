@@ -205,6 +205,30 @@ class Config:
             "FASTEMBED_MODEL", "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
         )
     )
+    # Какие веса внутри репозитория модели брать. int8 -- 643 МБ резидента
+    # против 1435 МБ у полных весов и втрое быстрее одиночный запрос, при той
+    # же размерности 768 (замер 2026-09-02). "onnx/model.onnx" -- полные веса.
+    fastembed_onnx_file: str = field(
+        default_factory=lambda: os.environ.get(
+            "FASTEMBED_ONNX_FILE", "onnx/model_quantized.onnx"
+        )
+    )
+    # Куда FastEmbed кладёт веса. Передаётся в TextEmbedding явным аргументом:
+    # сама библиотека читает переменную FASTEMBED_CACHE_PATH, а не наш
+    # FASTEMBED_CACHE_DIR, и без явной передачи молча уходит в
+    # tempfile.gettempdir()/fastembed_cache. Под systemd с PrivateTmp=yes это
+    # приватный tmpfs, который стирается при каждом рестарте -- сервис заново
+    # качал ~1.1 ГБ с HuggingFace и держал их в оперативке вместо диска.
+    fastembed_cache_dir: str | None = field(
+        default_factory=lambda: os.environ.get("FASTEMBED_CACHE_DIR") or None
+    )
+    # Сколько секунд простоя модели терпит ingest-воркер, прежде чем выгрузить
+    # её из памяти. 0 -- не выгружать (поведение до 2026-09).
+    ingest_model_idle_unload_sec: int = field(
+        default_factory=lambda: _env_int(
+            "INGEST_MODEL_IDLE_UNLOAD_SEC", "900", min_value=0
+        )
+    )
     mcp_host: str = field(
         default_factory=lambda: os.environ.get("MCP_HOST", "0.0.0.0")
     )

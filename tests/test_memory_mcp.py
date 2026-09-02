@@ -377,16 +377,16 @@ class TestTemporalDecay:
     """Tests for temporal_decay multiplier buckets."""
 
     def test_fresh_under_24h(self) -> None:
-        assert temporal_decay(0) == 1.5
-        assert temporal_decay(12) == 1.5
-        assert temporal_decay(23.9) == 1.5
+        assert temporal_decay(0) == 1.10
+        assert temporal_decay(12) == 1.10
+        assert temporal_decay(23.9) == 1.10
 
     def test_boundary_24h(self) -> None:
-        assert temporal_decay(24) == 1.2
+        assert temporal_decay(24) == 1.05
 
     def test_one_week(self) -> None:
-        assert temporal_decay(100) == 1.2
-        assert temporal_decay(167.9) == 1.2
+        assert temporal_decay(100) == 1.05
+        assert temporal_decay(167.9) == 1.05
 
     def test_boundary_7_days(self) -> None:
         assert temporal_decay(168) == 1.0
@@ -396,13 +396,22 @@ class TestTemporalDecay:
         assert temporal_decay(719.9) == 1.0
 
     def test_boundary_30_days(self) -> None:
-        assert temporal_decay(720) == 0.9
+        assert temporal_decay(720) == 0.98
 
     def test_old_document(self) -> None:
-        assert temporal_decay(10000) == 0.9
+        assert temporal_decay(10000) == 0.98
 
     def test_negative_hours(self) -> None:
-        assert temporal_decay(-1) == 1.5
+        assert temporal_decay(-1) == 1.10
+
+    def test_buckets_stay_monotonic(self) -> None:
+        """Порядок вёдер важнее их конкретных значений."""
+        assert (
+            temporal_decay(0)
+            > temporal_decay(24)
+            > temporal_decay(168)
+            > temporal_decay(720)
+        )
 
 
 # -----------------------------------------------------------------------
