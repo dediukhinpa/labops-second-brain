@@ -40,7 +40,7 @@ A subtle corollary: shared memory is also shared accountability. The moment two 
 
 - [`walkthrough.md`](./walkthrough.md) — sections "The Problem: Agents Without Memory" and "The Solution: Shared Brain Behind an API".
 - [`README.md`](../README.md) — top section only, for the one-paragraph framing.
-- [`agent-template/docs/MEMORY.md`](../agent-template/docs/MEMORY.md) — optional, if the tiering idea feels abstract.
+- [`agent-template/docs/MEMORY.md`](https://github.com/dediukhinpa/labops-ai-assistant/blob/main/agent-architecture/agent-template/docs/MEMORY.md) — optional, if the tiering idea feels abstract.
 
 ### Hands-on
 
@@ -67,7 +67,7 @@ The three services split by verb, not by data. Memory writes facts. Recall reads
 ### Read
 
 - [`architecture.md`](./architecture.md) — the canonical stack overview.
-- [`agent-template/docs/ARCHITECTURE.md`](../agent-template/docs/ARCHITECTURE.md) — same picture from the agent side: what an agent sees, what it sends, what it expects back.
+- [`agent-template/docs/ARCHITECTURE.md`](https://github.com/dediukhinpa/labops-ai-assistant/blob/main/agent-architecture/agent-template/docs/ARCHITECTURE.md) — same picture from the agent side: what an agent sees, what it sends, what it expects back.
 - [`security.md`](./security.md) — optional, the auth section makes the middleware story concrete.
 
 ### Hands-on
@@ -96,9 +96,9 @@ The compile step is where the real design choices live. A naive compile is "take
 
 ### Read
 
-- [`inbox-agent/README.md`](../inbox-agent/README.md) — the reference implementation.
-- [`agent-template/docs/FIRST-AGENT.md`](../agent-template/docs/FIRST-AGENT.md) — generic shape of any first agent you write.
-- [`agent-template/docs/HOOKS.md`](../agent-template/docs/HOOKS.md) — optional, only if you want to wire custom hooks before compile.
+- `inbox-agent` — the inbox pattern is described in [walkthrough.md](walkthrough.md#the-inbox-pattern); it is a pattern to build, not a component shipped in this repo.
+- [`agent-template/docs/FIRST-AGENT.md`](https://github.com/dediukhinpa/labops-ai-assistant/blob/main/agent-architecture/agent-template/docs/FIRST-AGENT.md) — generic shape of any first agent you write.
+- [`agent-template/docs/HOOKS.md`](https://github.com/dediukhinpa/labops-ai-assistant/blob/main/agent-architecture/agent-template/docs/HOOKS.md) — optional, only if you want to wire custom hooks before compile.
 
 ### Hands-on
 
@@ -124,10 +124,10 @@ A useful test: imagine you handed your `CLAUDE.md` to a new contractor and asked
 
 ### Read
 
-- [`agent-template/templates/CLAUDE.md.template`](../agent-template/templates/CLAUDE.md.template) — the skeleton.
-- [`agent-template/docs/AGENT-LAWS.md`](../agent-template/docs/AGENT-LAWS.md) — the patterns that make an agent reliable over many sessions.
-- [`agent-template/docs/MEMORY.md`](../agent-template/docs/MEMORY.md) — how the memory tiers connect back to the file.
-- [`agent-template/docs/MULTI-AGENT.md`](../agent-template/docs/MULTI-AGENT.md) — optional, only if you plan a second agent in the next month.
+- [`agent-template/templates/CLAUDE.md.template`](https://github.com/dediukhinpa/labops-ai-assistant/blob/main/agent-architecture/agent-template/templates/CLAUDE.md.template) — the skeleton.
+- [`agent-template/docs/AGENT-LAWS.md`](https://github.com/dediukhinpa/labops-ai-assistant/blob/main/agent-architecture/agent-template/docs/AGENT-LAWS.md) — the patterns that make an agent reliable over many sessions.
+- [`agent-template/docs/MEMORY.md`](https://github.com/dediukhinpa/labops-ai-assistant/blob/main/agent-architecture/agent-template/docs/MEMORY.md) — how the memory tiers connect back to the file.
+- [`agent-template/docs/MULTI-AGENT.md`](https://github.com/dediukhinpa/labops-ai-assistant/blob/main/agent-architecture/agent-template/docs/MULTI-AGENT.md) — optional, only if you plan a second agent in the next month.
 
 ### Hands-on
 
@@ -156,7 +156,7 @@ One real-world note: a clean install on a fresh VPS is almost always easier than
 - [`setup.md`](./setup.md) — step-by-step install and config.
 - [`security.md`](./security.md) — what the threat model is, what tokens to rotate, what to put on a firewall.
 - [`troubleshooting.md`](./troubleshooting.md) — skim it before you deploy, not after.
-- [`agent-template/docs/SETUP-GUIDE.md`](../agent-template/docs/SETUP-GUIDE.md) — agent-side install, after the brain is up.
+- [`agent-template/docs/SETUP-GUIDE.md`](https://github.com/dediukhinpa/labops-ai-assistant/blob/main/agent-architecture/agent-template/docs/SETUP-GUIDE.md) — agent-side install, after the brain is up.
 
 ### Hands-on
 
