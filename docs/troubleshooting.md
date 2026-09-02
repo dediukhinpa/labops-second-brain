@@ -301,18 +301,20 @@ What you should not do: edit `~/.claude/CLAUDE.md` to add agent-specific rules (
 
 ---
 
-## Q: Memory rotation cron didn't run for my agent
+## Q: Memory never rotates or consolidates for my agent
 
-**Symptoms:** `core/hot/recent.md` keeps growing forever and never rolls into `core/hot/archive/`. `core/warm/decisions.md` has entries older than 14 days that should have moved to `core/MEMORY.md`. `logs/trim-hot.log` is empty or missing.
+**Symptoms:** `core/active/episodic.md` grows forever and never rolls into `core/archived/episodic/`; `core/passive/` stays empty or `.consolidated-at` is missing/ancient.
+
+> There is no cron to check. Rotation and consolidation used to be an optional crontab block the installer printed as text — if the operator never set it up, nothing bounded memory growth. Both are now driven by the workspace: housekeeping (`decay-sweep.sh` + `archive-roll.sh`) runs from `stop-hook.sh` at most once a day, and consolidation is nudged by `reflect-nudge.sh` on a turn checkpoint and by the watchdog on idle.
 
 **Diagnosis chain:**
 
-1. **Crontab missing the entry.** `crontab -l | grep <agent-id>`. You should see three lines per agent (one each for `trim-hot.sh`, `rotate-warm.sh`, `compress-warm.sh`). If empty, the install never added them — re-add per the setup.md step 13 snippet.
-2. **Wrong crontab user.** Memory-rotation crons must be installed in **your user's** crontab, not `root`'s. `whoami` and `crontab -l` should both reflect the user who owns `~/.claude-lab/<agent-id>/`. If the entries are in `sudo crontab -l` (root), move them: `sudo crontab -l | grep <agent-id>` then add to your own `crontab -e`.
-3. **Wrong path in cron.** Cron runs with a minimal environment. If the entry references `$INBOX_AGENT_HOME` or `~` without expansion, it silently fails. Use absolute paths: `/Users/<you>/.claude-lab/<agent-id>/.claude/scripts/trim-hot.sh`, not `~/.claude-lab/.../scripts/trim-hot.sh`.
-4. **Script not executable.** `ls -l ~/.claude-lab/<agent-id>/.claude/scripts/*.sh` — every script should have the `x` bit. If not, `chmod +x` them.
-5. **No log entries at all.** Check `tail /var/log/syslog | grep CRON` (Linux) or `tail /var/log/system.log | grep cron` (macOS). If cron is running but the entry never fires, the schedule expression is malformed.
-6. **Per-agent isolation.** Each workspace has its own cron entries. If you have 5 personal agents, you should see 15 lines in `crontab -l`. Do not consolidate them — keep them independent so one agent's failing rotation does not silently take down another's.
+1. **Is the Stop hook firing at all?** `tail -20 <workspace>/logs/hooks.log`. Every finished turn should leave a `[stop-hook]` line. Nothing there means no capture, no housekeeping and no checkpoint — start here.
+2. **Is housekeeping being skipped as "already done"?** `cat <workspace>/state/last-housekeeping` holds an epoch. It runs at most once per `MEMORY_HOUSEKEEPING_INTERVAL_SEC` (default 86400). Delete the file to force a run on the next turn.
+3. **Did the consolidation nudge reach the session?** Look for `notify queued` in `hooks.log`. `notify failed` means the brain rejected the call — check the Bearer and that `mcp-call.sh` is present (a bare POST is answered with `400 Missing session ID`).
+4. **Is the agent idle-consolidating?** The watchdog fires `reflect-nudge.sh --reason idle` after `MEMORY_IDLE_CONSOLIDATE_MIN` (default 10 min) of quiet. If the pane holds a *drawn* prompt that was never submitted, older watchdogs never reached the idle branch at all — make sure the unit was restarted after updating `orchestration/watchdog.sh`; a running watchdog holds the code bash parsed at start.
+5. **Scripts not executable.** `ls -l <workspace>/scripts/*.sh` — every script needs the `x` bit.
+6. **A consolidation request stuck unanswered.** `ls <workspace>/core/active/requests/`. Entries piling up mean the session is being asked and never answers; the watermark stays where it was.
 
 ---
 
@@ -325,7 +327,7 @@ What you should not do: edit `~/.claude/CLAUDE.md` to add agent-specific rules (
 **Fix:**
 
 1. Restore from your most recent backup of the workspace (you backed up before re-running, right?).
-2. If no backup, check `~/.claude-lab/<agent-id>/.claude/core/hot/recent.md` and `core/warm/decisions.md` — these are append-only and survive template re-renders.
+2. If no backup, check `~/.claude-lab/<agent-id>/.claude/core/active/episodic.md` and `core/passive/decisions.md` — these are append-only and survive template re-renders.
 3. For future updates: do **not** re-run `install.sh` against an existing workspace. To update the template files (e.g. pick up a new hook), copy only the specific file you want from `agent-template/templates/` after rendering it manually, or do a `diff` first.
 4. To pick up a new memory-rotation script, just copy that one file into `~/.claude-lab/<agent-id>/.claude/scripts/` — no install needed.
 

@@ -98,7 +98,8 @@ sudo -u second_brain python /opt/second_brain/scripts/issue-agent-token.py \
   "mcpServers": {
     "second_brain-memory": { "url": "http://<VPS>:5001/mcp", "headers": { "Authorization": "Bearer <token>" } },
     "second_brain-memory_router": { "url": "http://<VPS>:5002/mcp", "headers": { "Authorization": "Bearer <token>" } },
-    "second_brain-agent_router":  { "url": "http://<VPS>:5000/mcp", "headers": { "Authorization": "Bearer <token>" } }
+    "second_brain-agent_router":  { "url": "http://<VPS>:5000/mcp", "headers": { "Authorization": "Bearer <token>" } },
+    "second_brain-tasks":         { "url": "http://<VPS>:5003/mcp", "headers": { "Authorization": "Bearer <token>" } }
   }
 }
 ```
@@ -126,8 +127,8 @@ curl -sS -H "Authorization: Bearer <token>" http://<VPS>:5002/mcp/
 %%{init: {'theme':'base','themeVariables':{'primaryColor':'#EDE9FE','primaryTextColor':'#4C1D95','primaryBorderColor':'#8B5CF6','lineColor':'#8B5CF6','secondaryColor':'#F1F5F9','tertiaryColor':'#ffffff','clusterBkg':'transparent','clusterBorder':'#B794F4','fontFamily':'Helvetica,Arial,sans-serif'}}}%%
 flowchart LR
     L1["L1 · Идентичность<br/>CLAUDE.md, rules.md<br/>(в системном промпте)"]
-    L2["L2 · Горячая<br/>hot/recent.md, handoff.md<br/>(текущая работа)"]
-    L3["L3 · Тёплая<br/>warm/decisions.md<br/>(ротация)"]
+    L2["L2 · Активная<br/>active/episodic.md, working-set.md, handoff.md<br/>(текущая работа)"]
+    L3["L3 · Пассивная<br/>passive/decisions.md, errors.md, insights.md<br/>(консолидация)"]
     L4["L4 · Общий мозг<br/>labops-second-brain<br/>(vault + pgvector)"]
     L1 --> L2 --> L3 --> L4
     classDef brand fill:#8B5CF6,stroke:#6D28D9,color:#ffffff,font-weight:bold

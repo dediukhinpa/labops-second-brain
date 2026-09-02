@@ -298,7 +298,7 @@ The script is interactive. It will ask:
 - **model** — `claude-sonnet-4.6` for most roles, `claude-opus-4.7` for a coordinator.
 - **install dir** — default `~/.claude-lab/<agent-id>`. Confirm.
 
-The script creates `~/.claude-lab/<agent-id>/.claude/` with the full skeleton: `CLAUDE.md`, `core/USER.md`, `core/rules.md`, `core/MEMORY.md`, `core/LEARNINGS.md`, `core/AGENTS.md`, `core/warm/decisions.md`, `core/hot/handoff.md`, `core/hot/recent.md`, `tools/TOOLS.md`, `settings.json`, plus `hooks/` (stop / session-start / pre-compact) and `scripts/` (memory rotation). All template files are rendered with your answers using a `sed_i` helper that works on both macOS and Linux.
+The script creates `~/.claude-lab/<agent-id>/.claude/` with the full skeleton: `CLAUDE.md`, `core/USER.md`, `core/rules.md`, `core/MEMORY.md`, `core/LEARNINGS.md`, `core/AGENTS.md`, `core/passive/decisions.md`, `core/active/handoff.md`, `core/active/episodic.md`, `tools/TOOLS.md`, `settings.json`, plus `hooks/` (stop / session-start / pre-compact) and `scripts/` (memory rotation). All template files are rendered with your answers using a `sed_i` helper that works on both macOS and Linux.
 
 Run it again for each additional agent you want.
 
@@ -311,7 +311,9 @@ test -f "$WORKSPACE/CLAUDE.md"
 test -f "$WORKSPACE/core/rules.md"
 test -f "$WORKSPACE/.mcp.json"
 test -x "$WORKSPACE/hooks/stop-hook.sh"
-test -x "$WORKSPACE/scripts/trim-hot.sh"
+test -x "$WORKSPACE/scripts/active-writer.sh"
+test -x "$WORKSPACE/scripts/task-poller.sh"
+test -f "$WORKSPACE/AGENT_ROUTER.md"
 ```
 
 All checks must pass. If any fails, read the install.sh output for which template did not render and re-run.
@@ -364,19 +366,14 @@ Open `~/.claude-lab/<agent-id>/.claude/.mcp.json` and replace the `<AGENT_BEARER
 
 `chmod 600` the file.
 
-Add per-workspace memory-rotation crons (one set per agent — keep them on separate lines so a failure in one workspace does not bleed into another):
+**No memory-rotation cron is needed.** It used to be an optional block printed here as advice; if you skipped it, nothing bounded memory growth. Rotation and consolidation now run from the workspace itself — housekeeping (`decay-sweep.sh` + `archive-roll.sh`) from `stop-hook.sh` at most once a day, consolidation via `reflect-nudge.sh` on a turn checkpoint and on watchdog idle.
+
+Check it is alive rather than adding cron lines:
 
 ```bash
 WORKSPACE=~/.claude-lab/<agent-id>/.claude
-(crontab -l 2>/dev/null; cat <<EOF
-# memory rotation for <agent-id>
-0 * * * *  /bin/bash -lc "$WORKSPACE/scripts/trim-hot.sh         >> $WORKSPACE/logs/trim-hot.log 2>&1"
-30 3 * * * /bin/bash -lc "$WORKSPACE/scripts/rotate-warm.sh      >> $WORKSPACE/logs/rotate-warm.log 2>&1"
-0 4 * * 0  /bin/bash -lc "$WORKSPACE/scripts/compress-warm.sh    >> $WORKSPACE/logs/compress-warm.log 2>&1"
-EOF
-) | crontab -
-
-crontab -l | grep "<agent-id>"
+cat "$WORKSPACE/core/passive/.consolidated-at"   # watermark, not ancient
+tail -5 "$WORKSPACE/logs/hooks.log"              # expect "notify queued"
 ```
 
 ---

@@ -246,10 +246,10 @@ knowledge base entry. You forward, the inbox stores, the summarizer
 classifies, and the recall layer finds it later by meaning. The
 cognitive load on you is one button: forward.
 
-The reference implementation lives in
-[inbox-agent/](../inbox-agent/README.md). It is roughly one hundred
-and fifty lines of bash and Python — small enough to read in one
-sitting and modify for your own ingestion channel.
+There is no `inbox-agent` component in this repo to copy: the pattern
+is yours to build, and it is small — a capture hook, a summarizer
+prompt, and one `memory.write` call, on the order of a hundred lines
+of bash and Python.
 
 ## What You'll Build
 
@@ -287,7 +287,7 @@ the canonical markdown lives in a git-tracked vault. You can rebuild
 the VPS from scratch in an hour without losing knowledge.
 
 For the build itself, see
-[agent-template/docs/FIRST-AGENT.md](../agent-template/docs/FIRST-AGENT.md)
+[agent-template/docs/FIRST-AGENT.md](https://github.com/dediukhinpa/labops-ai-assistant/blob/main/agent-architecture/agent-template/docs/FIRST-AGENT.md)
 for the local agent setup and [docs/setup.md](setup.md) for the VPS
 side.
 
@@ -353,7 +353,7 @@ recommend.
 If you want to *understand* the system before touching it, read
 [docs/architecture.md](architecture.md) next — it has the diagrams
 this walkthrough deliberately skipped. Then skim
-[agent-template/docs/AGENT-LAWS.md](../agent-template/docs/AGENT-LAWS.md)
+[agent-template/docs/AGENT-LAWS.md](https://github.com/dediukhinpa/labops-ai-assistant/blob/main/agent-architecture/agent-template/docs/AGENT-LAWS.md)
 to see the rule system that keeps agents from misbehaving.
 
 If you want to *deploy*, the fastest path is to hand
@@ -365,22 +365,21 @@ prefer to drive the install yourself,
 
 If you want to *build your first agent on top* of an already-deployed
 brain, start with
-[agent-template/docs/SETUP-GUIDE.md](../agent-template/docs/SETUP-GUIDE.md)
+[agent-template/docs/SETUP-GUIDE.md](https://github.com/dediukhinpa/labops-ai-assistant/blob/main/agent-architecture/agent-template/docs/SETUP-GUIDE.md)
 and then
-[agent-template/docs/FIRST-AGENT.md](../agent-template/docs/FIRST-AGENT.md).
+[agent-template/docs/FIRST-AGENT.md](https://github.com/dediukhinpa/labops-ai-assistant/blob/main/agent-architecture/agent-template/docs/FIRST-AGENT.md).
 Together they walk you from empty directory to a Claude Code
 workspace that can write and read shared memory.
 
 If you want to run *multiple coordinated agents*,
-[agent-template/docs/MULTI-AGENT.md](../agent-template/docs/MULTI-AGENT.md)
+[agent-template/docs/MULTI-AGENT.md](https://github.com/dediukhinpa/labops-ai-assistant/blob/main/agent-architecture/agent-template/docs/MULTI-AGENT.md)
 covers the patterns: bearer scopes, swarm conventions, when to use
 shared vault versus per-agent local memory, and how to keep agents
 from stepping on each other.
 
-The inbox pattern is its own track. Read
-[inbox-agent/README.md](../inbox-agent/README.md) and adapt the
-capture surface to whatever channel you actually dump information
-into.
+The inbox pattern is its own track. Take the shape described above
+and adapt the capture surface to whatever channel you actually dump
+information into.
 
 ## What This Is Not
 

@@ -169,7 +169,7 @@ sudo systemctl daemon-reload && sudo systemctl enable --now channel-<agent>
 
 ### Reference implementation
 
-См. [`agent-template/scripts/webhook_listener.py`](../agent-template/scripts/webhook_listener.py) — минимальный aiohttp listener (~80 строк) который:
+См. [`agent-template/scripts/webhook_listener.py`](https://github.com/dediukhinpa/labops-ai-assistant/blob/main/agent-architecture/agent-template/scripts/webhook_listener.py) — минимальный aiohttp listener (~80 строк) который:
 
 1. Слушает `POST /webhook` на `127.0.0.1:8091` (configurable через `WEBHOOK_PORT` env)
 2. Верифицирует Bearer (из `WEBHOOK_BEARER` env) ИЛИ HMAC (из `WEBHOOK_HMAC_SECRET` env) — в зависимости от того что задано
@@ -278,7 +278,7 @@ autossh -M 0 -f -N -o "ServerAliveInterval 60" -o "ServerAliveCountMax 3" \
 - Inject payload в свою runtime сессию (специфично для твоего фреймворка)
 - Вернуть `200 OK` после успешной inject (или `4xx`/`5xx` для retry от worker'а)
 
-Reference: [`agent-template/scripts/webhook_listener.py`](../agent-template/scripts/webhook_listener.py) — copy и адаптируй inject шаг под свой runtime.
+Reference: [`agent-template/scripts/webhook_listener.py`](https://github.com/dediukhinpa/labops-ai-assistant/blob/main/agent-architecture/agent-template/scripts/webhook_listener.py) — copy и адаптируй inject шаг под свой runtime.
 
 ---
 
@@ -408,7 +408,7 @@ Listener должен быть idempotent — если worker делает retry
 - jarvis-channel plugin (Claude Code receiver): [`dediukhinpa/labops-tg-plugin`](https://github.com/dediukhinpa/labops-tg-plugin)
 - Hermes outgoing HMAC + sidecar proxy: [`docs/hermes-integration.md`](hermes-integration.md)
 - Worker AGENT_GATEWAYS spec: [`docs/hermes-integration.md` §7](hermes-integration.md#7-outbound-hmac-agent_router-worker)
-- Reference listener: [`agent-template/scripts/webhook_listener.py`](../agent-template/scripts/webhook_listener.py)
+- Reference listener: [`agent-template/scripts/webhook_listener.py`](https://github.com/dediukhinpa/labops-ai-assistant/blob/main/agent-architecture/agent-template/scripts/webhook_listener.py)
 - Architecture overview: [`docs/architecture.md`](architecture.md)
 - Security model: [`docs/security.md`](security.md)
 - Troubleshooting общий: [`docs/troubleshooting.md`](troubleshooting.md)
