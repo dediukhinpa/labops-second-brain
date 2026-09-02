@@ -137,6 +137,9 @@ RESERVED_VARS: frozenset[str] = frozenset({
     "LC_MESSAGES", "LC_MONETARY", "LC_PAPER", "LC_NAME", "LC_ADDRESS",
     "LC_TELEPHONE", "LC_MEASUREMENT", "LC_IDENTIFICATION",
     "CLAUDE_SDK_CHILD",
+    # Выставляется самим sudo, а не оператором: документировать в .env.example
+    # нечего, но connect-agents.sh обязан её читать, чтобы найти дом оператора.
+    "SUDO_USER",
     # Common Python venv/virtualenv vars
     "PYTHONPATH", "VIRTUAL_ENV", "PYTHONDONTWRITEBYTECODE", "PYTHONUNBUFFERED",
     # ssh / shell positionals indirectly

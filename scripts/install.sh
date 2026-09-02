@@ -50,7 +50,10 @@ fi
 # worker is likely to be OOM-killed and recall silently degrades to
 # lexical-only — warn loudly up front instead of failing mysteriously later.
 MEM_TOTAL_KB="$(awk '/^MemTotal:/{print $2}' /proc/meminfo 2>/dev/null || echo 0)"
-if [ "${MEM_TOTAL_KB:-0}" -gt 0 ] && [ "$MEM_TOTAL_KB" -lt 3000000 ]; then
+# Без `:-0`: awk выше всегда что-то присваивает, а лишняя подстановка по
+# умолчанию выдавала локальную переменную за настройку окружения — из-за неё
+# check_env_sync требовал MEM_TOTAL_KB в .env.example, где ей не место.
+if [ "$MEM_TOTAL_KB" -gt 0 ] && [ "$MEM_TOTAL_KB" -lt 3000000 ]; then
   log "WARNING: only $((MEM_TOTAL_KB / 1024)) MB RAM — ingest-worker (FastEmbed, ~1.1 GB resident) may be OOM-killed; recall would degrade to lexical-only. 4 GB+ recommended."
 fi
 
