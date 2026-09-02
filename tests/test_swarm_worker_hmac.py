@@ -437,3 +437,54 @@ def test_worker_missing_gateway_url_still_retries(monkeypatch: pytest.MonkeyPatc
     status, err = asyncio.run(worker._deliver_one(client, {}, _make_row("unknown"), {}))
     assert status == "retry"
     assert "no gateway URL" in err
+
+
+def test_gateway_body_carries_structured_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Шлюзу нужны task_id/from_agent рядом с message, а не только в тексте.
+
+    webhook-listener читает структурные поля; когда их не было, он получал
+    task_id="no-id", считал доставку вырожденной и молча отвечал empty_inbox --
+    задача доходила до слушателя и там умирала, не породив ни одного запуска.
+    """
+    monkeypatch.setenv("GATEWAY_WEBHOOK_TOKEN", "t")
+    monkeypatch.delenv("AGENT_GATEWAY_AUTH", raising=False)
+    worker = _reload_worker(monkeypatch)
+
+    client = _RecordingClient()
+    row = _make_row("claude", task_id="t-42", from_agent="nova")
+    row["payload_json"] = json.dumps(
+        {"title": "Memory consolidation", "body": "распаковать эпизодику",
+         "instruction_type": "memory_consolidate"}
+    )
+
+    status, err = asyncio.run(
+        worker._deliver_one(client, {"claude": "http://gw/claude"}, row, {})
+    )
+    assert status == "acked", err
+    sent = json.loads(client.calls[0]["content"].decode("utf-8"))
+    assert sent["task_id"] == "t-42"
+    assert sent["from_agent"] == "nova"
+    assert sent["title"] == "Memory consolidation"
+    assert sent["instruction_type"] == "memory_consolidate"
+    # message остаётся -- на нём держится канал labops-channel.
+    assert "message" in sent and sent["chatId"] is not None
+
+
+def test_gateway_body_defaults_when_payload_is_bare(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Пустой payload не должен ронять доставку -- поля просто пустые."""
+    monkeypatch.setenv("GATEWAY_WEBHOOK_TOKEN", "t")
+    monkeypatch.delenv("AGENT_GATEWAY_AUTH", raising=False)
+    worker = _reload_worker(monkeypatch)
+
+    client = _RecordingClient()
+    row = _make_row("claude")
+    row["payload_json"] = json.dumps({})
+
+    status, err = asyncio.run(
+        worker._deliver_one(client, {"claude": "http://gw/claude"}, row, {})
+    )
+    assert status == "acked", err
+    sent = json.loads(client.calls[0]["content"].decode("utf-8"))
+    assert sent["title"] == "(no title)"
+    assert sent["body"] == ""
+    assert sent["instruction_type"] == ""

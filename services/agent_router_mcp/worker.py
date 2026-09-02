@@ -302,6 +302,17 @@ async def _deliver_one(
     body = {
         "message": _format_virtual_prompt(row["from_agent"], to_agent, row["task_id"], payload),
         "chatId": OWNER_CHAT_ID,
+        # Структурные поля рядом с message: webhook-listener читает task_id,
+        # from_agent и instruction_type, а не текст промпта. Без них он видел
+        # task_id="no-id", считал доставку «вырожденной» и молча отвечал
+        # empty_inbox -- побудка на консолидацию доходила до слушателя и там
+        # умирала (замер 2026-09-02). Схема плагина labops-channel -- не
+        # strict-объект, лишние ключи он отбрасывает, так что канал не ломается.
+        "task_id": row["task_id"],
+        "from_agent": row["from_agent"],
+        "title": payload.get("title") or "(no title)",
+        "body": payload.get("body") or "",
+        "instruction_type": payload.get("instruction_type") or "",
     }
 
     auth = _gateway_auth_for(to_agent, auth_map or {})
