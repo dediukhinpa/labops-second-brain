@@ -26,6 +26,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from services.shared.asgi_auth import HermesAwareAuthMiddleware
 from services.shared.config import Config
 from services.shared.db import close_pool, get_pool
+from services.shared.embed_model import load_text_embedding
 from services.shared.mcp_http import build_http_app
 
 from .cache import RecallCache
@@ -100,11 +101,12 @@ async def lifespan(server: FastMCP) -> AsyncIterator[dict[str, Any]]:
     _pool = await get_pool(config)
 
     logger.info("Loading FastEmbed model: %s", config.fastembed_model)
-    from fastembed import TextEmbedding
     # cache_dir обязателен: без него fastembed уходит в /tmp, который под
     # PrivateTmp=yes стирается на каждом рестарте -- и веса качаются заново.
-    _embed_model = TextEmbedding(
-        config.fastembed_model, cache_dir=config.fastembed_cache_dir
+    _embed_model = load_text_embedding(
+        config.fastembed_model,
+        config.fastembed_onnx_file,
+        config.fastembed_cache_dir,
     )
 
     # Optional second-stage cross-encoder reranker. Best-effort: a load failure

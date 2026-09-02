@@ -240,7 +240,9 @@ async def run_worker() -> None:
     config = Config()
     pool = await get_pool(config)
     embedder = Embedder(
-        model_name=config.fastembed_model, cache_dir=config.fastembed_cache_dir
+        model_name=config.fastembed_model,
+        cache_dir=config.fastembed_cache_dir,
+        onnx_file=config.fastembed_onnx_file,
     )
     idle_unload_sec = config.ingest_model_idle_unload_sec
     cache_dir = config.fastembed_cache_dir

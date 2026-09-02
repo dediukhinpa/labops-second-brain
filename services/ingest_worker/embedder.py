@@ -8,6 +8,7 @@ from collections import OrderedDict
 from fastembed import TextEmbedding
 
 from services.shared.config import fastembed_uses_e5_prefix
+from services.shared.embed_model import load_text_embedding
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +32,10 @@ class Embedder:
         self,
         model_name: str = "intfloat/multilingual-e5-large",
         cache_dir: str | None = None,
+        onnx_file: str | None = None,
     ) -> None:
         self._model_name = model_name
+        self._onnx_file = onnx_file
         # Каталог весов передаём явно: fastembed читает FASTEMBED_CACHE_PATH,
         # а не наш FASTEMBED_CACHE_DIR, и без аргумента уходит в /tmp.
         self._cache_dir = cache_dir
@@ -47,8 +50,8 @@ class Embedder:
         """Load model on first use."""
         if self._model is None:
             logger.info("Loading FastEmbed model: %s", self._model_name)
-            self._model = TextEmbedding(
-                model_name=self._model_name, cache_dir=self._cache_dir
+            self._model = load_text_embedding(
+                self._model_name, self._onnx_file, self._cache_dir
             )
             logger.info("FastEmbed model loaded")
         self._model_last_used = time.monotonic()

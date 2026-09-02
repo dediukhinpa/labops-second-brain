@@ -38,23 +38,47 @@ class _RecordingModel:
         return [_FakeVector([1.0]) for _ in batch]
 
 
-def test_embedder_passes_cache_dir_to_fastembed(monkeypatch) -> None:
-    _RecordingModel.last_kwargs = {}
-    monkeypatch.setattr(embedder_module, "TextEmbedding", _RecordingModel)
+def _record_loader(monkeypatch) -> dict[str, object]:
+    """Подменить загрузчик модели и вернуть словарь с его аргументами."""
+    seen: dict[str, object] = {}
+
+    def fake_loader(model_name: str, onnx_file: str | None, cache_dir: str | None):
+        seen.update(
+            {"model_name": model_name, "onnx_file": onnx_file, "cache_dir": cache_dir}
+        )
+        return _RecordingModel(model_name, cache_dir)
+
+    monkeypatch.setattr(embedder_module, "load_text_embedding", fake_loader)
+    return seen
+
+
+def test_embedder_passes_cache_dir_to_loader(monkeypatch) -> None:
+    seen = _record_loader(monkeypatch)
 
     emb = Embedder(model_name="fake/model", cache_dir="/var/lib/second_brain/fastembed")
     emb.embed(["проверка"])
 
-    assert _RecordingModel.last_kwargs["cache_dir"] == "/var/lib/second_brain/fastembed"
+    assert seen["cache_dir"] == "/var/lib/second_brain/fastembed"
 
 
 def test_embedder_without_cache_dir_passes_none(monkeypatch) -> None:
-    _RecordingModel.last_kwargs = {}
-    monkeypatch.setattr(embedder_module, "TextEmbedding", _RecordingModel)
+    seen = _record_loader(monkeypatch)
 
     Embedder(model_name="fake/model").embed(["проверка"])
 
-    assert _RecordingModel.last_kwargs["cache_dir"] is None
+    assert seen["cache_dir"] is None
+
+
+def test_embedder_passes_the_onnx_variant(monkeypatch) -> None:
+    seen = _record_loader(monkeypatch)
+
+    Embedder(
+        model_name="fake/model",
+        cache_dir="/cache",
+        onnx_file="onnx/model_quantized.onnx",
+    ).embed(["проверка"])
+
+    assert seen["onnx_file"] == "onnx/model_quantized.onnx"
 
 
 def test_config_reads_cache_dir_from_env(monkeypatch) -> None:

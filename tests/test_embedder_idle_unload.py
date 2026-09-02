@@ -37,7 +37,13 @@ class _FakeModel:
 
 def _make_embedder(monkeypatch) -> Embedder:
     _FakeModel.loads = 0
-    monkeypatch.setattr(embedder_module, "TextEmbedding", _FakeModel)
+    # Модель поднимается через общий загрузчик (он умеет квантованные веса),
+    # поэтому подменяем именно его.
+    monkeypatch.setattr(
+        embedder_module,
+        "load_text_embedding",
+        lambda name, onnx_file, cache_dir: _FakeModel(name),
+    )
     return Embedder(model_name="fake/model")
 
 

@@ -205,6 +205,14 @@ class Config:
             "FASTEMBED_MODEL", "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
         )
     )
+    # Какие веса внутри репозитория модели брать. int8 -- 643 МБ резидента
+    # против 1435 МБ у полных весов и втрое быстрее одиночный запрос, при той
+    # же размерности 768 (замер 2026-09-02). "onnx/model.onnx" -- полные веса.
+    fastembed_onnx_file: str = field(
+        default_factory=lambda: os.environ.get(
+            "FASTEMBED_ONNX_FILE", "onnx/model_quantized.onnx"
+        )
+    )
     # Куда FastEmbed кладёт веса. Передаётся в TextEmbedding явным аргументом:
     # сама библиотека читает переменную FASTEMBED_CACHE_PATH, а не наш
     # FASTEMBED_CACHE_DIR, и без явной передачи молча уходит в
