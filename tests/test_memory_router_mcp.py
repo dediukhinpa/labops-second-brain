@@ -720,3 +720,128 @@ def test_recall_applies_reranking_when_scorer_provided(
 
     paths = [r["path"] for r in out]
     assert paths[:2] == ["p2", "p1"]
+
+
+def _capture_recent_tool(pool: Any):
+    """Зарегистрировать инструменты на рекордере и вернуть функцию recent."""
+    from services.memory_router_mcp.search import register_tools
+
+    class _Recorder:
+        def __init__(self) -> None:
+            self.tools: dict[str, Any] = {}
+
+        def tool(self, **kwargs: Any):
+            def deco(fn):
+                self.tools[fn.__name__] = fn
+                return fn
+            return deco
+
+    recorder = _Recorder()
+    register_tools(
+        recorder,
+        lambda: pool,
+        lambda: _NoopEmbed(),
+        lambda: _SpyCache(),
+        lambda: MagicMock(),
+        tool_set="all",
+    )
+    return recorder.tools["recent"]
+
+
+def _stub_reader(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Подменить разбор личности вызывающего: тест не про авторизацию."""
+    from services.shared.auth import AgentContext
+
+    async def _fake_resolve(_var, _pool, **_kwargs):
+        return AgentContext(agent="nova", write_scopes=[], read_scopes=["*"])
+
+    monkeypatch.setattr(
+        "services.memory_router_mcp.search.resolve_request_identity",
+        _fake_resolve,
+    )
+
+
+def test_recent_without_filter_passes_empty_array(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Без фильтра поведение прежнее: пустой массив, условие не режет выдачу."""
+    _stub_reader(monkeypatch)
+    pool = _CapturingPool(rows=[])
+    recent = _capture_recent_tool(pool)
+
+    tok = _REQUEST_AUTH.set("Bearer test-token")
+    try:
+        asyncio.run(recent(scope="decisions", limit=30))
+    finally:
+        _REQUEST_AUTH.reset(tok)
+
+    assert pool.last_params == ("decisions", 30, [])
+
+
+def test_recent_passes_needles_to_sql(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Отбор должен уходить в БД, иначе limit срежет чужие строки раньше своих.
+
+    Регрессия 2026-09-02: поллер задач берёт recent(scope="decisions",
+    limit=30) и фильтрует у себя. Scope общий -- стоит появиться тридцати
+    заметкам после задачи, и она вываливается из окна навсегда, без ошибки.
+    """
+    _stub_reader(monkeypatch)
+    pool = _CapturingPool(rows=[])
+    recent = _capture_recent_tool(pool)
+
+    tok = _REQUEST_AUTH.set("Bearer test-token")
+    try:
+        asyncio.run(
+            recent(
+                scope="decisions",
+                limit=30,
+                body_contains=["TASK-FOR: nova", "STATUS: open"],
+            )
+        )
+    finally:
+        _REQUEST_AUTH.reset(tok)
+
+    assert pool.last_params == (
+        "decisions", 30, ["TASK-FOR: nova", "STATUS: open"],
+    )
+    assert "ILIKE ALL" in pool.last_query
+    # LIMIT обязан стоять ПОСЛЕ фильтра, иначе смысл правки теряется.
+    assert pool.last_query.index("ILIKE ALL") < pool.last_query.index("LIMIT")
+
+
+def test_recent_drops_empty_needles(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Пустая строка совпала бы со всем -- выбрасываем её, а не фильтруем ею."""
+    _stub_reader(monkeypatch)
+    pool = _CapturingPool(rows=[])
+    recent = _capture_recent_tool(pool)
+
+    tok = _REQUEST_AUTH.set("Bearer test-token")
+    try:
+        asyncio.run(recent(scope="decisions", body_contains=["", "STATUS: open"]))
+    finally:
+        _REQUEST_AUTH.reset(tok)
+
+    assert pool.last_params[2] == ["STATUS: open"]
+
+
+def test_recent_still_gates_scope(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Фильтр не должен открывать чужой scope в обход проверки прав."""
+    from services.shared.auth import AgentContext
+
+    async def _fake_resolve(_var, _pool, **_kwargs):
+        return AgentContext(agent="nova", write_scopes=[], read_scopes=["knowledge"])
+
+    monkeypatch.setattr(
+        "services.memory_router_mcp.search.resolve_request_identity",
+        _fake_resolve,
+    )
+    pool = _CapturingPool(rows=[])
+    recent = _capture_recent_tool(pool)
+
+    tok = _REQUEST_AUTH.set("Bearer test-token")
+    try:
+        with pytest.raises(PermissionError):
+            asyncio.run(recent(scope="decisions", body_contains=["STATUS: open"]))
+    finally:
+        _REQUEST_AUTH.reset(tok)
+    assert pool.fetch_called == 0
