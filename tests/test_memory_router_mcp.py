@@ -35,6 +35,7 @@ from services.memory_router_mcp.search import (
     _embed_query_cached,
     _fts_search,
     _rerank,
+    _RRF_K,
     _rrf_fuse,
     register_tools,
 )
@@ -265,8 +266,8 @@ def test_rrf_fuse_weighted_overlap_scores_higher() -> None:
     merged = _rrf_fuse(vec_rows, fts_rows, vec_weight=0.6, fts_weight=0.4)
 
     assert set(merged.keys()) == {1, 2, 3}
-    # Overlapping chunk 1 has both vec rank=1 (0.6/(60+1)) and fts rank=1 (0.4/(60+1)).
-    expected_1 = 0.6 / 61 + 0.4 / 61
+    # Overlapping chunk 1 has both vec rank=1 and fts rank=1.
+    expected_1 = 0.6 / (_RRF_K + 1) + 0.4 / (_RRF_K + 1)
     assert merged[1]["rrf"] == pytest.approx(expected_1)
     # Chunk 1 should beat chunks present in only one stream.
     assert merged[1]["rrf"] > merged[2]["rrf"]
@@ -289,8 +290,8 @@ def test_rrf_fuse_one_based_ranks() -> None:
     fts_rows: list[dict[str, Any]] = []
     merged = _rrf_fuse(vec_rows, fts_rows, vec_weight=0.6, fts_weight=0.4)
 
-    # Single stream present, re-normalized to 1.0; rank=1 -> 1.0 / (60+1).
-    assert merged[1]["rrf"] == pytest.approx(1.0 / 61)
+    # Single stream present, re-normalized to 1.0; rank=1 -> 1.0 / (_RRF_K + 1).
+    assert merged[1]["rrf"] == pytest.approx(1.0 / (_RRF_K + 1))
 
 
 # ---------------------------------------------------------------------------
