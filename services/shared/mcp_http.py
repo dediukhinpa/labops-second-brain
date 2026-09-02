@@ -133,6 +133,68 @@ def apply_session_idle_timeout(app: Any, timeout_sec: float | None) -> int:
     return len(managers)
 
 
+class _SelfPruningSessions(dict):
+    """Реестр сессий, из которого закрытые вычищаются при добавлении новой.
+
+    ЗАЧЕМ: ``StreamableHTTPServerTransport.terminate()`` закрывает потоки и
+    ставит флаг ``_terminated``, но НЕ убирает себя из ``_server_instances``
+    менеджера, а блок очистки в менеджере пропускает удаление именно для
+    терминированных (``... and not http_transport.is_terminated``). То есть
+    каждая КОРРЕКТНО закрытая сессия остаётся в словаре навсегда.
+
+    Замер 2026-09-02: 50 открытых и закрытых сессий -> 50 записей в реестре,
+    все с ``is_terminated=True``; на живом memory_router это ~5.2 КБ на
+    сессию. Поллер задач открывает сессию каждые 5 секунд на агента -- около
+    34 тысяч сессий в сутки, порядка 180 МБ. Это и есть тот линейный рост,
+    который держался после починки протухания брошенных сессий: тот
+    предохранитель убирает сессии, которые клиент не закрыл, а здесь течёт
+    ровно противоположный случай -- закрытые по правилам.
+
+    Поведение не меняется: запрос со ссылкой на удалённую сессию получает
+    тот же 404 ``Session not found``, только из ветки менеджера про
+    неизвестный идентификатор, а не из проверки ``_terminated``.
+
+    Чистка навешена на вставку, а не на фоновую задачу: вставка происходит
+    под ``_session_creation_lock`` менеджера, отдельного жизненного цикла не
+    требует, а размер словаря после чистки равен числу живых сессий.
+    """
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        """Добавить сессию, попутно выбросив все уже закрытые."""
+        dead = [k for k, v in self.items() if getattr(v, "is_terminated", False)]
+        for k in dead:
+            super().__delitem__(k)
+        if dead:
+            logger.debug("Выброшено закрытых MCP-сессий из реестра: %d", len(dead))
+        super().__setitem__(key, value)
+
+
+def install_session_registry_pruning(app: Any) -> int:
+    """Заменить реестры сессий на самоочищающиеся.
+
+    Args:
+        app: Starlette-приложение, собранное FastMCP.
+
+    Returns:
+        Сколько менеджеров удалось починить.
+    """
+    patched = 0
+    for manager in find_session_managers(app):
+        current = getattr(manager, "_server_instances", None)
+        if current is None or isinstance(current, _SelfPruningSessions):
+            continue
+        manager._server_instances = _SelfPruningSessions(current)
+        patched += 1
+    if not patched:
+        logger.warning(
+            "Реестр MCP-сессий не подменён -- закрытые сессии будут "
+            "накапливаться (проверьте версию MCP SDK)"
+        )
+    else:
+        logger.info("Закрытые MCP-сессии вычищаются из реестра (менеджеров: %d)", patched)
+    return patched
+
+
 def build_http_app(mcp: Any, timeout_sec: float | None | str = "auto") -> Any:
     """Собрать HTTP-приложение MCP и включить протухание брошенных сессий.
 
@@ -149,4 +211,7 @@ def build_http_app(mcp: Any, timeout_sec: float | None | str = "auto") -> Any:
     app = mcp.http_app(transport="streamable-http")
     resolved = resolve_idle_timeout() if timeout_sec == "auto" else timeout_sec
     apply_session_idle_timeout(app, resolved)  # type: ignore[arg-type]
+    # Два разных случая, и предохранители нужны оба: таймаут выше убирает
+    # сессии, которые клиент бросил, а здесь -- те, что он закрыл по правилам.
+    install_session_registry_pruning(app)
     return app
