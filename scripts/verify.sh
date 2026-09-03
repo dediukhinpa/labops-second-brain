@@ -217,6 +217,29 @@ if sudo -u "$SB_USER" test -f "$SB_HOME/scripts/check_env_sync.py" 2>/dev/null; 
 else
   warn "check_env_sync.py not found — skipped"
 fi
+# Deployed unit templates vs the units systemd actually loaded. The installed
+# copy under $SB_HOME is an rsync of the repo, not a checkout, so it silently
+# lags whenever someone reinstalls from an older tree. That bites hardest on
+# HF_HUB_DISABLE_XET: without it a cold model download crash-loops on
+# "Read-only file system" under ProtectHome=yes. Caught by hand on 2026-09-02
+# (the live units had it, $SB_HOME/systemd/*.template did not) — a reinstall
+# from that stale copy would have taken the model services down.
+tmpl_drift=0
+for tmpl in "$SB_HOME"/systemd/*.template; do
+  [ -f "$tmpl" ] || continue
+  base=$(basename "$tmpl" .service.template)
+  unit="second_brain-${base}.service"
+  systemctl cat "$unit" >/dev/null 2>&1 || continue
+  live_xet=$(systemctl show -p Environment --value "$unit" 2>/dev/null | grep -c 'HF_HUB_DISABLE_XET' || true)
+  tmpl_xet=$(grep -c 'HF_HUB_DISABLE_XET' "$tmpl" 2>/dev/null || true)
+  if [ "${live_xet:-0}" -gt 0 ] && [ "${tmpl_xet:-0}" -eq 0 ]; then
+    fail "stale unit template: $(basename "$tmpl") lacks HF_HUB_DISABLE_XET that $unit is running with — a reinstall from $SB_HOME would crash-loop the model download"
+    tmpl_drift=1
+  fi
+done
+# Своим флагом, а не глобальным FAILN: тот считает провалы всех прошлых секций.
+[ "$tmpl_drift" -eq 0 ] && pass "deployed unit templates match the running units"
+
 if [ "$FULL" = 1 ]; then
   (cd "$SB_HOME" && sudo -u "$SB_USER" "$VENV_PY" -m pytest -q >/dev/null 2>&1) \
     && pass "full pytest suite green" || fail "pytest suite has failures (run: $VENV_PY -m pytest)"
