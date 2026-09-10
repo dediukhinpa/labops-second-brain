@@ -6,7 +6,8 @@ Runs 10 checks against the local install and reports pass/warn/fail.
 Required environment variables (typically loaded from /etc/second_brain/secrets.env):
     PG_HOST, PG_PORT, PG_DATABASE, PG_USER, PG_PASSWORD
     VAULT_ROOT (default /opt/second_brain/vault)
-    FASTEMBED_MODEL (default intfloat/multilingual-e5-large)
+    FASTEMBED_MODEL (default: services.shared.config.DEFAULT_FASTEMBED_MODEL)
+    FASTEMBED_CACHE_DIR (where the services actually cache the weights)
     TOKEN_HASH_SALT (optional, used to hash Bearer tokens)
 
 Exit codes:
@@ -41,6 +42,15 @@ from typing import Any, Awaitable, Callable, Iterable, Literal, Sequence
 # These imports are runtime deps in pyproject.toml.
 import asyncpg
 import httpx
+
+# Дефолт модели держим общим с сервисами. Собственная копия здесь уже
+# однажды разъехалась с config.py и заставляла доктора проверять кэш
+# модели, которой в системе нет, -- проверка была ложно-зелёной.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+try:
+    from services.shared.config import DEFAULT_FASTEMBED_MODEL
+except ImportError:  # доктор унесли из репозитория в одиночку
+    DEFAULT_FASTEMBED_MODEL = None
 
 # Repo root on sys.path so `services.shared.config` resolves when running as a
 # script (python scripts/second_brain_doctor.py) and not just as installed entry point.
@@ -427,20 +437,45 @@ async def check_mcp_livez(
     )
 
 
-def check_fastembed_cache(model_name: str) -> CheckResult:
-    """Warn-only: probe ~/.cache/fastembed/<model>/ for at least one .onnx."""
-    cache_dir = Path.home() / ".cache" / "fastembed"
+def check_fastembed_cache(model_name: str | None) -> CheckResult:
+    """Warn-only: probe the services' FastEmbed cache for at least one .onnx.
+
+    Смотрим в FASTEMBED_CACHE_DIR, а не в ~/.cache/fastembed: сервисы получают
+    каталог явным аргументом (см. Config.fastembed_cache_dir), и под systemd с
+    PrivateTmp это вообще другой путь. Проверка домашнего кэша всегда была
+    мимо -- она предупреждала о скачивании там, где веса уже лежат.
+
+    Args:
+        model_name: Имя модели; ``None`` -- дефолт не удалось импортировать.
+
+    Returns:
+        Результат проверки.
+    """
+    if model_name is None:
+        return CheckResult(
+            name="fastembed_cache",
+            status="skip",
+            message="cannot resolve the embedding model name (services package not importable)",
+            remediation="run the doctor from the repo/install root so services.shared.config imports",
+        )
+    env_dir = os.environ.get("FASTEMBED_CACHE_DIR")
+    cache_dir = Path(env_dir).expanduser() if env_dir else Path.home() / ".cache" / "fastembed"
     if not cache_dir.exists():
         return CheckResult(
             name="fastembed_cache",
             status="warn",
             message=f"{cache_dir} missing; first call will download {model_name}",
+            remediation="re-run scripts/install.sh (step 11 pre-downloads the weights)",
         )
-    # Best-effort: scan for any subdir matching the safe model slug.
-    safe_slug = model_name.replace("/", "_")
+    # FastEmbed раскладывает веса по HF-схеме models--<org>--<repo>, а int8
+    # берётся из зарегистрированного варианта с другим именем -- поэтому
+    # сверяемся по хвосту имени модели, а не по точному совпадению каталога.
+    repo_slug = model_name.split("/")[-1]
     candidates = [
         cache_dir / model_name,
-        cache_dir / safe_slug,
+        cache_dir / model_name.replace("/", "_"),
+        *cache_dir.glob(f"models--*{repo_slug}"),
+        *cache_dir.glob(f"*{repo_slug}"),
     ]
     for cand in candidates:
         if cand.exists():
@@ -455,6 +490,7 @@ def check_fastembed_cache(model_name: str) -> CheckResult:
         name="fastembed_cache",
         status="warn",
         message=f"no onnx artefacts under {cache_dir} for {model_name}",
+        remediation="re-run scripts/install.sh (step 11 pre-downloads the weights)",
     )
 
 
@@ -767,7 +803,7 @@ async def run_all_checks(args: argparse.Namespace) -> list[CheckResult]:
     results.append(await check_mcp_livez())
     results.append(
         check_fastembed_cache(
-            os.environ.get("FASTEMBED_MODEL", "intfloat/multilingual-e5-large")
+            os.environ.get("FASTEMBED_MODEL") or DEFAULT_FASTEMBED_MODEL
         )
     )
     results.append(check_cron())

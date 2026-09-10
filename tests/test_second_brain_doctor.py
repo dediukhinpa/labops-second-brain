@@ -338,21 +338,55 @@ async def test_check_mcp_livez_one_down():
 # check_fastembed_cache
 # ---------------------------------------------------------------------------
 
+MODEL = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
+
+
 def test_check_fastembed_cache_missing_warns(monkeypatch, tmp_path):
-    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("FASTEMBED_CACHE_DIR", raising=False)
     # Force Path.home() to use the env var via direct monkeypatch.
     monkeypatch.setattr(doc.Path, "home", classmethod(lambda cls: tmp_path))
-    res = doc.check_fastembed_cache("intfloat/multilingual-e5-large")
+    res = doc.check_fastembed_cache(MODEL)
     assert res.status == "warn"
 
 
 def test_check_fastembed_cache_present_ok(monkeypatch, tmp_path):
-    cache = tmp_path / ".cache" / "fastembed" / "intfloat/multilingual-e5-large"
+    cache = tmp_path / ".cache" / "fastembed" / MODEL
     cache.mkdir(parents=True)
     (cache / "model.onnx").write_bytes(b"\x00")
+    monkeypatch.delenv("FASTEMBED_CACHE_DIR", raising=False)
     monkeypatch.setattr(doc.Path, "home", classmethod(lambda cls: tmp_path))
-    res = doc.check_fastembed_cache("intfloat/multilingual-e5-large")
+    res = doc.check_fastembed_cache(MODEL)
     assert res.status == "pass"
+
+
+def test_check_fastembed_cache_honours_env_cache_dir(monkeypatch, tmp_path):
+    """FASTEMBED_CACHE_DIR перекрывает домашний кэш -- сервисы смотрят туда."""
+    service_cache = tmp_path / "var" / "fastembed" / MODEL
+    service_cache.mkdir(parents=True)
+    (service_cache / "model.onnx").write_bytes(b"\x00")
+    monkeypatch.setenv("FASTEMBED_CACHE_DIR", str(tmp_path / "var" / "fastembed"))
+    # Домашний кэш пуст: до фикса проверка смотрела сюда и выдавала warn.
+    monkeypatch.setattr(doc.Path, "home", classmethod(lambda cls: tmp_path / "empty"))
+    res = doc.check_fastembed_cache(MODEL)
+    assert res.status == "pass"
+
+
+def test_check_fastembed_cache_finds_hf_layout(monkeypatch, tmp_path):
+    """FastEmbed кладёт веса как models--<org>--<repo>, а не как <org>/<repo>."""
+    cache_root = tmp_path / "fastembed"
+    hf_dir = cache_root / "models--xenova--paraphrase-multilingual-mpnet-base-v2" / "onnx"
+    hf_dir.mkdir(parents=True)
+    (hf_dir / "model_quantized.onnx").write_bytes(b"\x00")
+    monkeypatch.setenv("FASTEMBED_CACHE_DIR", str(cache_root))
+    res = doc.check_fastembed_cache(MODEL)
+    assert res.status == "pass"
+
+
+def test_check_fastembed_cache_skips_without_model_name(monkeypatch, tmp_path):
+    """Без импортируемого дефолта проверка честно молчит, а не зеленеет."""
+    monkeypatch.setenv("FASTEMBED_CACHE_DIR", str(tmp_path))
+    res = doc.check_fastembed_cache(None)
+    assert res.status == "skip"
 
 
 # ---------------------------------------------------------------------------
