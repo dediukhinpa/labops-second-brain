@@ -7,7 +7,10 @@ from collections import OrderedDict
 
 from fastembed import TextEmbedding
 
-from services.shared.config import fastembed_uses_e5_prefix
+from services.shared.config import (
+    DEFAULT_FASTEMBED_MODEL,
+    fastembed_uses_e5_prefix,
+)
 from services.shared.embed_model import load_text_embedding
 
 logger = logging.getLogger(__name__)
@@ -30,7 +33,7 @@ class Embedder:
 
     def __init__(
         self,
-        model_name: str = "intfloat/multilingual-e5-large",
+        model_name: str = DEFAULT_FASTEMBED_MODEL,
         cache_dir: str | None = None,
         onnx_file: str | None = None,
     ) -> None:

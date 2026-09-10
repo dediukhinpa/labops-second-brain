@@ -398,7 +398,6 @@ fi
 
 note "11. FastEmbed model pre-download + embedding probe"
 
-FASTEMBED_MODEL="${FASTEMBED_MODEL:-intfloat/multilingual-e5-large}"
 if [ -x "$INSTALL_DIR/.venv/bin/python" ]; then
   # Anti-false-green: a missing/broken embedding model silently degrades recall
   # to lexical-only and the rest of the install still looks green. Load the
@@ -407,17 +406,36 @@ if [ -x "$INSTALL_DIR/.venv/bin/python" ]; then
   # (We verify at the embedding layer rather than via a recall query in the
   # smoke test because the ingest-worker embeds asynchronously and may not have
   # caught up by the time the smoke test runs — a recall probe would be flaky.)
+  # Модель, веса и префикс берём из services.shared.config, а не из
+  # собственного дефолта: своя копия здесь однажды пережила переход на
+  # mpnet и молча качала 2.1 ГБ e5-large при каждой установке.
+  # FASTEMBED_MODEL/FASTEMBED_ONNX_FILE из окружения по-прежнему
+  # уважаются. Прогреваем ровно те веса, что грузят сервисы: полные
+  # вместо int8 сделали бы кэш бесполезным для первого запроса.
   if FASTEMBED_CACHE_DIR="$STATE_DIR/fastembed" \
-       sudo -E -u "$SERVICE_USER" "$INSTALL_DIR/.venv/bin/python" - "$FASTEMBED_MODEL" "$STATE_DIR/fastembed" <<'PY'
+       sudo -E -u "$SERVICE_USER" env PYTHONPATH="$INSTALL_DIR" \
+       "$INSTALL_DIR/.venv/bin/python" - "$STATE_DIR/fastembed" <<'PY'
+import os
 import sys
-from fastembed import TextEmbedding
 
-model_name, cache_dir = sys.argv[1], sys.argv[2]
-emb = TextEmbedding(model_name, cache_dir=cache_dir)
-vecs = list(emb.embed(["query: smoke probe"]))
+from services.shared.config import (
+    DEFAULT_FASTEMBED_MODEL,
+    DEFAULT_FASTEMBED_ONNX_FILE,
+    fastembed_uses_e5_prefix,
+)
+from services.shared.embed_model import load_text_embedding
+
+cache_dir = sys.argv[1]
+model_name = os.environ.get("FASTEMBED_MODEL", DEFAULT_FASTEMBED_MODEL)
+onnx_file = os.environ.get("FASTEMBED_ONNX_FILE", DEFAULT_FASTEMBED_ONNX_FILE)
+
+emb = load_text_embedding(model_name, onnx_file, cache_dir)
+# Префикс нужен только e5-семейству; mpnet его понимать не обучался.
+probe = "query: smoke probe" if fastembed_uses_e5_prefix(model_name) else "smoke probe"
+vecs = list(emb.embed([probe]))
 if not vecs or len(vecs[0]) == 0:
     raise SystemExit("embedding probe returned an empty vector")
-print(f"fastembed model ready: {model_name} dim={len(vecs[0])}")
+print(f"fastembed model ready: {model_name} ({onnx_file}) dim={len(vecs[0])}")
 PY
   then
     log "fastembed model + embedding probe OK"

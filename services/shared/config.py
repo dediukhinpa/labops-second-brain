@@ -6,6 +6,23 @@ from dataclasses import dataclass, field
 from services.shared.tool_gating import parse_tool_set
 
 
+# Дефолты модели эмбеддингов вынесены в константы, а не зашиты литералами в
+# Config: их читают ещё scripts/install.sh (прогрев весов) и
+# scripts/second_brain_doctor.py. Пока у каждого была своя копия, переход на
+# mpnet (bad7bd8) обошёл install.sh стороной, и тот при каждой установке тянул
+# 2.1 ГБ весов e5-large, которыми ни один сервис не пользуется.
+#
+# mpnet-base-v2: ~1.0GB resident vs. e5-large's ~2.9GB (VPS RAM is shared with
+# Postgres + both agent sessions; e5-large alone sat at the MemoryMax cgroup
+# ceiling within minutes of a cold start).
+DEFAULT_FASTEMBED_MODEL = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
+
+# Какие веса внутри репозитория модели брать. int8 -- 643 МБ резидента против
+# 1435 МБ у полных весов и втрое быстрее одиночный запрос, при той же
+# размерности 768 (замер 2026-09-02). "onnx/model.onnx" -- полные веса.
+DEFAULT_FASTEMBED_ONNX_FILE = "onnx/model_quantized.onnx"
+
+
 def _require_pg_password() -> str:
     """Read PG_PASSWORD from env, fail loudly with a clear remediation hint.
 
@@ -199,18 +216,12 @@ class Config:
     )
     fastembed_model: str = field(
         default_factory=lambda: os.environ.get(
-            # mpnet-base-v2: ~1.0GB resident vs. e5-large's ~2.9GB (VPS RAM is
-            # shared with Postgres + both agent sessions; e5-large alone sat
-            # at the MemoryMax cgroup ceiling within minutes of a cold start).
-            "FASTEMBED_MODEL", "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
+            "FASTEMBED_MODEL", DEFAULT_FASTEMBED_MODEL
         )
     )
-    # Какие веса внутри репозитория модели брать. int8 -- 643 МБ резидента
-    # против 1435 МБ у полных весов и втрое быстрее одиночный запрос, при той
-    # же размерности 768 (замер 2026-09-02). "onnx/model.onnx" -- полные веса.
     fastembed_onnx_file: str = field(
         default_factory=lambda: os.environ.get(
-            "FASTEMBED_ONNX_FILE", "onnx/model_quantized.onnx"
+            "FASTEMBED_ONNX_FILE", DEFAULT_FASTEMBED_ONNX_FILE
         )
     )
     # Куда FastEmbed кладёт веса. Передаётся в TextEmbedding явным аргументом:
