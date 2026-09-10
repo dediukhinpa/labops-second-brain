@@ -16,6 +16,7 @@ Recognized Python patterns (when scanning .py files):
   * ``_env_float("VAR", ...)``   (services.shared.config helper, H10)
   * ``_env_int("VAR", ...)``      (services.shared.config helper, H10)
   * ``_env_float_clamped("VAR", ...)``  (shared clamped helper, H10)
+  * ``_level_from_env("VAR", ...)``  (services.shared.logging_setup helper)
   * ``parse_tool_set(os.environ.get("VAR", ...))``  (gating helper, H10)
 
 Recognized Bash patterns (with ``--include-bash``):
@@ -78,6 +79,10 @@ _PY_PATTERNS = [
     re.compile(rf"""_env_float\(\s*['"]{_VAR}['"]"""),
     re.compile(rf"""_env_int\(\s*['"]{_VAR}['"]"""),
     re.compile(rf"""_env_float_clamped\(\s*['"]{_VAR}['"]"""),
+    # Хелпер уровней логирования из services.shared.logging_setup: имена
+    # переменных там литералы, но не внутри os.environ.get -- без этого
+    # паттерна гейт молча пропускал бы их как незадокументированные.
+    re.compile(rf"""_level_from_env\(\s*['"]{_VAR}['"]"""),
     # H10: parse_tool_set wrapper around os.environ.get
     re.compile(
         rf"""parse_tool_set\(\s*os\.environ\.get\(\s*['"]{_VAR}['"]"""
@@ -255,6 +260,8 @@ def _legacy_strip_py(source: str) -> str:
 
 _ENV_FUNC_NAMES = frozenset({
     "_env_float", "_env_int", "_env_float_clamped",
+    # services.shared.logging_setup: уровни логирования.
+    "_level_from_env",
 })
 
 
@@ -266,6 +273,7 @@ def _scan_python_ast(text: str) -> list[tuple[str, int]] | None:
       * ``os.environ.get("VAR", ...)``
       * ``os.getenv("VAR", ...)``
       * ``_env_float("VAR", ...)`` / ``_env_int(...)`` / ``_env_float_clamped(...)``
+      * ``_level_from_env("VAR", ...)`` (logging_setup helper)
       * ``parse_tool_set(os.environ.get("VAR", ...))``
 
     String literals inside ``print("os.environ['FAKE']")`` are simple

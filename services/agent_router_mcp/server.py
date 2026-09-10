@@ -12,6 +12,7 @@ from fastmcp import FastMCP
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from services.shared.logging_setup import configure_logging, uvicorn_log_level
 from services.shared.asgi_auth import HermesAwareAuthMiddleware
 from services.shared.auth import (
     AuthValue,
@@ -26,10 +27,7 @@ from services.shared.tool_gating import parse_tool_set, should_register_tool
 
 from . import outbox
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-)
+configure_logging()
 logger = logging.getLogger(__name__)
 
 DEFAULT_PORT = 5000
@@ -236,4 +234,4 @@ if __name__ == "__main__":
     # (FastMCP этого не делает, а без него утекает 56 КБ на сессию).
     app = build_http_app(mcp)
     app = AuthCaptureMiddleware(app)
-    uvicorn.run(app, host=host, port=port, log_level="info")
+    uvicorn.run(app, host=host, port=port, log_level=uvicorn_log_level())
