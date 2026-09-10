@@ -20,6 +20,7 @@ from fastmcp import FastMCP
 # Ensure parent package is importable when running as module
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from services.shared.logging_setup import configure_logging, uvicorn_log_level
 from services.shared.asgi_auth import HermesAwareAuthMiddleware
 from services.shared.config import Config
 from services.shared.db import close_pool, get_pool
@@ -27,10 +28,7 @@ from services.shared.mcp_http import build_http_app
 
 from .tools import _REQUEST_AUTH, register_tools
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-)
+configure_logging()
 logger = logging.getLogger(__name__)
 
 DEFAULT_PORT = 5001
@@ -98,7 +96,7 @@ def main() -> None:
     # (FastMCP этого не делает, а без него утекает 56 КБ на сессию).
     app = build_http_app(mcp)
     app = AuthCaptureMiddleware(app)
-    uvicorn.run(app, host=host, port=port, log_level="info")
+    uvicorn.run(app, host=host, port=port, log_level=uvicorn_log_level())
 
 
 if __name__ == "__main__":
