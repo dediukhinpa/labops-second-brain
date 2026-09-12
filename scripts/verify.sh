@@ -21,6 +21,9 @@
 #   --full   also run the pytest suite (heavier; off by default for a fast gate).
 set -uo pipefail
 
+# Сколько последних строк вывода упавшей проверки показывать оператору.
+VERIFY_TAIL="${VERIFY_TAIL:-20}"
+
 # ---- config (override via env; defaults match the standard install topology) ----
 SB_HOME="${SB_HOME:-/opt/second_brain}"
 SB_ETC="${SB_ETC:-/etc/second_brain}"
@@ -211,9 +214,16 @@ fi
 # ===================================================== env drift & full tests ==
 sec "Config drift & tests"
 if sudo -u "$SB_USER" test -f "$SB_HOME/scripts/check_env_sync.py" 2>/dev/null; then
-  (cd "$SB_HOME" && sudo -u "$SB_USER" "$VENV_PY" scripts/check_env_sync.py >/dev/null 2>&1) \
-    && pass "env in sync with .env.example (no undocumented vars)" \
-    || warn "env drift: code uses vars absent from .env.example (run scripts/check_env_sync.py)"
+  # Вывод в файл, а не в /dev/null: провал без причины заставляет оператора
+  # запускать проверку заново вручную, чтобы узнать хотя бы имя переменной.
+  drift_log="$(mktemp)"
+  if (cd "$SB_HOME" && sudo -u "$SB_USER" "$VENV_PY" scripts/check_env_sync.py) >"$drift_log" 2>&1; then
+    pass "env in sync with .env.example (no undocumented vars)"
+  else
+    warn "env drift: code uses vars absent from .env.example (run scripts/check_env_sync.py)"
+    tail -n "$VERIFY_TAIL" "$drift_log" | sed 's/^/      /'
+  fi
+  rm -f "$drift_log"
 else
   warn "check_env_sync.py not found — skipped"
 fi
@@ -241,8 +251,16 @@ done
 [ "$tmpl_drift" -eq 0 ] && pass "deployed unit templates match the running units"
 
 if [ "$FULL" = 1 ]; then
-  (cd "$SB_HOME" && sudo -u "$SB_USER" "$VENV_PY" -m pytest -q >/dev/null 2>&1) \
-    && pass "full pytest suite green" || fail "pytest suite has failures (run: $VENV_PY -m pytest)"
+  # Вывод pytest И ЕСТЬ диагноз: в /dev/null он превращал «провалено» в загадку,
+  # и оператор шёл перезапускать сюиту вручную только чтобы увидеть имя теста.
+  pytest_log="$(mktemp)"
+  if (cd "$SB_HOME" && sudo -u "$SB_USER" "$VENV_PY" -m pytest -q) >"$pytest_log" 2>&1; then
+    pass "full pytest suite green"
+  else
+    fail "pytest suite has failures (run: $VENV_PY -m pytest)"
+    tail -n "$VERIFY_TAIL" "$pytest_log" | sed 's/^/      /'
+  fi
+  rm -f "$pytest_log"
 else
   printf '  %s(skip)%s full pytest suite — pass --full to include it\n' "$d" "$x"
 fi
