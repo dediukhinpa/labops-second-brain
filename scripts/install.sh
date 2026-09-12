@@ -478,7 +478,21 @@ systemctl daemon-reload
 
 note "13. start services"
 
-systemctl enable --now \
+# enable --now поднимает только ОСТАНОВЛЕННЫЙ юнит: работающий процесс он не
+# трогает. На повторной установке это значило, что в /opt/second_brain лежит
+# новый код (шаг 5 его туда rsync-нул), а в памяти продолжает крутиться старый —
+# и status ниже честно показывал «active», так что установка выглядела
+# обновлённой, хотя ничего не обновила. Поэтому два шага: enable ставит
+# автозапуск, restart подхватывает новый код (для остановленного юнита restart
+# равносилен start).
+systemctl enable \
+  second_brain-memory-mcp \
+  second_brain-memory_router-mcp \
+  second_brain-agent_router-mcp \
+  second_brain-agent_router-worker \
+  second_brain-ingest-worker
+
+systemctl restart \
   second_brain-memory-mcp \
   second_brain-memory_router-mcp \
   second_brain-agent_router-mcp \
