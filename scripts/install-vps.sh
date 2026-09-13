@@ -52,20 +52,20 @@ if [ -n "$SSH_KEY" ]; then
   RSYNC_SSH=(ssh "${SSH_OPTS[@]}" -i "$SSH_KEY")
 fi
 
-log() { printf '[install-vps %s] %s\n' "$(date -u +%H:%M:%SZ)" "$*"; }
+# shellcheck source=lib/ui.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/ui.sh"
 
-log "remote: $REMOTE"
-log "repo:   $REPO_ROOT"
+note "remote: $REMOTE"
+note "repo:   $REPO_ROOT"
 
 # Ensure remote staging dir exists
 ssh "${SSH_OPTS[@]}" "$REMOTE" 'mkdir -p /tmp/second_brain-install && sudo -n true' \
   >/dev/null 2>&1 || {
-  echo "ERROR: cannot connect or sudo on $REMOTE" >&2
-  echo "Make sure ssh works and the remote user can sudo without prompting (or run interactively)." >&2
-  exit 1
+  die "cannot connect or sudo on $REMOTE
+  Make sure ssh works and the remote user can sudo without prompting (or run interactively)."
 }
 
-log "rsync repo → $REMOTE:/tmp/second_brain-install"
+step "rsync repo → $REMOTE:/tmp/second_brain-install"
 
 rsync -az --delete \
   -e "${RSYNC_SSH[*]}" \
@@ -79,11 +79,11 @@ rsync -az --delete \
 
 # Push .env if it exists locally — operator decides whether to keep it
 if [ -f "$REPO_ROOT/.env" ]; then
-  log "copying .env to remote"
+  step "copying .env to remote"
   scp "${SSH_OPTS[@]}" "$REPO_ROOT/.env" "$REMOTE:/tmp/second_brain-install/.env"
 fi
 
-log "running install.sh on remote"
+step "running install.sh on remote"
 
 ssh "${SSH_OPTS[@]}" -t "$REMOTE" '
   set -euo pipefail
@@ -92,4 +92,4 @@ ssh "${SSH_OPTS[@]}" -t "$REMOTE" '
   sudo -E bash scripts/install.sh
 '
 
-log "remote install finished"
+ok "remote install finished"

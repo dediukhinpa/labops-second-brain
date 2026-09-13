@@ -10,8 +10,8 @@
 
 set -euo pipefail
 
-log() { printf '[migrate %s] %s\n' "$(date -u +%H:%M:%SZ)" "$*"; }
-die() { printf '[migrate ERROR] %s\n' "$*" >&2; exit 1; }
+# shellcheck source=lib/ui.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/ui.sh"
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
@@ -45,7 +45,7 @@ SQL
 mapfile -t files < <(find "$MIGRATIONS_DIR" -maxdepth 1 -type f -name '*.sql' | sort)
 
 if [ "${#files[@]}" -eq 0 ]; then
-  log "no migration files found in $MIGRATIONS_DIR"
+  note "no migration files found in $MIGRATIONS_DIR"
   exit 0
 fi
 
@@ -59,12 +59,12 @@ for f in "${files[@]}"; do
 done
 
 if [ "${#pending[@]}" -eq 0 ]; then
-  log "no pending migrations"
+  note "no pending migrations"
   exit 0
 fi
 
 if $LIST_ONLY; then
-  log "pending migrations:"
+  note "pending migrations:"
   for f in "${pending[@]}"; do
     printf '  %s\n' "$(basename "$f")"
   done
@@ -73,11 +73,11 @@ fi
 
 for f in "${pending[@]}"; do
   bn="$(basename "$f")"
-  log "applying $bn"
+  step "applying $bn"
   sudo -u postgres psql -d "$PG_DATABASE" -v ON_ERROR_STOP=1 --single-transaction \
     -f "$f" \
     -c "INSERT INTO schema_migrations (filename) VALUES ('$bn');"
-  log "applied $bn"
+  ok "applied $bn"
 done
 
-log "all pending migrations applied"
+ok "all pending migrations applied"

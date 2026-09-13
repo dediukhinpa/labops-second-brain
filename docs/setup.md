@@ -129,15 +129,16 @@ bash scripts/smoke-test.sh
 This should print:
 
 ```
-[1/5] GET / on memory_mcp        ... 200 ok
-[2/5] GET / on memory_router_mcp        ... 200 ok
-[3/5] GET / on agent_router_mcp         ... 200 ok
-[4/5] tools/list with admin token... 9 tools
-[5/5] auth roundtrip             ... ok
-SMOKE TEST PASSED
+✓ memory OK (http://127.0.0.1:5001/mcp)
+✓ memory_router OK (http://127.0.0.1:5002/mcp)
+✓ agent_router OK (http://127.0.0.1:5000/mcp)
+✓ all 3 services healthy
 ```
 
-If step 4 returns 401, the admin token in `ADMIN_AGENT_TOKEN` (or wherever the script reads it) does not match the sha256 stored. Re-run the issue-token flow.
+A `✗` line means that service did not answer the MCP `initialize` handshake within
+the polling window (~80 s): check `journalctl -u second_brain-<service>`. The smoke
+test proves liveness only; authenticated `tools/list` is covered by
+`bash scripts/verify.sh`.
 
 If step 5 fails, the AuthCaptureMiddleware is not loaded. Verify `services/memory_mcp/server.py` and `services/memory_router_mcp/server.py` both wrap `mcp.http_app()` in `AuthCaptureMiddleware` and use `uvicorn.run(...)`.
 

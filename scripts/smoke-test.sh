@@ -10,8 +10,10 @@
 
 set -euo pipefail
 
-log()  { printf '[smoke %s] %s\n' "$(date -u +%H:%M:%SZ)" "$*"; }
-fail() { printf '[smoke FAIL] %s\n' "$*" >&2; }
+# shellcheck source=lib/ui.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/ui.sh"
+# Провал проверки без выхода: smoke опрашивает все сервисы и только потом решает.
+fail() { err "$*"; }
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
@@ -35,7 +37,7 @@ if [ -z "$ADMIN_TOKEN" ] && [ -r "$INSTALL_DIR/secrets/admin.token" ]; then
 fi
 
 if [ -z "$ADMIN_TOKEN" ]; then
-  log "no admin token available — running unauthenticated (expect 401 from services)"
+  note "no admin token available — probing without auth (initialize needs none)"
   AUTH_HDR=()
 else
   AUTH_HDR=(-H "Authorization: Bearer ${ADMIN_TOKEN}")
@@ -102,7 +104,7 @@ for ep in "${ENDPOINTS[@]}"; do
   done
 
   if [ "$ok_ep" = "1" ]; then
-    log "$name OK ($url)"
+    ok "$name OK ($url)"
   else
     fail "$name $url — MCP не ответил serverInfo (http=$http_code) за ~$((attempts * interval))s"
     printf '  response: %s\n' "$(printf '%s' "$masked_payload" | head -c 200)"
@@ -111,7 +113,7 @@ for ep in "${ENDPOINTS[@]}"; do
 done
 
 if [ "$failures" -eq 0 ]; then
-  log "all 3 services healthy"
+  ok "all 3 services healthy"
   exit 0
 fi
 
