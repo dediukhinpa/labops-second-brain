@@ -13,8 +13,8 @@
 
 set -euo pipefail
 
-log()  { printf '[install-local %s] %s\n' "$(date -u +%H:%M:%SZ)" "$*"; }
-die()  { printf '[install-local ERROR] %s\n' "$*" >&2; exit 1; }
+# shellcheck source=lib/ui.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/ui.sh"
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
@@ -32,7 +32,7 @@ fi
 : "${TELEGRAM_BOT_TOKEN:=}"
 : "${BOSS_CHAT_ID:=}"
 
-log "INBOX_AGENT_HOME=$INBOX_AGENT_HOME"
+note "INBOX_AGENT_HOME=$INBOX_AGENT_HOME"
 
 if [ ! -d "$REPO_ROOT/inbox-agent" ]; then
   die "$REPO_ROOT/inbox-agent does not exist — Batch B not landed yet?"
@@ -53,7 +53,7 @@ mkdir -p \
 # Copy skeleton (don't overwrite hand-edited files)
 # ---------------------------------------------------------------------------
 
-log "copying inbox-agent skeleton"
+step "copying inbox-agent skeleton"
 
 if command -v rsync >/dev/null 2>&1; then
   rsync -a --ignore-existing "$REPO_ROOT/inbox-agent/" "$INBOX_AGENT_HOME/"
@@ -73,10 +73,10 @@ MCP_JSON_OUT="$INBOX_AGENT_HOME/.claude/.mcp.json"
 
 if [ -f "$MCP_JSON_TPL" ]; then
   if [ -z "$MCP_HOST" ]; then
-    read -r -p "MCP host base URL (e.g. https://mcp.example.com): " MCP_HOST
+    ask_text MCP_HOST "MCP host base URL (e.g. https://mcp.example.com)"
   fi
   if [ -z "$INBOX_BEARER" ]; then
-    read -r -p "Bearer token for inbox-agent (one token, used for memory/memory_router/agent_router): " INBOX_BEARER
+    ask_text INBOX_BEARER "Bearer token for inbox-agent (one token, used for memory/memory_router/agent_router)"
   fi
 
   mkdir -p "$INBOX_AGENT_HOME/.claude"
@@ -85,9 +85,9 @@ if [ -f "$MCP_JSON_TPL" ]; then
   MCP_HOST="$MCP_HOST" INBOX_BEARER="$INBOX_BEARER" \
     envsubst '${MCP_HOST} ${INBOX_BEARER}' < "$MCP_JSON_TPL" > "$MCP_JSON_OUT"
   chmod 600 "$MCP_JSON_OUT"
-  log "rendered $MCP_JSON_OUT"
+  ok "rendered $MCP_JSON_OUT"
 else
-  log "WARNING: $MCP_JSON_TPL missing — skip .mcp.json render"
+  warn "$MCP_JSON_TPL missing — skip .mcp.json render"
 fi
 
 # ---------------------------------------------------------------------------
@@ -104,22 +104,22 @@ if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
   echo "  1. Open https://t.me/BotFather"
   echo "  2. /newbot, name it, copy the HTTP API token."
   echo
-  read -r -p "Paste bot token (or leave empty to skip): " TELEGRAM_BOT_TOKEN
+  ask_text TELEGRAM_BOT_TOKEN "Paste bot token (or leave empty to skip)"
 fi
 
 if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
   printf '%s\n' "$TELEGRAM_BOT_TOKEN" > "$SECRETS_DIR/telegram-bot-token"
   chmod 600 "$SECRETS_DIR/telegram-bot-token"
-  log "telegram bot token saved to $SECRETS_DIR/telegram-bot-token"
+  ok "telegram bot token saved to $SECRETS_DIR/telegram-bot-token"
 fi
 
 if [ -z "$BOSS_CHAT_ID" ]; then
-  read -r -p "Your Telegram chat id (numeric, where digests will arrive): " BOSS_CHAT_ID
+  ask_text BOSS_CHAT_ID "Your Telegram chat id (numeric, where digests will arrive)"
 fi
 
 if [ -n "$BOSS_CHAT_ID" ]; then
   printf 'BOSS_CHAT_ID=%s\n' "$BOSS_CHAT_ID" >> "$INBOX_AGENT_HOME/.env"
-  log "BOSS_CHAT_ID saved to $INBOX_AGENT_HOME/.env"
+  ok "BOSS_CHAT_ID saved to $INBOX_AGENT_HOME/.env"
 fi
 
 # ---------------------------------------------------------------------------
@@ -133,9 +133,10 @@ if [ -f "$CRON_TPL" ]; then
   echo "---"
   cat "$CRON_TPL"
   echo "---"
-  read -r -p "Install these cron entries now? [y/N] " ans
-  case "$ans" in
-    y|Y|yes)
+  INSTALL_CRON=""
+  ask_yn INSTALL_CRON "Install these cron entries now?" n
+  case "$INSTALL_CRON" in
+    y)
       tmp="$(mktemp)"
       crontab -l 2>/dev/null > "$tmp" || true
       # Idempotent append: only add lines that aren't already there
@@ -148,12 +149,12 @@ if [ -f "$CRON_TPL" ]; then
       done < "$CRON_TPL"
       crontab "$tmp"
       rm -f "$tmp"
-      log "crontab installed"
+      ok "crontab installed"
       ;;
     *)
-      log "crontab skipped — install manually with: crontab -e"
+      note "crontab skipped — install manually with: crontab -e"
       ;;
   esac
 fi
 
-log "local setup done. Workspace: $INBOX_AGENT_HOME"
+ok "local setup done. Workspace: $INBOX_AGENT_HOME"

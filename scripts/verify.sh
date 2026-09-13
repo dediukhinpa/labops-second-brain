@@ -58,13 +58,18 @@ REQUIRED_TABLES=( agent_tokens agents chunks documents delivery_outbox \
 FULL=0; [ "${1:-}" = "--full" ] && FULL=1
 
 # ---- output framework ----
+# Значки и цвета — общие для установки (scripts/lib/ui.sh): ✓ / ⚠ / ✗ вместо
+# отдельного словаря PASS/WARN/FAIL. Здесь функции ещё и считают итог гейта.
 PASS=0; WARN=0; FAILN=0
-if [ -t 1 ]; then g=$'\e[32m'; y=$'\e[33m'; r=$'\e[31m'; d=$'\e[2m'; x=$'\e[0m'
-else g=; y=; r=; d=; x=; fi
-pass(){ PASS=$((PASS+1));  printf '  %sPASS%s %s\n' "$g" "$x" "$1"; }
-warn(){ WARN=$((WARN+1));  printf '  %sWARN%s %s\n' "$y" "$x" "$1"; }
-fail(){ FAILN=$((FAILN+1)); printf '  %sFAIL%s %s\n' "$r" "$x" "$1"; }
-sec(){  printf '\n%s== %s ==%s\n' "$d" "$1" "$x"; }
+# shellcheck source=lib/ui.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/ui.sh"
+# Отчёт часто уходит в файл или CI-лог — там escape-коды только мешают читать.
+if [ ! -t 1 ]; then UI_SECTION=; UI_OK=; UI_WARN=; UI_ERR=; UI_INFO=; UI_BOLD=; UI_RESET=; fi
+g="$UI_OK"; y="$UI_WARN"; r="$UI_ERR"; d="$UI_INFO"; x="$UI_RESET"
+pass(){ PASS=$((PASS+1));   printf '  %s✓%s %s\n' "$g" "$x" "$1"; }
+warn(){ WARN=$((WARN+1));   printf '  %s⚠%s %s\n' "$y" "$x" "$1"; }
+fail(){ FAILN=$((FAILN+1)); printf '  %s✗%s %s\n' "$r" "$x" "$1"; }
+sec(){  say "$1"; }
 
 # ---- read a KEY=value from secrets WITHOUT sourcing (never execute the file) ----
 read_key(){
@@ -262,14 +267,14 @@ if [ "$FULL" = 1 ]; then
   fi
   rm -f "$pytest_log"
 else
-  printf '  %s(skip)%s full pytest suite — pass --full to include it\n' "$d" "$x"
+  printf '  %sℹ%s full pytest suite skipped — pass --full to include it\n' "$d" "$x"
 fi
 
 # ===================================================================== summary ==
 printf '\n%s---------------------------------------------%s\n' "$d" "$x"
-printf '  %sPASS %d%s   %sWARN %d%s   %sFAIL %d%s\n' "$g" "$PASS" "$x" "$y" "$WARN" "$x" "$r" "$FAILN" "$x"
+printf '  %s✓ %d%s   %s⚠ %d%s   %s✗ %d%s\n' "$g" "$PASS" "$x" "$y" "$WARN" "$x" "$r" "$FAILN" "$x"
 if [ "$FAILN" -gt 0 ]; then
-  printf '  %sDEPLOY GATE: FAILED%s — fix the FAILs above before proceeding.\n' "$r" "$x"; exit 1
+  printf '  %s✗ DEPLOY GATE: FAILED%s — fix the ✗ checks above before proceeding.\n' "$r" "$x"; exit 1
 fi
-printf '  %sDEPLOY GATE: PASSED%s%s\n' "$g" "$x" "$( [ "$WARN" -gt 0 ] && printf ' (with warnings)')"
+printf '  %s✓ DEPLOY GATE: PASSED%s%s\n' "$g" "$x" "$( [ "$WARN" -gt 0 ] && printf ' (with warnings)')"
 exit 0

@@ -37,9 +37,8 @@ ISSUE_PY="$SB_HOME/scripts/issue-agent-token.py"
 DEFAULT_SCOPES="${DEFAULT_SCOPES:-decisions,external,knowledge,inbox,error-patterns,task-board}"
 PLACEHOLDER="CHANGE_ME"
 
-log()  { printf '[connect-agents] %s\n' "$*"; }
-warn() { printf '[connect-agents WARN] %s\n' "$*" >&2; }
-die()  { printf '[connect-agents ERROR] %s\n' "$*" >&2; exit 1; }
+# shellcheck source=lib/ui.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/ui.sh"
 
 # ---- locate the agent lab (operator's home, not root's) ----------------------
 if [ -z "${AGENT_LAB_DIR:-}" ]; then
@@ -55,7 +54,7 @@ if [ -z "${AGENT_LAB_DIR:-}" ]; then
   fi
 fi
 if [ ! -d "$AGENT_LAB_DIR" ]; then
-  log "no agent lab found ($AGENT_LAB_DIR) — nothing to connect (install agent-architecture first or set AGENT_LAB_DIR)"
+  note "no agent lab found ($AGENT_LAB_DIR) — nothing to connect (install agent-architecture first or set AGENT_LAB_DIR)"
   exit 0
 fi
 
@@ -109,7 +108,7 @@ for ws in "$AGENT_LAB_DIR"/*/.claude; do
   agent_env="$ws/agent.env"
   mcp_json="$ws/.mcp.json"
   agent="$(basename "$(dirname "$ws")")"
-  [ -f "$agent_env" ] || { log "$agent: no agent.env — not a second_brain-wired agent, skipping"; continue; }
+  [ -f "$agent_env" ] || { note "$agent: no agent.env — not a second_brain-wired agent, skipping"; continue; }
 
   current="$(env_val "$agent_env" AGENT_BEARER)"
   if [ -n "$current" ] && [ "$current" != "$PLACEHOLDER" ] && [ "${FORCE_REISSUE:-0}" != "1" ]; then
@@ -121,13 +120,13 @@ for ws in "$AGENT_LAB_DIR"/*/.claude; do
     # дёргать возможно рабочего агента.
     v="$(token_valid "$current")"
     if [ "$v" = "1" ]; then
-      log "$agent: токен валиден в БД — skipping (FORCE_REISSUE=1 чтобы переиздать)"
+      note "$agent: токен валиден в БД — skipping (FORCE_REISSUE=1 чтобы переиздать)"
       skipped=$((skipped+1)); continue
     elif [ -z "$v" ]; then
       warn "$agent: токен есть, но проверка БД не удалась — skipping (проверьте вручную / FORCE_REISSUE=1)"
       skipped=$((skipped+1)); continue
     else
-      log "$agent: токена нет в БД (устарел после пере-установки?) — переиздаю"
+      step "$agent: токена нет в БД (устарел после пере-установки?) — переиздаю"
       # проваливаемся ниже к выдаче нового токена
     fi
   fi
@@ -159,7 +158,7 @@ for ws in "$AGENT_LAB_DIR"/*/.claude; do
     warn "$agent: .mcp.json missing — MCP tools will stay disconnected (agent.env updated)"
   fi
 
-  log "$agent: connected (scopes=$scopes, token=${token:0:6}…, backups: *.bak-connect)"
+  ok "$agent: connected (scopes=$scopes, token=${token:0:6}…, backups: *.bak-connect)"
   connected=$((connected+1))
 
   # Рестарт агента, чтобы он ПОДХВАТИЛ токен: живая сессия прочитала agent.env/
@@ -168,19 +167,19 @@ for ws in "$AGENT_LAB_DIR"/*/.claude; do
   # мы root (иначе systemctl не сработает) и не задан SKIP_AGENT_RESTART.
   unit="claude-agent-$agent.service"
   if [ "${SKIP_AGENT_RESTART:-0}" = "1" ]; then
-    log "$agent: SKIP_AGENT_RESTART=1 — рестарт вручную: systemctl restart $unit"
+    note "$agent: SKIP_AGENT_RESTART=1 — рестарт вручную: systemctl restart $unit"
   elif [ "$(id -u)" -ne 0 ]; then
-    log "$agent: не root — рестарт вручную: sudo systemctl restart $unit"
+    note "$agent: не root — рестарт вручную: sudo systemctl restart $unit"
   elif systemctl cat "$unit" >/dev/null 2>&1; then
     if systemctl restart "$unit" 2>/dev/null; then
-      log "$agent: перезапущен $unit — токен подхвачен, recall активен"
+      ok "$agent: перезапущен $unit — токен подхвачен, recall активен"
     else
       warn "$agent: не удалось перезапустить $unit — вручную: systemctl restart $unit"
     fi
   else
-    log "$agent: нет systemd-юнита $unit — перезапустите сессию агента вручную, чтобы подхватить токен"
+    note "$agent: нет systemd-юнита $unit — перезапустите сессию агента вручную, чтобы подхватить токен"
   fi
 done
 
-log "done: $connected connected, $skipped already ok, $failed failed"
+ok "done: $connected connected, $skipped already ok, $failed failed"
 [ "$failed" -eq 0 ] || exit 1
