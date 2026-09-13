@@ -188,12 +188,19 @@ def test_build_http_app_installs_pruning_on_real_fastmcp_app() -> None:
 
 
 def test_sdk_still_leaves_closed_sessions_behind() -> None:
-    """Сторож апстрима: когда SDK починят, обходной путь пора снимать.
+    """Сторож апстрима: пока SDK копит закрытые сессии, обход обязателен.
 
-    Блок очистки менеджера пропускает удаление именно для терминированных
-    (``and not http_transport.is_terminated``), а ``terminate()`` себя из
-    реестра не убирает. Если эта строка из SDK исчезнет -- проверить, не стал
-    ли наш реестр лишним.
+    До mcp 1.30 блок очистки менеджера пропускал удаление именно для
+    терминированных (``and not http_transport.is_terminated``), а
+    ``terminate()`` себя из реестра не убирал. В mcp 1.30 менеджер получил
+    ``_discard_session`` и сам выбрасывает сессию на DELETE -- утечки там нет,
+    а наш реестр просто не находит, что чистить.
+
+    Версия SDK не прибита (приходит транзитивно через fastmcp): свежая установка
+    13.09.2026 получила 1.30.0, а живой хост работает на 1.28.1. Поэтому тест
+    различает обе раскладки, а падает только на третьей -- незнакомой, где
+    непонятно, нужен ли обход. Снимать обход можно, когда минимальной
+    поддерживаемой станет версия с ``_discard_session``.
     """
     pytest.importorskip("mcp")
     import inspect
@@ -201,4 +208,9 @@ def test_sdk_still_leaves_closed_sessions_behind() -> None:
     from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 
     source = inspect.getsource(StreamableHTTPSessionManager)
-    assert "not http_transport.is_terminated" in source
+    leaks = "not http_transport.is_terminated" in source
+    discards = "_discard_session" in source
+    assert leaks or discards, (
+        "раскладка очистки сессий в SDK незнакома -- проверить, течёт ли реестр "
+        "закрытыми сессиями, и нужен ли ещё _SelfPruningSessions"
+    )

@@ -38,17 +38,18 @@ ADMIN_TOKEN_FILE="${ADMIN_TOKEN_FILE:-$SB_HOME/secrets/admin.token}"
 
 # MCP endpoints to probe: "unit:port:path". This MUST mirror what
 # scripts/install.sh actually deploys: SEPARATE units per service (there is no
-# consolidated core unit in systemd/ and install.sh never enables task-mcp).
-# Edit the ports here only if you changed them at install time.
+# consolidated core unit in systemd/). Edit the ports here only if you changed
+# them at install time.
+# task-mcp обязателен: на нём доска задач, которую агенты опрашивают поллером
+# (SECOND_BRAIN_TASKS_URL в agent-architecture) и на запись в которую им выдают
+# scope task-board. Раньше install.sh юнит клал, но не включал, а verify проверял
+# его только «если юнит установлен» — то есть всегда и всегда красным.
 MCP_ENDPOINTS=(
   "second_brain-memory-mcp:5001:/mcp"         # memory (write-side)
   "second_brain-agent_router-mcp:5000:/mcp"   # agent_router
   "second_brain-memory_router-mcp:5002:/mcp"  # memory_router (recall)
+  "second_brain-task-mcp:5003:/mcp"           # tasks / board
 )
-# task-mcp (:5003) is optional — probed only if its unit is actually installed.
-if systemctl list-unit-files 'second_brain-task-mcp.service' 2>/dev/null | grep -q '^second_brain-task-mcp'; then
-  MCP_ENDPOINTS+=( "second_brain-task-mcp:5003:/mcp" )
-fi
 WORKER_UNITS=( second_brain-ingest-worker second_brain-agent_router-worker )
 REQUIRED_SECRET_KEYS=( PG_HOST PG_PORT PG_DATABASE PG_USER PG_PASSWORD \
                        VAULT_ROOT LOG_DIR STATE_DIR FASTEMBED_CACHE_DIR )
@@ -175,9 +176,16 @@ for spec in "${MCP_ENDPOINTS[@]}"; do
   if ! ss -ltn 2>/dev/null | grep -q ":$port "; then
     fail "port $port not listening ($unit)"; continue
   fi
-  body="$(curl -s --max-time 8 -X POST "http://127.0.0.1:$port$path" \
+  # Заголовки в файл — ради Mcp-Session-Id: initialize открывает сессию, и
+  # её надо закрыть DELETE, а не бросать до таймаута простоя.
+  live_hdr="$(mktemp)"
+  body="$(curl -s --max-time 8 -D "$live_hdr" -X POST "http://127.0.0.1:$port$path" \
     -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
     -d "$init" 2>/dev/null)"
+  live_sid="$(tr -d '\r' < "$live_hdr" | awk -F': ' 'tolower($1)=="mcp-session-id"{print $2; exit}')"
+  rm -f "$live_hdr"
+  [ -n "$live_sid" ] && curl -s --max-time 8 -o /dev/null -X DELETE \
+    "http://127.0.0.1:$port$path" -H "Mcp-Session-Id: $live_sid" 2>/dev/null
   echo "$body" | grep -q '"serverInfo"' \
     && pass "MCP up on :$port ($unit)" \
     || fail "MCP on :$port did not return serverInfo ($unit)"
@@ -199,19 +207,45 @@ if [ -z "$VERIFY_BEARER" ]; then
   if [ -r "$ADMIN_TOKEN_FILE" ]; then VERIFY_BEARER="$(head -1 "$ADMIN_TOKEN_FILE" | tr -d '[:space:]')"
   else VERIFY_BEARER="$(sudo cat "$ADMIN_TOKEN_FILE" 2>/dev/null | head -1 | tr -d '[:space:]')"; fi
 fi
+
+# mcp_session_tools_list <port> <path> — tools/list по-честному, внутри сессии.
+# Streamable HTTP сессионный: одиночный tools/list без Mcp-Session-Id сервер
+# отвергает с 400 «Missing session ID» при любом токене, и прежняя проверка
+# валила гейт на каждой установке (поймано 13.09.2026 на чистой 26.04, хотя
+# вручную токен принимался). Порядок как у клиента: initialize → initialized →
+# tools/list → DELETE. DELETE обязателен: брошенная сессия висит в памяти
+# сервиса до таймаута простоя.
+# Токен идёт в curl заголовком из файла 600, а не аргументом -H: иначе он
+# виден в списке процессов любому пользователю машины.
+mcp_session_tools_list() {
+  local url="http://127.0.0.1:$1$2" hdr sid body
+  local accept='Accept: application/json, text/event-stream' ctype='Content-Type: application/json'
+  hdr="$(mktemp)"
+  printf 'Authorization: Bearer %s\n' "$VERIFY_BEARER" > "$AUTH_HDR_FILE"
+  curl -s --max-time 8 -D "$hdr" -o /dev/null -X POST "$url" -H @"$AUTH_HDR_FILE" \
+    -H "$ctype" -H "$accept" -d "$init" 2>/dev/null
+  sid="$(tr -d '\r' < "$hdr" | awk -F': ' 'tolower($1)=="mcp-session-id"{print $2; exit}')"
+  rm -f "$hdr"
+  [ -n "$sid" ] || return 1
+  curl -s --max-time 8 -o /dev/null -X POST "$url" -H @"$AUTH_HDR_FILE" -H "Mcp-Session-Id: $sid" \
+    -H "$ctype" -H "$accept" -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' 2>/dev/null
+  body="$(curl -s --max-time 8 -X POST "$url" -H @"$AUTH_HDR_FILE" -H "Mcp-Session-Id: $sid" \
+    -H "$ctype" -H "$accept" -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' 2>/dev/null)"
+  curl -s --max-time 8 -o /dev/null -X DELETE "$url" -H @"$AUTH_HDR_FILE" -H "Mcp-Session-Id: $sid" 2>/dev/null
+  printf '%s' "$body"
+}
+
 if [ -n "$VERIFY_BEARER" ]; then
-  tools_list='{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
+  AUTH_HDR_FILE="$(umask 077; mktemp)"
   for spec in "${MCP_ENDPOINTS[@]}"; do
     IFS=: read -r unit port path <<<"$spec"
-    body="$(curl -s --max-time 8 -X POST "http://127.0.0.1:$port$path" \
-      -H "Authorization: Bearer $VERIFY_BEARER" -H 'Content-Type: application/json' \
-      -H 'Accept: application/json, text/event-stream' -d "$tools_list" 2>/dev/null)"
-    if echo "$body" | grep -q '"tools"'; then
+    if mcp_session_tools_list "$port" "$path" | grep -q '"tools"'; then
       pass "authenticated tools/list OK on :$port ($unit)"
     else
-      fail "authenticated tools/list FAILED on :$port ($unit) — bearer rejected or gating broken"
+      fail "authenticated tools/list FAILED on :$port ($unit) — bearer rejected, gating broken or service down"
     fi
   done
+  rm -f "$AUTH_HDR_FILE"
 else
   warn "no bearer available (VERIFY_BEARER unset, $ADMIN_TOKEN_FILE unreadable) — authenticated probe skipped"
 fi
