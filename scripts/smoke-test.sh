@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# smoke-test.sh — verify the three MCP services answer `tools/list` over HTTP.
+# smoke-test.sh — verify the four MCP services (memory, memory_router, agent_router, tasks) answer `initialize` over HTTP.
 #
 # Usage:
 #   bash scripts/smoke-test.sh                    # uses localhost ports
@@ -29,6 +29,7 @@ fi
 : "${MCP_MEMORY_PORT:=5001}"
 : "${MCP_MEMORY_ROUTER_PORT:=5002}"
 : "${MCP_AGENT_ROUTER_PORT:=5000}"
+: "${MCP_TASK_PORT:=5003}"
 : "${ADMIN_TOKEN:=}"
 
 # Load admin token from file if not set
@@ -40,7 +41,12 @@ if [ -z "$ADMIN_TOKEN" ]; then
   note "no admin token available — probing without auth (initialize needs none)"
   AUTH_HDR=()
 else
-  AUTH_HDR=(-H "Authorization: Bearer ${ADMIN_TOKEN}")
+  # Заголовок из файла 600, а не аргументом -H: иначе токен виден в списке
+  # процессов, пока идёт опрос (до ~80 секунд на сервис).
+  AUTH_HDR_FILE="$(umask 077; mktemp)"
+  trap 'rm -f "$AUTH_HDR_FILE"' EXIT
+  printf 'Authorization: Bearer %s\n' "$ADMIN_TOKEN" > "$AUTH_HDR_FILE"
+  AUTH_HDR=(-H @"$AUTH_HDR_FILE")
 fi
 
 # Build endpoint list: domain mode or localhost ports
@@ -49,12 +55,14 @@ if [ -n "$MCP_BASE" ]; then
     "memory:${MCP_BASE}/memory/mcp"
     "memory_router:${MCP_BASE}/memory_router/mcp"
     "agent_router:${MCP_BASE}/agent_router/mcp"
+    "tasks:${MCP_BASE}/tasks/mcp"
   )
 else
   ENDPOINTS=(
     "memory:http://127.0.0.1:${MCP_MEMORY_PORT}/mcp"
     "memory_router:http://127.0.0.1:${MCP_MEMORY_ROUTER_PORT}/mcp"
     "agent_router:http://127.0.0.1:${MCP_AGENT_ROUTER_PORT}/mcp"
+    "tasks:http://127.0.0.1:${MCP_TASK_PORT}/mcp"
   )
 fi
 
@@ -66,7 +74,7 @@ for ep in "${ENDPOINTS[@]}"; do
   # Probe with `initialize`, NOT `tools/list`: the MCP Streamable-HTTP transport
   # is session-based — a bare tools/list without a prior initialize handshake
   # returns http 400 "Missing session ID" regardless of the bearer, so it can
-  # never pass as a one-shot curl. `initialize` is stateless, needs no session
+  # never pass as a one-shot curl. `initialize` needs no prior session
   # and no auth (open by MCP design), returns serverInfo, and proves the service
   # is up and speaking MCP — the right liveness gate. Deep auth/tools coverage
   # lives in pytest (a real MCP client), not this smoke.
@@ -83,9 +91,11 @@ for ep in "${ENDPOINTS[@]}"; do
   # мёртвый сервис — на живом цикл выходит сразу после первого serverInfo.
   attempts="${SMOKE_ATTEMPTS:-40}"; interval="${SMOKE_INTERVAL:-2}"
   ok_ep=0; http_code=""; masked_payload=""
+  hdr_file="$(mktemp)"
   for _a in $(seq 1 "$attempts"); do
     resp=$(curl -sS \
       --max-time 8 \
+      -D "$hdr_file" \
       -w '\n__HTTP__:%{http_code}' \
       -X POST "$url" \
       -H "Content-Type: application/json" \
@@ -98,11 +108,18 @@ for ep in "${ENDPOINTS[@]}"; do
     masked_payload="$(printf '%s' "$payload" | sed 's/Bearer [A-Za-z0-9_-]\{20,\}/Bearer ***/g')"
     # Success = HTTP 200 + serverInfo (service is up and speaks MCP).
     if [ "$http_code" = "200" ] && printf '%s' "$payload" | grep -q '"serverInfo"'; then
-      ok_ep=1; break
+      ok_ep=1
+      # initialize открыл сессию — закрываем, чтобы она не висела в памяти
+      # сервиса до таймаута простоя.
+      sid="$(tr -d '\r' < "$hdr_file" | awk -F': ' 'tolower($1)=="mcp-session-id"{print $2; exit}')"
+      [ -n "$sid" ] && curl -s --max-time 8 -o /dev/null -X DELETE "$url" \
+        -H "Mcp-Session-Id: $sid" "${AUTH_HDR[@]}" 2>/dev/null
+      break
     fi
     sleep "$interval"
   done
 
+  rm -f "$hdr_file"
   if [ "$ok_ep" = "1" ]; then
     ok "$name OK ($url)"
   else
@@ -113,7 +130,7 @@ for ep in "${ENDPOINTS[@]}"; do
 done
 
 if [ "$failures" -eq 0 ]; then
-  ok "all 3 services healthy"
+  ok "all ${#ENDPOINTS[@]} services healthy"
   exit 0
 fi
 

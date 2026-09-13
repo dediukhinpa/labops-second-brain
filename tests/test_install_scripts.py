@@ -8,6 +8,14 @@
   установка выглядела обновлённой, ничего не обновив;
 * `verify.sh` глушил вывод своих проверок в /dev/null, и красная строка не
   говорила, что именно не сошлось: оператор запускал проверку заново вручную.
+
+И три, найденные 13.09.2026 прогоном установки на чистой Ubuntu 26.04 (сама
+установка прошла, а гейт `verify.sh` — нет):
+
+* проверка токена слала одиночный `tools/list` без сессии, сервер отвечал 400
+  «Missing session ID» при любом токене — гейт был красным на каждом хосте;
+* `task-mcp` юнит ставился, но не включался, а verify его требовал;
+* проверки живости открывали MCP-сессии и бросали их до таймаута простоя.
 """
 import re
 from pathlib import Path
@@ -21,6 +29,7 @@ SERVICE_UNITS = (
     "second_brain-memory-mcp",
     "second_brain-memory_router-mcp",
     "second_brain-agent_router-mcp",
+    "second_brain-task-mcp",
     "second_brain-agent_router-worker",
     "second_brain-ingest-worker",
 )
@@ -68,3 +77,47 @@ def test_verify_prints_the_failing_output() -> None:
     assert text.count('tail -n "$VERIFY_TAIL"') >= 2, (
         "verify.sh не показывает вывод упавших проверок"
     )
+
+
+def test_install_enables_task_mcp() -> None:
+    """Доска задач поднимается установкой, а не руками после неё."""
+    text = _read("install.sh")
+    enable = re.search(r"systemctl enable\s+((?:\\\n\s*\S+\s*)+)", text)
+    assert enable is not None and "second_brain-task-mcp" in enable.group(1), (
+        "install.sh не включает second_brain-task-mcp — доска задач не поднимется"
+    )
+
+
+def test_verify_requires_task_mcp() -> None:
+    """task-mcp проверяется всегда, а не «если юнит найден»."""
+    text = _read("verify.sh")
+    block = re.search(r"MCP_ENDPOINTS=\((.*?)\n\)", text, flags=re.S)
+    assert block is not None and "second_brain-task-mcp:5003" in block.group(1)
+
+
+def test_verify_auth_probe_uses_a_session_and_closes_it() -> None:
+    """tools/list — внутри сессии, сессия закрывается, токен не в argv curl."""
+    text = _read("verify.sh")
+    probe = re.search(r"mcp_session_tools_list\(\) \{(.*?)\n\}", text, flags=re.S)
+    assert probe is not None, "нет сессионной проверки tools/list"
+    body = probe.group(1)
+    for step in ("$init", "notifications/initialized",
+                 "tools/list", "-X DELETE", "Mcp-Session-Id"):
+        assert step in body, f"в сессионной проверке нет шага: {step}"
+    assert not re.search(r'-H "Authorization: Bearer', text), "токен снова уходит аргументом curl"
+
+
+@pytest.mark.parametrize("name", ["verify.sh", "smoke-test.sh"])
+def test_liveness_probes_close_their_sessions(name: str) -> None:
+    """initialize открывает сессию — проверка обязана её закрыть."""
+    text = _read(name)
+    assert "-X DELETE" in text and "Mcp-Session-Id" in text, (
+        f"{name} открывает MCP-сессии и не закрывает их"
+    )
+    assert not re.search(r'-H "Authorization: Bearer', text), f"{name}: токен в argv curl"
+
+
+def test_smoke_probes_task_mcp() -> None:
+    """Смоук после установки видит и доску задач."""
+    text = _read("smoke-test.sh")
+    assert '"tasks:http://127.0.0.1:${MCP_TASK_PORT}/mcp"' in text

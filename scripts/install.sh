@@ -87,6 +87,7 @@ fi
 : "${MCP_MEMORY_PORT:=5001}"
 : "${MCP_MEMORY_ROUTER_PORT:=5002}"
 : "${MCP_AGENT_ROUTER_PORT:=5000}"
+: "${MCP_TASK_PORT:=5003}"
 : "${VAULT_ROOT:=$INSTALL_DIR/vault}"
 
 note "INSTALL_DIR=$INSTALL_DIR SERVICE_USER=$SERVICE_USER"
@@ -344,6 +345,7 @@ VAULT_ROOT=$VAULT_ROOT
 MCP_MEMORY_PORT=$MCP_MEMORY_PORT
 MCP_MEMORY_ROUTER_PORT=$MCP_MEMORY_ROUTER_PORT
 MCP_AGENT_ROUTER_PORT=$MCP_AGENT_ROUTER_PORT
+MCP_TASK_PORT=$MCP_TASK_PORT
 EOF
 chmod 600 "$INSTALL_ENV"
 chown "$SERVICE_USER":"$SERVICE_USER" "$INSTALL_ENV"
@@ -473,7 +475,7 @@ done
 systemctl daemon-reload
 
 # ---------------------------------------------------------------------------
-# 13. Start services (memory-mcp, memory_router-mcp, agent_router-mcp, agent_router-worker, ingest-worker)
+# 13. Start services (memory-mcp, memory_router-mcp, agent_router-mcp, task-mcp, agent_router-worker, ingest-worker)
 # ---------------------------------------------------------------------------
 
 say "13. start services"
@@ -485,10 +487,14 @@ say "13. start services"
 # обновлённой, хотя ничего не обновила. Поэтому два шага: enable ставит
 # автозапуск, restart подхватывает новый код (для остановленного юнита restart
 # равносилен start).
+# task-mcp в списке с 13.09.2026: шаг 12 его юнит ставил, но не включал, и доска
+# задач, которую опрашивает поллер каждого агента, на свежей установке молчала —
+# на живом хосте её когда-то включили руками.
 systemctl enable \
   second_brain-memory-mcp \
   second_brain-memory_router-mcp \
   second_brain-agent_router-mcp \
+  second_brain-task-mcp \
   second_brain-agent_router-worker \
   second_brain-ingest-worker
 
@@ -496,6 +502,7 @@ systemctl restart \
   second_brain-memory-mcp \
   second_brain-memory_router-mcp \
   second_brain-agent_router-mcp \
+  second_brain-task-mcp \
   second_brain-agent_router-worker \
   second_brain-ingest-worker
 
@@ -504,6 +511,7 @@ systemctl --no-pager status \
   second_brain-memory-mcp \
   second_brain-memory_router-mcp \
   second_brain-agent_router-mcp \
+  second_brain-task-mcp \
   second_brain-agent_router-worker \
   second_brain-ingest-worker || true
 
@@ -515,7 +523,7 @@ say "14. smoke test"
 
 if [ -x "$INSTALL_DIR/scripts/smoke-test.sh" ]; then
   if MCP_MEMORY_PORT="$MCP_MEMORY_PORT" MCP_MEMORY_ROUTER_PORT="$MCP_MEMORY_ROUTER_PORT" \
-     MCP_AGENT_ROUTER_PORT="$MCP_AGENT_ROUTER_PORT" \
+     MCP_AGENT_ROUTER_PORT="$MCP_AGENT_ROUTER_PORT" MCP_TASK_PORT="$MCP_TASK_PORT" \
      bash "$INSTALL_DIR/scripts/smoke-test.sh"; then
     ok "smoke test passed — install verified"
   elif [ "${SKIP_SMOKE_GATE:-0}" = "1" ]; then
@@ -573,7 +581,7 @@ Next steps:
   2. Agent tokens: existing agents were auto-connected above (scripts/connect-agents.sh).
      Restart them to pick up tokens:  systemctl restart claude-agent-<name>
      For future/remote agents:        $INSTALL_DIR/.venv/bin/python $INSTALL_DIR/scripts/issue-agent-token.py --agent <name> --scopes 'decisions,external,knowledge,inbox'
-  3. Point your local agents at:     http://<host>:$MCP_MEMORY_PORT/mcp (memory), :$MCP_MEMORY_ROUTER_PORT/mcp (memory_router), :$MCP_AGENT_ROUTER_PORT/mcp (agent_router)
+  3. Point your local agents at:     http://<host>:$MCP_MEMORY_PORT/mcp (memory), :$MCP_MEMORY_ROUTER_PORT/mcp (memory_router), :$MCP_AGENT_ROUTER_PORT/mcp (agent_router), :$MCP_TASK_PORT/mcp (tasks)
   4. Set up the inbox-agent locally: bash $INSTALL_DIR/scripts/install-local.sh
   5. Review $ETC_DIR/secrets.env and add provider API keys you want available.
 
