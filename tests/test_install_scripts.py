@@ -121,3 +121,19 @@ def test_smoke_probes_task_mcp() -> None:
     """Смоук после установки видит и доску задач."""
     text = _read("smoke-test.sh")
     assert '"tasks:http://127.0.0.1:${MCP_TASK_PORT}/mcp"' in text
+
+
+@pytest.mark.parametrize("name", ["install.sh", "connect-agents.sh"])
+def test_service_user_commands_do_not_use_sudo_preserve_env(name: str) -> None:
+    """Команды от сервисного пользователя — без sudo -E.
+
+    Обычный sudo (22.04/24.04) с -E сохраняет HOME=/root: huggingface_hub
+    под second_brain лез в /root/.cache/huggingface/token, модель не
+    скачивалась, и чистая установка на 24.04 падала на шаге 11 (13.09.2026).
+    sudo-rs (26.04) -E игнорирует — поэтому на 26.04 та же установка проходила.
+    """
+    code = "\n".join(
+        line for line in _read(name).splitlines() if not line.lstrip().startswith("#")
+    )
+    assert not re.search(r"sudo\s+-E\b", code), f"{name}: sudo -E вернулся"
+    assert "PGPASSWORD=" not in code, f"{name}: пароль БД снова идёт через окружение/argv"
