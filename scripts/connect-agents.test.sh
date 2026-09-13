@@ -109,6 +109,15 @@ mkdir -p "$TMP/lab/shared/.claude" 2>/dev/null; mkdir -p "$TMP/lab/plain"
 out="$(run_sut 2>&1)"
 echo "$out" | grep -q 'shared: no agent.env' && ok "non-wired dir skipped" || bad "non-wired dir not skipped"
 
+# ---- case 4b: agent.env without AGENT_SCOPES → DEFAULT_SCOPES, not a silent exit
+rm -rf "$TMP/lab"; mkdir -p "$TMP/lab/noscope/.claude"
+printf 'export AGENT_ID="noscope"\nexport AGENT_BEARER="CHANGE_ME"\n' > "$TMP/lab/noscope/.claude/agent.env"
+printf '{"mcpServers":{"m":{"headers":{"Authorization":"Bearer CHANGE_ME"}}}}\n' > "$TMP/lab/noscope/.claude/.mcp.json"
+out="$(SKIP_AGENT_RESTART=1 run_sut 2>&1)"; rc=$?
+[ $rc -eq 0 ] && echo "$out" | grep -q 'noscope: connected (scopes=decisions,external' \
+  && ok "no AGENT_SCOPES → default scopes" \
+  || bad "no AGENT_SCOPES: rc=$rc, script died silently or ignored DEFAULT_SCOPES"
+
 # ---- case 5: no lab at all → clean exit 0 -----------------------------------
 out="$(SB_HOME="$SB" SB_ETC="$TMP/etc" SECRETS="$TMP/etc/secrets.env" \
   SERVICE_USER="$(id -un)" AGENT_LAB_DIR="$TMP/nope" bash "$SUT" 2>&1)"; rc=$?

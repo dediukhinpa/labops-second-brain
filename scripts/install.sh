@@ -374,10 +374,12 @@ if [ ! -s "$ADMIN_TOKEN_FILE" ]; then
   if [ -x "$INSTALL_DIR/.venv/bin/python" ] && [ -f "$INSTALL_DIR/scripts/issue-agent-token.py" ]; then
     # The redirect runs in this (root) shell; that's intentional since the
     # secrets dir is root-owned at this point. We chown to SERVICE_USER below.
+    # Без sudo -E и без PG_* в окружении: скрипт сам читает $INSTALL_DIR/.env,
+    # записанный шагом 8. -E на обычном sudo (22.04/24.04) оставлял HOME=/root,
+    # а на sudo-rs (26.04) игнорируется — поведение различалось между версиями,
+    # и на 24.04 из-за этого падал шаг 11 (см. комментарий там).
     # shellcheck disable=SC2024
-    PG_HOST="$PG_HOST" PG_PORT="$PG_PORT" \
-    PG_DATABASE="$PG_DATABASE" PG_USER="$PG_USER" PG_PASSWORD="$PG_PASSWORD" \
-      sudo -E -u "$SERVICE_USER" "$INSTALL_DIR/.venv/bin/python" \
+    sudo -u "$SERVICE_USER" "$INSTALL_DIR/.venv/bin/python" \
       "$INSTALL_DIR/scripts/issue-agent-token.py" \
       --agent admin --scopes '*' \
       > "$ADMIN_TOKEN_FILE"
@@ -414,8 +416,16 @@ if [ -x "$INSTALL_DIR/.venv/bin/python" ]; then
   # FASTEMBED_MODEL/FASTEMBED_ONNX_FILE из окружения по-прежнему
   # уважаются. Прогреваем ровно те веса, что грузят сервисы: полные
   # вместо int8 сделали бы кэш бесполезным для первого запроса.
-  if FASTEMBED_CACHE_DIR="$STATE_DIR/fastembed" \
-       sudo -E -u "$SERVICE_USER" env PYTHONPATH="$INSTALL_DIR" \
+  #
+  # Переменные — явно через env, НЕ через sudo -E. Обычный sudo с -E сохраняет
+  # HOME=/root, и huggingface_hub под $SERVICE_USER лез за токеном в
+  # /root/.cache/huggingface/token: Permission denied, модель не скачивалась,
+  # установка падала здесь на чистой Ubuntu 24.04 (13.09.2026). На 26.04 это
+  # не проявлялось только потому, что sudo-rs флаг -E игнорирует.
+  FASTEMBED_ENV=(PYTHONPATH="$INSTALL_DIR" FASTEMBED_CACHE_DIR="$STATE_DIR/fastembed")
+  [ -n "${FASTEMBED_MODEL:-}" ] && FASTEMBED_ENV+=(FASTEMBED_MODEL="$FASTEMBED_MODEL")
+  [ -n "${FASTEMBED_ONNX_FILE:-}" ] && FASTEMBED_ENV+=(FASTEMBED_ONNX_FILE="$FASTEMBED_ONNX_FILE")
+  if sudo -u "$SERVICE_USER" env "${FASTEMBED_ENV[@]}" \
        "$INSTALL_DIR/.venv/bin/python" - "$STATE_DIR/fastembed" <<'PY'
 import os
 import sys

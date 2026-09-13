@@ -71,15 +71,20 @@ PG_DATABASE="$(read_key PG_DATABASE)"; PG_USER="$(read_key PG_USER)"
 PG_PASSWORD="$(read_key PG_PASSWORD)"
 SERVICE_USER="${SERVICE_USER:-$PG_USER}"
 
+# Без sudo -E: обычный sudo с ним оставляет HOME=/root, sudo-rs его игнорирует —
+# одна и та же команда вела себя по-разному на 24.04 и 26.04. Скрипт выдачи
+# токена сам читает $SB_HOME/.env (его пишет install.sh), так что PG_* ему через
+# окружение не нужны.
 issue_token() {  # $1=agent $2=scopes → raw token on stdout (never logged)
-  PG_HOST="$PG_HOST" PG_PORT="$PG_PORT" PG_DATABASE="$PG_DATABASE" \
-  PG_USER="$PG_USER" PG_PASSWORD="$PG_PASSWORD" \
-    sudo -E -u "$SERVICE_USER" "$VENV_PY" "$ISSUE_PY" --agent "$1" --scopes "$2"
+  sudo -u "$SERVICE_USER" "$VENV_PY" "$ISSUE_PY" --agent "$1" --scopes "$2"
 }
 
 # extract KEY value from an `export KEY="v"` / `KEY=v` style env file
+# Нет ключа — пустая строка и код 0: grep без совпадения под set -e + pipefail
+# молча обрывал весь скрипт на `scopes="$(env_val … AGENT_SCOPES)"`, и запасной
+# DEFAULT_SCOPES для agent.env без scopes не срабатывал никогда.
 env_val() {  # $1=file $2=key
-  grep -E "^(export +)?$2=" "$1" 2>/dev/null | head -1 \
+  { grep -E "^(export +)?$2=" "$1" 2>/dev/null || true; } | head -1 \
     | sed -E "s/^(export +)?$2=//" | sed -e 's/^"//' -e 's/"$//'
 }
 
@@ -91,11 +96,23 @@ env_val() {  # $1=file $2=key
 token_valid() {  # $1=token
   local sha out
   sha="$(printf '%s' "$1" | sha256sum | awk '{print $1}')"
-  if out="$(PGPASSWORD="$PG_PASSWORD" sudo -E -u "$SERVICE_USER" psql \
-              -h "${PG_HOST:-/var/run/postgresql}" -p "${PG_PORT:-5432}" \
-              -d "$PG_DATABASE" -tAc \
-              "SELECT 1 FROM agent_tokens WHERE token_sha256='$sha' AND revoked_at IS NULL LIMIT 1" \
-              2>/dev/null)"; then
+  # Пароль — через временный pgpass-файл, а не PGPASSWORD: без sudo -E
+  # окружение до psql не доходит, а `env PGPASSWORD=…` положил бы пароль в argv.
+  # При peer-auth (сокет, пустой пароль) файл не нужен.
+  local pgpass_env=() pgpass_file="" rc=0
+  if [ -n "$PG_PASSWORD" ]; then
+    pgpass_file="$(umask 077; mktemp)"
+    printf '*:*:*:*:%s\n' "$(printf '%s' "$PG_PASSWORD" | sed -e 's/\\/\\\\/g' -e 's/:/\\:/g')" > "$pgpass_file"
+    chown "$SERVICE_USER" "$pgpass_file" 2>/dev/null || true
+    pgpass_env=(PGPASSFILE="$pgpass_file")
+  fi
+  out="$(sudo -u "$SERVICE_USER" env "${pgpass_env[@]}" psql \
+           -h "${PG_HOST:-/var/run/postgresql}" -p "${PG_PORT:-5432}" \
+           -d "$PG_DATABASE" -tAc \
+           "SELECT 1 FROM agent_tokens WHERE token_sha256='$sha' AND revoked_at IS NULL LIMIT 1" \
+           2>/dev/null)" || rc=$?
+  [ -n "$pgpass_file" ] && rm -f "$pgpass_file"
+  if [ "$rc" -eq 0 ]; then
     [ "$(printf '%s' "$out" | tr -d '[:space:]')" = "1" ] && echo 1 || echo 0
   else
     echo ''   # psql недоступен / ошибка соединения — не знаем
