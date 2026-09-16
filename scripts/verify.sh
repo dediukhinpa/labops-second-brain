@@ -166,6 +166,15 @@ for spec in "${MCP_ENDPOINTS[@]}" "${WORKER_UNITS[@]/%/::}"; do
   unit="${spec%%:*}"; [ -n "${seen[$unit]:-}" ] && continue; seen[$unit]=1
   [ "$(systemctl is-active "$unit.service" 2>/dev/null)" = "active" ] \
     && pass "service active: $unit" || fail "service NOT active: $unit"
+  # Отдельно — автозапуск. «Поставлен, но не включён» выглядит зелёным ровно до
+  # первой перезагрузки: так доска задач и молчала у клиента на свежей установке
+  # (install.sh юнит клал, но не включал — исправлено 13.09.2026).
+  case "$(systemctl is-enabled "$unit.service" 2>/dev/null)" in
+    enabled|enabled-runtime|static|indirect|generated|alias)
+      pass "service enabled: $unit" ;;
+    *)
+      fail "service NOT enabled: $unit — после перезагрузки не поднимется (systemctl enable $unit)" ;;
+  esac
 done
 # port listening + speaks MCP (initialize returns serverInfo). Auth is enforced
 # at tool-call level (initialize is open by MCP design), so this checks liveness,
