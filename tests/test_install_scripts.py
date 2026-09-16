@@ -137,3 +137,68 @@ def test_service_user_commands_do_not_use_sudo_preserve_env(name: str) -> None:
     )
     assert not re.search(r"sudo\s+-E\b", code), f"{name}: sudo -E вернулся"
     assert "PGPASSWORD=" not in code, f"{name}: пароль БД снова идёт через окружение/argv"
+
+
+# Две находки 16.09.2026, обе — с установки у клиента для УЖЕ существующего
+# агента: не подключились recall и доска задач.
+
+
+def test_verify_requires_units_to_be_enabled() -> None:
+    """«Поставлен, но не включён» — зелёный до первой перезагрузки.
+
+    Именно так доска задач молчала на свежей установке: install.sh юнит клал,
+    но не включал, а verify проверял только is-active.
+    """
+    text = _read("verify.sh")
+    assert "systemctl is-enabled" in text, "verify.sh не проверяет автозапуск юнитов"
+    assert "service NOT enabled" in text, "verify.sh не сообщает о выключенном юните"
+
+
+def test_connect_agents_adds_missing_mcp_servers() -> None:
+    """Состав .mcp.json приводится к текущему, а не только Bearer подменяется.
+
+    Файл рендерится один раз, при создании агента: у агента прежнего выпуска в
+    нём нет доски задач, и сколько ни переустанавливай second_brain, сервис не
+    подключится.
+    """
+    text = _read("connect-agents.sh")
+    for server in (
+        "second_brain-memory=",
+        "second_brain-memory_router=",
+        "second_brain-agent_router=",
+        "second_brain-tasks=",
+    ):
+        assert server in text, f"connect-agents.sh не знает про сервер {server}"
+    assert "sync_mcp_json" in text, "connect-agents.sh не синхронизирует .mcp.json"
+    assert "SECOND_BRAIN_TASKS_URL=" in text, (
+        "connect-agents.sh не дописывает адрес доски задач в agent.env"
+    )
+
+
+def test_connect_agents_waits_for_services_before_restart() -> None:
+    """Рестарт сессии раньше готовности сервиса = сервис «не подключён» навсегда.
+
+    memory_router грузит модель эмбеддингов в lifespan и слушает порт не сразу;
+    Claude Code, стартовав раньше, запоминает MCP-сервер как недоступный до
+    следующего перезапуска агента.
+    """
+    text = _read("connect-agents.sh")
+    assert "wait_for_services" in text, "connect-agents.sh не ждёт готовности сервисов"
+    assert '"$SERVICES_READY" != "1"' in text, (
+        "рестарт агента не защищён проверкой готовности сервисов"
+    )
+    probe = re.search(r"mcp_ready\(\) \{(.*?)\n\}", text, flags=re.S)
+    assert probe is not None, "нет пробника готовности MCP"
+    body = probe.group(1)
+    assert '"method":"initialize"' in body, "пробник не использует initialize"
+    assert "-X DELETE" in body and "Mcp-Session-Id" in body, (
+        "пробник открывает MCP-сессию и не закрывает её"
+    )
+
+
+def test_connect_agents_checks_token_scopes() -> None:
+    """Валидный токен ещё не значит достаточный: без task-board доска не берётся."""
+    text = _read("connect-agents.sh")
+    assert "token_scopes" in text, "connect-agents.sh не сверяет права токена"
+    assert "can_write_scopes" in text, "права токена не читаются из БД"
+    assert "merge_scopes" in text, "прежние scopes не объединяются с базовыми"
