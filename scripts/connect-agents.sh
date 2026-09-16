@@ -366,6 +366,8 @@ for ws in "$AGENT_LAB_DIR"/*/.claude; do
   token=""            # непусто = выдали новый токен в этом проходе
   changed=0           # что-то в конфигурации агента реально поменялось
   need_token=1
+  have_scopes=""      # права токена по БД; пусто = не знаем
+  env_backed_up=0     # бэкап agent.env снимается один раз, перед первой правкой
   if [ -n "$current" ] && [ "$current" != "$PLACEHOLDER" ] && [ "${FORCE_REISSUE:-0}" != "1" ]; then
     # Не просто «есть непустой токен» — ПРОВЕРЯЕМ его в БД. При пере-установке
     # second-brain БД пересоздаётся и старые токены становятся невалидными;
@@ -398,36 +400,69 @@ for ws in "$AGENT_LAB_DIR"/*/.claude; do
 
   owner="$(stat -c '%U:%G' "$agent_env")"
 
+  # Бэкап — только когда файл действительно меняется, и свежий: раньше при
+  # живом токене бэкап снимался лишь однажды, и следующие правки agent.env
+  # (адреса, права) шли поверх файла, чей бэкап описывал состояние месячной
+  # давности.
+  backup_env() {  # $1 — готовая копия состояния до правки (необязательно)
+    [ "$env_backed_up" = "1" ] && { [ -n "${1:-}" ] && rm -f "$1"; return 0; }
+    if [ -n "${1:-}" ]; then mv "$1" "$agent_env.bak-connect"
+    else cp -p "$agent_env" "$agent_env.bak-connect"; fi
+    chown "$owner" "$agent_env.bak-connect"
+    env_backed_up=1
+  }
+  set_env_scopes() {  # $1=scopes
+    if grep -qE '^(export +)?AGENT_SCOPES=' "$agent_env"; then
+      sed -i -E "s|^(export +)?AGENT_SCOPES=.*|export AGENT_SCOPES=\"$1\"|" "$agent_env"
+    else
+      printf 'export AGENT_SCOPES="%s"\n' "$1" >> "$agent_env"
+    fi
+  }
+
   if [ "$need_token" = "1" ]; then
-    scopes="$(merge_scopes "$(env_val "$agent_env" AGENT_SCOPES)")"
+    # База — права из БД, если их удалось прочитать: строка в agent.env могла
+    # отстать от них, и перевыпуск по ней молча снял бы права, выданные вручную.
+    scopes="$(merge_scopes "${have_scopes:-$(env_val "$agent_env" AGENT_SCOPES)}")"
     if ! token="$(issue_token "$agent" "$scopes")" || [ -z "$token" ]; then
       warn "$agent: token issuance FAILED — skipping"
       failed=$((failed+1)); continue
     fi
 
     # agent.env — hooks read AGENT_BEARER from the session environment
-    cp -p "$agent_env" "$agent_env.bak-connect"
+    backup_env
     sed -i -E "s|^(export +)?AGENT_BEARER=.*|export AGENT_BEARER=\"$token\"|" "$agent_env"
     grep -qE '^(export +)?AGENT_BEARER=' "$agent_env" \
       || printf 'export AGENT_BEARER="%s"\n' "$token" >> "$agent_env"
     # Права записываем туда же: следующий запуск (и хуки, которые их читают)
     # должны видеть тот же набор, что зашит в выданный токен.
-    if grep -qE '^(export +)?AGENT_SCOPES=' "$agent_env"; then
-      sed -i -E "s|^(export +)?AGENT_SCOPES=.*|export AGENT_SCOPES=\"$scopes\"|" "$agent_env"
-    else
-      printf 'export AGENT_SCOPES="%s"\n' "$scopes" >> "$agent_env"
-    fi
-    chmod 600 "$agent_env"; chown "$owner" "$agent_env" "$agent_env.bak-connect"
+    set_env_scopes "$scopes"
+    chmod 600 "$agent_env"; chown "$owner" "$agent_env"
     changed=1
   else
     scopes="$(env_val "$agent_env" AGENT_SCOPES)"
-    [ -f "$agent_env.bak-connect" ] || cp -p "$agent_env" "$agent_env.bak-connect"
+    # Токен оставили, но строка AGENT_SCOPES могла разойтись с БД: права
+    # выдавали перевыпуском мимо этого скрипта (так было у carmella —
+    # task-board в БД есть, в agent.env нет). Истина — БД; строку сверяем.
+    # Рестарт сессии ради этого не нужен: во время работы агента AGENT_SCOPES
+    # никто не читает, это только база для следующего перевыпуска.
+    if [ -n "$have_scopes" ] && [ "$have_scopes" != "$scopes" ]; then
+      backup_env
+      set_env_scopes "$have_scopes"
+      chmod 600 "$agent_env"; chown "$owner" "$agent_env"
+      ok "$agent: AGENT_SCOPES в agent.env сверен с БД: $have_scopes (было: ${scopes:-пусто})"
+      scopes="$have_scopes"
+    fi
   fi
 
   # Адреса сервисов в agent.env: у агента прежнего выпуска нет
   # SECOND_BRAIN_TASKS_URL, и поллер доски задач молчит даже при живом сервисе.
+  env_before="$(mktemp "$agent_env.pre-connect.XXXXXX")"   # рядом, а не в /tmp: внутри токен
+  cp -p "$agent_env" "$env_before"
   added_env="$(ensure_env_urls "$agent_env")"
-  if [ -n "$added_env" ]; then
+  if [ -z "$added_env" ]; then
+    rm -f "$env_before"
+  else
+    backup_env "$env_before"
     chmod 600 "$agent_env"; chown "$owner" "$agent_env"
     ok "$agent: в agent.env дописаны адреса:$added_env"
     changed=1
@@ -454,7 +489,7 @@ for ws in "$AGENT_LAB_DIR"/*/.claude; do
   fi
 
   if [ "$changed" = "0" ]; then
-    note "$agent: уже подключён полностью — менять нечего"
+    note "$agent: уже подключён полностью — рестарт не нужен"
     skipped=$((skipped+1)); continue
   fi
 

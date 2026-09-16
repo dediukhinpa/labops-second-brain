@@ -182,6 +182,39 @@ echo "$out" | grep -q 'dev: уже подключён полностью' \
 grep -q 'restart claude-agent-dev.service' "$TMP/systemctl.log" \
   && bad "лишний рестарт агента" || ok "лишнего рестарта нет"
 
+# ---- case 2a: токен оставлен, AGENT_SCOPES отстал от БД → строку сверяем ----
+envf="$TMP/lab/dev/.claude/agent.env"
+sed -i -E 's|^export AGENT_SCOPES=.*|export AGENT_SCOPES="decisions,knowledge"|' "$envf"
+echo "old backup marker" > "$envf.bak-connect"
+: > "$TMP/systemctl.log"
+out="$(FAKE_TOKEN_VALID=1 run_sut 2>&1)"
+echo "$out" | grep -q 'dev: AGENT_SCOPES в agent.env сверен с БД' \
+  && ok "отставший AGENT_SCOPES замечен" || bad "расхождение AGENT_SCOPES с БД не замечено: $out"
+grep -q "^export AGENT_SCOPES=\"$FULL_SCOPES\"" "$envf" \
+  && ok "AGENT_SCOPES = права из БД" || bad "AGENT_SCOPES не сверен: $(grep AGENT_SCOPES "$envf")"
+grep -q 'AGENT_SCOPES="decisions,knowledge"' "$envf.bak-connect" \
+  && ok "бэкап снят свежий, перед правкой" || bad "бэкап устаревший: $(cat "$envf.bak-connect")"
+grep -q 'restart claude-agent-dev.service' "$TMP/systemctl.log" \
+  && bad "рестарт ради одной строки AGENT_SCOPES" || ok "сверка прав без рестарта агента"
+ls "$TMP/lab/dev/.claude/" | grep -q 'pre-connect' \
+  && bad "временная копия agent.env не убрана" || ok "временных копий agent.env не осталось"
+
+# ---- case 2a': адрес дописан при живом токене → бэкап тоже свежий -----------
+sed -i '/SECOND_BRAIN_TASKS_URL/d' "$envf"
+echo "old backup marker" > "$envf.bak-connect"
+out="$(FAKE_TOKEN_VALID=1 run_sut 2>&1)"
+grep -q 'old backup marker' "$envf.bak-connect" \
+  && bad "дописали адрес поверх старого бэкапа" || ok "бэкап обновлён перед дописыванием адреса"
+grep -q 'SECOND_BRAIN_TASKS_URL' "$envf.bak-connect" \
+  && bad "бэкап снят уже после правки" || ok "бэкап — состояние до правки"
+
+# ---- case 2a'': перевыпуск берёт права из БД, а не из отставшей строки ------
+sed -i -E 's|^export AGENT_SCOPES=.*|export AGENT_SCOPES="decisions"|' "$envf"
+out="$(FAKE_TOKEN_VALID=1 FAKE_TOKEN_SCOPES="decisions,projects" run_sut 2>&1)"
+echo "$out" | grep -q 'scopes=decisions,projects,' \
+  && ok "выданное вручную право (projects) пережило перевыпуск" \
+  || bad "перевыпуск по отставшей строке потерял права из БД: $out"
+
 # ---- case 2b: валидный токен, но прав не хватает → переиздание --------------
 out="$(FAKE_TOKEN_VALID=1 FAKE_TOKEN_SCOPES="decisions,knowledge" run_sut 2>&1)"
 echo "$out" | grep -q 'прав не хватает' \
