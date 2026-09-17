@@ -5,20 +5,20 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-PG_BIN="${PG_BIN:-$(ls -d /usr/lib/postgresql/*/bin 2>/dev/null | sort -V | tail -1)}"
-if [ -z "$PG_BIN" ] || [ ! -x "$PG_BIN/initdb" ]; then
+pg_bin="$(ls -d /usr/lib/postgresql/*/bin 2>/dev/null | sort -V | tail -1)"
+if [ -z "$pg_bin" ] || [ ! -x "$pg_bin/initdb" ]; then
   echo "skip: нет initdb — миграция 011 не проверялась"
   exit 0
 fi
-PG_PORT="${PG_PORT:-55433}"
+pg_port=55433
 
 TMP="$(mktemp -d)"
-"$PG_BIN/initdb" -D "$TMP/data" -U postgres -A trust >/dev/null
-"$PG_BIN/pg_ctl" -D "$TMP/data" -o "-k $TMP -c listen_addresses='' -p $PG_PORT" \
+"$pg_bin/initdb" -D "$TMP/data" -U postgres -A trust >/dev/null
+"$pg_bin/pg_ctl" -D "$TMP/data" -o "-k $TMP -c listen_addresses='' -p $pg_port" \
   -l "$TMP/log" start >/dev/null
-trap '"$PG_BIN/pg_ctl" -D "$TMP/data" stop -m fast >/dev/null; rm -rf "$TMP"' EXIT
+trap '"$pg_bin/pg_ctl" -D "$TMP/data" stop -m fast >/dev/null; rm -rf "$TMP"' EXIT
 
-psql_q() { psql -h "$TMP" -p "$PG_PORT" -U postgres -v ON_ERROR_STOP=1 -qAt "$@"; }
+psql_q() { psql -h "$TMP" -p "$pg_port" -U postgres -v ON_ERROR_STOP=1 -qAt "$@"; }
 pass=0; fail=0
 ok()  { echo "✓ $*"; pass=$((pass + 1)); }
 bad() { echo "✗ $*"; fail=$((fail + 1)); }
