@@ -10,7 +10,8 @@ if [ -z "$pg_bin" ] || [ ! -x "$pg_bin/initdb" ]; then
   echo "skip: нет initdb — миграция 011 не проверялась"
   exit 0
 fi
-pg_port=55433
+# Случайный порт: фиксированный мог быть занят параллельным прогоном.
+pg_port=$((20000 + RANDOM % 20000))
 
 TMP="$(mktemp -d)"
 "$pg_bin/initdb" -D "$TMP/data" -U postgres -A trust >/dev/null
