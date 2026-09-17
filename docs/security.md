@@ -17,9 +17,9 @@ What this system protects, what it does not, and how to keep an unintentional mi
 
 - **The admin agent token has full power.** It can issue new tokens for any agent with any scopes, read every vault entry, and write into any folder. Treat it like a root SSH key.
 - **The Postgres password has full power.** Anyone with Postgres-superuser-equivalent access can `DROP TABLE`, alter the schema, or read tokens (the sha256 column does not protect against a chosen-prefix attack if the password is leaked).
-- **A compromised local workstation owns its agent tokens.** The inbox-agent token lives in `${INBOX_AGENT_HOME}/.env` — if your laptop is stolen and unlocked, the attacker can write into `external` and `inbox`.
+- **A compromised local workstation owns its agent tokens.** The inbox-agent token lives in `${INBOX_AGENT_HOME}/.env` — if your laptop is stolen and unlocked, the attacker can write into `knowledge` and `inbox`.
 - **The brain VPS is a single point of failure.** No HA, no read replicas, no geo-redundancy. If the VPS is compromised, the attacker has everything.
-- **The vault contains whatever you put into it.** If you forward private messages to the bot, those messages are in `vault/external/` in plain text. Anyone with read access to the vault filesystem can read them. Encrypt the volume if the threat model demands it.
+- **The vault contains whatever you put into it.** If you forward private messages to the bot, those messages are in `vault/knowledge/` in plain text. Anyone with read access to the vault filesystem can read them. Encrypt the volume if the threat model demands it.
 
 ---
 
@@ -39,11 +39,15 @@ The scopes argument restricts which vault folders the agent can write into. A `r
 
 | Agent role | Suggested scopes |
 |---|---|
-| Coordinator (full agent) | `daily, decisions, external, knowledge, error-patterns, inbox` |
-| Inbox-agent (Telegram bot) | `decisions, external, knowledge, inbox` |
+| Coordinator (full agent) | `daily, decisions, knowledge, error-patterns, inbox` |
+| Inbox-agent (Telegram bot) | `decisions, knowledge, inbox` |
 | Coder agent (writes knowledge, error-patterns) | `decisions, knowledge, error-patterns, inbox` |
 | Reviewer agent | `decisions, error-patterns, inbox` |
 | Read-only research agent | (empty — recall works without write scopes) |
+
+`strategy`, `system`, `metrics`, `external` and `tasks` were retired in
+migration `011_retire_unused_scopes.sql` and alias to `knowledge` — see
+`docs/troubleshooting.md` "Retired scopes".
 
 **Revoke:**
 

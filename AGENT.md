@@ -31,7 +31,7 @@ You will NOT:
 
 The system you deploy has up to four layers (the last is Path B only):
 
-1. **Shared brain (VPS):** 3 MCP services (memory write / memory_router read / agent_router event bus) backed by Postgres + pgvector, plus an ingest worker that embeds new vault files. The vault is 12 folders of markdown.
+1. **Shared brain (VPS):** 3 MCP services (memory write / memory_router read / agent_router event bus) backed by Postgres + pgvector, plus an ingest worker that embeds new vault files. The vault is 7 folders of markdown (`strategy`, `system`, `metrics`, `external` and `tasks` were retired into `knowledge` by migration `011_retire_unused_scopes.sql`).
 2. **Inbox-agent (local):** a Telegram bot the user forwards content to (links, voice notes, screenshots). It dual-writes — once to a local `raw/` folder for resilience, once to the shared brain via the memory MCP. Cron jobs compile raw into structured notes daily and send a digest.
 3. **Skills bundle (local):** optional ingestion skills the inbox-agent (and any personal agent) can invoke per content type (YouTube transcripts, Instagram captions, X threads, voice-to-text, generic markdown).
 4. **Personal agent workspaces (local, Path B):** one or more `~/.claude-lab/<agent-id>/.claude/` workspaces produced by `agent-template/install.sh`. Each has its own SOUL (CLAUDE.md), rules, layered memory (handoff.md → decisions.md → MEMORY.md/LEARNINGS.md/TOOLS.md), Stop/SessionStart/PreCompact hooks, and an `.mcp.json` wired to the shared brain. Multiple workspaces share **one** brain — that is the point.
@@ -139,7 +139,7 @@ If the user is undecided after reading this section, default to Path A and expli
               |     documents (body + body_tsv) +               |
               |     chunks (content + embedding vector(768))    |
               |                                                 |
-              |   vault/  (12 markdown folders)                 |
+              |   vault/  (7 markdown folders)                  |
               +-------------------------------------------------+
 ```
 
@@ -147,7 +147,7 @@ If the user is undecided after reading this section, default to Path A and expli
 
 | Service | Port | Purpose | Scopes it writes |
 |---|---|---|---|
-| `memory_mcp` | 5001 | Write tools: create decision, error-pattern, personal note, project note, external note, daily log entry | daily, decisions, external, knowledge, error-patterns, personal, projects, inbox |
+| `memory_mcp` | 5001 | Write tools: create decision, error-pattern, personal note, project note, daily log entry | daily, decisions, knowledge, error-patterns, personal, projects, inbox |
 | `memory_router_mcp` | 5002 | Read tools: recall (hybrid search), recent, related, get-by-id, stats | none (read-only) |
 | `agent_router_mcp` | 5000 | Inter-agent event bus: notify, ack, list-pending, broadcast | none (writes to `outbox` table only) |
 
@@ -239,8 +239,8 @@ Only if the user picked Path B, ask these on top:
 9. **List of personal agents to create.** For each one, ask:
     - **Agent id** (slug, lowercase, hyphenated — e.g. `coordinator-agent`, `coder-agent`, `marketer-agent`). This becomes the workspace directory name `~/.claude-lab/<agent-id>/.claude/` and the `agent` identifier in `agent_tokens`.
     - **Role** (1 line, e.g. "main coordinator and brainstorm partner", "Python/TypeScript coder for backend work", "content marketer for Telegram channel").
-    - **Write scopes** (comma-separated subset of the 12 vault scopes). Defaults per role:
-        - `coordinator-agent`: `daily, decisions, external, knowledge, error-patterns, inbox`
+    - **Write scopes** (comma-separated subset of the 7 vault scopes). Defaults per role:
+        - `coordinator-agent`: `daily, decisions, knowledge, error-patterns, inbox`
         - `coder-agent`: `decisions, knowledge, error-patterns, inbox`
         - `marketer-agent`: `daily, knowledge, inbox`
         - `researcher-agent` (recall-only): empty write scopes
@@ -338,14 +338,14 @@ If smoke-test fails, do not move on. The most common cause is `AuthCaptureMiddle
 
 You need at minimum two tokens for Path A:
 
-- **coordinator token** — for the user's main Claude Code agent that recalls and writes decisions. Full scopes: `daily, decisions, external, knowledge, error-patterns, inbox`.
-- **inbox-agent token** — restricted to the scopes inbox-agent writes: `decisions, external, knowledge, inbox`.
+- **coordinator token** — for the user's main Claude Code agent that recalls and writes decisions. Full scopes: `daily, decisions, knowledge, error-patterns, inbox`.
+- **inbox-agent token** — restricted to the scopes inbox-agent writes: `decisions, knowledge, inbox`.
 
 Issue them with:
 
 ```bash
-ssh <USER>@<VPS_IP> "cd /opt/second_brain && python scripts/issue-agent-token.py --agent coordinator-agent --scopes 'daily,decisions,external,knowledge,error-patterns,inbox'"
-ssh <USER>@<VPS_IP> "cd /opt/second_brain && python scripts/issue-agent-token.py --agent inbox-agent --scopes 'decisions,external,knowledge,inbox'"
+ssh <USER>@<VPS_IP> "cd /opt/second_brain && python scripts/issue-agent-token.py --agent coordinator-agent --scopes 'daily,decisions,knowledge,error-patterns,inbox'"
+ssh <USER>@<VPS_IP> "cd /opt/second_brain && python scripts/issue-agent-token.py --agent inbox-agent --scopes 'decisions,knowledge,inbox'"
 ```
 
 Each command prints the token ONCE to stdout. Capture both. Hand them to the user with the explicit instruction to save them in a password manager. Never write them into the repo, the `.env.example`, or any committed file.
@@ -427,11 +427,11 @@ This is the only step that proves the Path A system actually works.
 
 1. From the user's Telegram, send a YouTube URL (or any URL) directly to the inbox-agent bot.
 2. Within ~2 seconds the bot should reply with a short ack ("Got it" — see `inbox-agent/bot.py` for the exact text).
-3. The hook (`save-to-raw.sh`) runs synchronously inside the bot: it writes the raw markdown into `${INBOX_AGENT_HOME}/raw/...` AND posts to `memory_mcp.create_external_note` over the bearer in `.claude/.mcp.json`.
+3. The hook (`save-to-raw.sh`) runs synchronously inside the bot: it writes the raw markdown into `${INBOX_AGENT_HOME}/raw/...` AND posts it into the shared brain (scope `knowledge`) over the bearer in `.claude/.mcp.json`. (`memory_mcp.create_external_note` and the `external` scope it used were retired in migration `011_retire_unused_scopes.sql` — see docs/troubleshooting.md "Retired scopes"; point this step at whichever write tool is current in your deploy.)
 4. From a fresh Claude Code agent context configured with the coordinator-agent token (use `${INBOX_AGENT_HOME}/.claude/.mcp.json` as reference), call:
 
    ```
-   recall.recent(scope="external", limit=5)
+   recall.recent(scope="knowledge", limit=5)
    ```
 
 5. The just-sent URL must appear in the results, with `agent: inbox-agent` and a recent `created_at` (within the last 60 seconds).
@@ -442,9 +442,9 @@ If the URL does NOT appear, debug in this order:
 
 1. Check the bot got the message and replied: `tail -f ${INBOX_AGENT_HOME}/logs/bot.log` and `tail -f ${INBOX_AGENT_HOME}/logs/save-to-raw.log`.
 2. Check `raw/` has the new file: `ls -la ${INBOX_AGENT_HOME}/raw/ | head`.
-3. Check the dual-write attempted: `grep memory ${INBOX_AGENT_HOME}/logs/save-to-raw.log | tail`. A successful write logs `memory-mcp create_external_note 200`. A failure logs the curl HTTP code and body.
+3. Check the dual-write attempted: `grep memory ${INBOX_AGENT_HOME}/logs/save-to-raw.log | tail`. A successful write logs `memory-mcp <write-tool> 200`. A failure logs the curl HTTP code and body.
 4. On the VPS: `journalctl -u second_brain-memory-mcp -n 200 --no-pager` and `journalctl -u second_brain-ingest-worker -n 200 --no-pager`.
-5. Verify in Postgres: `psql -U second_brain -d second_brain -c "SELECT path, agent, created_at FROM documents WHERE scope='external' ORDER BY created_at DESC LIMIT 5;"`.
+5. Verify in Postgres: `psql -U second_brain -d second_brain -c "SELECT path, agent, created_at FROM documents WHERE scope='knowledge' ORDER BY created_at DESC LIMIT 5;"`.
 
 The fault is almost always (a) wrong bearer token in `${INBOX_AGENT_HOME}/.claude/.mcp.json`, (b) wrong VPS URL there, (c) firewall blocking outbound 443, or (d) `bot.py` not running. Address those before digging deeper.
 
@@ -587,13 +587,13 @@ claude --project ~/.claude-lab/<agent-id>/.claude
 1. The CLI opens without errors.
 2. The SessionStart hook (`hooks/session-start-hook.sh`) runs and writes a fresh top-of-handoff entry.
 3. The first turn loads CLAUDE.md, `core/rules.md`, `core/passive/decisions.md`, `core/active/handoff.md` — confirm by asking the agent: "What is your role?". It should answer with the role you set in step 12.
-4. Ask the agent: "Recall recent entries from scope external." The agent should call `recall.recent` against the brain and return results (at minimum, the URL forwarded in Path A step 10).
+4. Ask the agent: "Recall recent entries from scope knowledge." The agent should call `recall.recent` against the brain and return results (at minimum, the URL forwarded in Path A step 10).
 
 If recall returns 0 results despite the brain having data:
 
 - Check `.mcp.json` Bearer is correct (re-read it; should be the value from step 14, not the placeholder).
 - Check the brain is reachable: `curl -sS -H "Authorization: Bearer <token>" http://<VPS_IP>:5002/mcp` should return 406 with an MCP error body. 401 → wrong token. Connection refused → firewall or the services are bound to 127.0.0.1 and you are connecting remotely without a tunnel.
-- Check the agent's bearer is for an agent whose scope set includes `external` for reads (default read scope `*` covers everything).
+- Check the agent's bearer is for an agent whose scope set includes `knowledge` for reads (default read scope `*` covers everything).
 
 ### Step 18 (optional): Wire the agent into a Telegram bot
 
@@ -684,7 +684,7 @@ The deployment is complete when ALL of these are verifiable. Read each one and c
 - [ ] `psql -U second_brain -d second_brain -c "SELECT agent, array_length(can_write_scopes,1) FROM agent_tokens WHERE revoked_at IS NULL;"` shows at least two rows (`coordinator-agent`, `inbox-agent`) with the expected scope counts.
 - [ ] `curl -sS http://<VPS_IP>:5002/mcp` (from the VPS itself, or from a Tailscale/tunnel-connected host) returns the recall service banner. Add an `Authorization: Bearer <token>` header — a 406 with MCP error body confirms the upstream is live and auth is wired.
 - [ ] The Telegram bot (`bot.py`) responds to `/start` from the allowlisted user_id within 2 seconds, and replies with a short ack to a forwarded URL.
-- [ ] A forwarded URL → bot ack ("Got it") → `recall.recent(scope='external')` returns the URL with `agent: inbox-agent`. End-to-end.
+- [ ] A forwarded URL → bot ack ("Got it") → `recall.recent(scope='knowledge')` returns the URL with `agent: inbox-agent`. End-to-end.
 - [ ] `crontab -l` shows the two inbox-agent entries.
 - [ ] `ls ${INBOX_AGENT_HOME}/raw/` shows at least one captured raw file (the test forward from Step 10).
 - [ ] No secrets in any file you committed back. Run `bash scripts/sanitize-check.sh` from the repo root to confirm.
@@ -696,7 +696,7 @@ For each agent in the user's list:
 - [ ] Workspace exists: `ls ~/.claude-lab/<agent-id>/.claude/` shows `CLAUDE.md`, `core/`, `hooks/`, `scripts/`, `.mcp.json`.
 - [ ] `.mcp.json` has all three second_brain entries (memory / memory_router / agent_router), each with that agent's Bearer (not the placeholder, not the inbox-agent token, not another agent's token).
 - [ ] `claude --project ~/.claude-lab/<agent-id>/.claude` opens without errors and reports the role you set.
-- [ ] From inside that agent, `recall.recent(scope='external')` returns results (at minimum, the URL forwarded in Path A step 10).
+- [ ] From inside that agent, `recall.recent(scope='knowledge')` returns results (at minimum, the URL forwarded in Path A step 10).
 - [ ] `cat <workspace>/core/passive/.consolidated-at` shows a recent watermark — consolidation is firing (there is no crontab to check: rotation and consolidation are driven by the Stop hook and the watchdog).
 - [ ] Per-agent token is in `agent_tokens` with the right scopes: `psql -U second_brain -d second_brain -c "SELECT agent, can_write_scopes FROM agent_tokens WHERE agent='<agent-id>' AND revoked_at IS NULL;"`.
 

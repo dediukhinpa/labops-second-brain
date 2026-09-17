@@ -157,11 +157,11 @@ On the VPS:
 cd /opt/second_brain
 sudo -u second_brain python scripts/issue-agent-token.py \
   --agent coordinator-agent \
-  --scopes 'daily,decisions,external,knowledge,error-patterns,inbox'
+  --scopes 'daily,decisions,knowledge,error-patterns,inbox'
 
 sudo -u second_brain python scripts/issue-agent-token.py \
   --agent inbox-agent \
-  --scopes 'decisions,external,knowledge,inbox'
+  --scopes 'decisions,knowledge,inbox'
 ```
 
 Each command prints the token once. Copy both to your password manager immediately.
@@ -267,7 +267,7 @@ On your phone or desktop Telegram:
 3. From your Claude Code agent (configured with the coordinator-agent token in `.claude/.mcp.json`), call:
 
    ```
-   recall.recent(scope="external", limit=5)
+   recall.recent(scope="knowledge", limit=5)
    ```
 
 4. The URL must appear with `agent: inbox-agent` and a recent `created_at`.
@@ -333,7 +333,7 @@ sudo -u second_brain python /opt/second_brain/scripts/issue-agent-token.py \
 
 Default scope sets per role:
 
-- `coordinator-agent`: `daily,decisions,external,knowledge,error-patterns,inbox`
+- `coordinator-agent`: `daily,decisions,knowledge,error-patterns,inbox`
 - `coder-agent`: `decisions,knowledge,error-patterns,inbox`
 - `marketer-agent`: `daily,knowledge,inbox`
 - `researcher-agent` (recall-only): `--scopes ''` (empty — recall always works, but no writes)
@@ -392,7 +392,7 @@ Expected behaviour:
 1. The CLI opens cleanly.
 2. The SessionStart hook runs (you can confirm via `tail ~/.claude-lab/<agent-id>/.claude/logs/session-start.log`).
 3. Ask the agent: "What is your role?" — it should respond with the role you set in step 11.
-4. Ask the agent: "Recall recent entries from scope external." — it should call `second_brain-memory_router.recent` and return results (at minimum, the URL you forwarded in step 10 of Path A).
+4. Ask the agent: "Recall recent entries from scope knowledge." — it should call `second_brain-memory_router.recent` and return results (at minimum, the URL you forwarded in step 10 of Path A).
 
 If recall returns 0 results despite the brain having data:
 
@@ -414,7 +414,7 @@ Repeat steps 11–14 for every additional agent the user wants. Each one is inde
 
 **Backing up Postgres.** Optional. `pg_dump -U second_brain second_brain > backup.sql` if you want to skip re-embedding on restore.
 
-**Upgrading services.** Pull a newer commit, `rsync` to VPS, run `sudo bash scripts/install.sh` again (idempotent). Services restart automatically.
+**Upgrading services.** Pull a newer commit, `rsync` to VPS, run `sudo bash scripts/install.sh` again (idempotent). Services restart automatically. The repo sync (`scripts/lib/sync-repo.sh`) excludes `vault/`, `.cache/`, `.venv/`, `.env` and `secrets/` from its `rsync --delete`, so re-running the installer no longer wipes the live vault. If the upgrade includes migration `011_retire_unused_scopes.sql`, the installer also moves any files still sitting in the retired vault folders (`strategy`, `system`, `metrics`, `external`, `tasks`) into `knowledge/`, backing them up first — see `docs/troubleshooting.md` "Retired scopes".
 
 **Re-embedding the vault** (after model change or vault rebuild). Stop the worker, clear the chunks (and their queue), re-enqueue every document, restart the worker:
 

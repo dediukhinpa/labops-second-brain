@@ -56,7 +56,6 @@ All three speak MCP over HTTP using FastMCP's `streamable-http` transport. They 
 |---|---|---|
 | `create_decision_note` | `decisions` | Decision records (context, decision, consequences, alternatives) |
 | `create_error_pattern_note` | `error-patterns` | Recurring failure modes (symptom, root cause, fix) |
-| `create_external_note` | `external`, `knowledge` | External content: URLs, transcripts, screenshots, voice-to-text |
 | `create_handoff` | `inbox` | Inter-session handoff notes |
 | `append_daily_log` | `daily` | Daily journal entry append |
 | `supersede_decision` | `decisions` | Mark an old decision as superseded, link to the new one |
@@ -107,22 +106,23 @@ Tasks are at-least-once: a worker re-delivers if no ack arrives within `next_ret
 
 ## The vault
 
-Plain markdown on a filesystem, mounted at `${VAULT_ROOT}` (default `/opt/second_brain/vault/`). 12 folders, each with its own purpose:
+Plain markdown on a filesystem, mounted at `${VAULT_ROOT}` (default `/opt/second_brain/vault/`). 7 folders, each with its own purpose:
 
 | Folder | Purpose |
 |---|---|
-| `strategy/` | Long-horizon plans, OKRs, north-star definitions |
-| `system/` | How the system itself is configured (your own ops notes) |
 | `personal/` | Notes about the person: name, skills, experience, life situations |
 | `daily/` | One file per day, append-only |
-| `metrics/` | Numeric snapshots (subscriber counts, MRR, conversion rates) |
 | `decisions/` | One file per architectural or product decision |
 | `projects/` | Per-project working notes (status, blockers, deliverables) |
-| `external/` | Content forwarded into the inbox (URLs, voice notes, screenshots) |
-| `knowledge/` | Curated explanations of topics (vs. raw external content), including step-by-step procedures (deploy, restore, on-call) |
-| `tasks/` | Task tracking, kanban-style notes |
+| `knowledge/` | Curated explanations of topics, including step-by-step procedures (deploy, restore, on-call) |
 | `error-patterns/` | Recurring problems with their resolutions |
 | `inbox/` | Triage area for items not yet classified |
+
+`strategy/`, `system/`, `metrics/`, `external/` and `tasks/` used to be
+separate folders. No core-set tool ever wrote to them, so migration
+`011_retire_unused_scopes.sql` folded them into `knowledge/` (`services/shared/scopes.py`
+aliases the old names) and `scripts/install.sh` moves any files an upgrade
+still finds there — see `docs/troubleshooting.md` "Retired scopes".
 
 **Why markdown?** Three reasons. (1) Human-editable in any text editor without depending on this stack. (2) Re-indexable — if Postgres dies, you re-run the ingest worker and the index rebuilds from markdown. (3) Diffable — `git` works natively, you can review your agents' writes the same way you review code.
 
@@ -163,7 +163,7 @@ agent_tokens (
 
 **Token lifecycle:**
 
-1. `python scripts/issue-agent-token.py --agent coordinator-agent --scopes 'decisions,external,...'` generates a random 32-byte token, stores its sha256 in `agent_tokens`, and prints the raw token to stdout once.
+1. `python scripts/issue-agent-token.py --agent coordinator-agent --scopes 'decisions,knowledge,...'` generates a random 32-byte token, stores its sha256 in `agent_tokens`, and prints the raw token to stdout once.
 2. The user stores the raw token in a password manager.
 3. The agent's `.mcp.json` includes `Authorization: Bearer <token>` in every MCP server config.
 4. To revoke, set `revoked_at = now()` on the row; the auth check excludes revoked tokens.
@@ -225,13 +225,14 @@ Multiply by a per-scope weight from `services/memory_router_mcp/source_weights.p
 | `decisions` | 1.5 |
 | `knowledge` | 1.2 |
 | `projects` | 1.0 |
-| `strategy`, `system` | 1.0 |
-| `daily`, `metrics` | 0.8 |
-| `external` | 0.7 |
-| `tasks` | 0.6 |
+| `daily` | 0.8 |
 | `inbox` | 0.5 |
 
 Rationale: a query like "how do we redeploy the recall service" should preferentially surface a knowledge write-up over a daily-log mention. A query about a past failure mode should bias toward error-patterns. The weights are a default — tune them in `source_weights.py` for your usage.
+
+`strategy`, `system`, `metrics`, `external` and `tasks` no longer appear here:
+migration `011_retire_unused_scopes.sql` folded them into `knowledge`, so a
+recall scoped to any of the old names now resolves to `knowledge`'s weight.
 
 ### Step 5: scope filter and limit
 
@@ -268,7 +269,7 @@ A separate process (`second_brain-ingest-worker.service`) that consumes the `emb
 The local Telegram bot daemon (`inbox-agent/bot.py`, python-telegram-bot polling) is the only ingestion path you actively touch. On each inbound message it calls the hook (`inbox-agent/hooks/save-to-raw.sh`) synchronously, replies with a short ack, and exits the handler. The hook executes:
 
 1. Write the raw message (text + metadata) to a local file under `${INBOX_AGENT_HOME}/raw/YYYY/MM/DD/<timestamp>-<source>.md`.
-2. Immediately attempt to call `memory_mcp.create_external_note` with the same content, scope `external`, agent `inbox-agent`.
+2. Immediately attempt to mirror the same content into the shared vault under scope `knowledge`, agent `inbox-agent`. (`memory_mcp.create_external_note` and the `external` scope it wrote were retired in migration `011_retire_unused_scopes.sql` — see docs/troubleshooting.md "Retired scopes"; this step needs a current write tool wired in.)
 
 **Both writes attempt in parallel.** If the network is down or the brain is unreachable, the local raw write still succeeds. The compile cron job (`*/15 * * * *`) re-tries any raw files that still have `compiled: false` in their frontmatter.
 
@@ -280,7 +281,7 @@ The local Telegram bot daemon (`inbox-agent/bot.py`, python-telegram-bot polling
 
 **Compile cycle:** every 15 minutes, `inbox-agent/scripts/compile.sh` walks `raw/` for files with `compiled: false`, classifies them by content type (URL → fetch + extract; voice → Whisper transcribe; image → describe), enriches the markdown, writes a structured note via memory MCP, and flips the flag to `compiled: true`. The original raw file stays in place as an audit trail.
 
-**Daily digest:** at 09:00 UTC, `inbox-agent/scripts/daily-digest.sh` recalls the last ~26h of `external` writes, asks Sonnet for an HTML digest using `inbox-agent/prompts/digest.prompt.md` + `inbox-agent/config/digest-template.html`, and sends it to the user's Telegram via the Bot API.
+**Daily digest:** at 09:00 UTC, `inbox-agent/scripts/daily-digest.sh` recalls the last ~26h of `knowledge` writes, asks Sonnet for an HTML digest using `inbox-agent/prompts/digest.prompt.md` + `inbox-agent/config/digest-template.html`, and sends it to the user's Telegram via the Bot API.
 
 ---
 
@@ -416,7 +417,7 @@ The bearer is per-agent (issued by `scripts/issue-agent-token.py --agent <agent-
 
 Inside Claude Code, this surfaces as four groups of tools the agent can call: `second_brain-memory.create_decision_note(...)`, `second_brain-memory_router.recall(...)`, `second_brain-agent_router.notify(...)`, `second_brain-tasks.task_claim(...)`, etc. No HTTP plumbing — Claude Code handles the JSON-RPC and the Bearer.
 
-The default scope set an agent is issued is `decisions,external,knowledge,inbox,error-patterns,task-board,personal,projects,daily`. `personal`, `projects` and `daily` back the core-set tools `create_personal_note`, `create_project_note` and `append_daily_log`, which were refused without them. `task-board` and `error-patterns` are not optional in practice: `task-board` gates every write on the board (`task_mcp/server.py::TASKS_WRITE_SCOPE`), and the agent's own `CLAUDE.md` instructs it to write `decisions/error-patterns` into shared memory.
+The default scope set an agent is issued is `decisions,knowledge,inbox,error-patterns,task-board,personal,projects,daily`. `personal`, `projects` and `daily` back the core-set tools `create_personal_note`, `create_project_note` and `append_daily_log`, which were refused without them. `task-board` and `error-patterns` are not optional in practice: `task-board` gates every write on the board (`task_mcp/server.py::TASKS_WRITE_SCOPE`), and the agent's own `CLAUDE.md` instructs it to write `decisions/error-patterns` into shared memory.
 
 ### How hooks glue local memory to the shared brain
 
@@ -448,7 +449,7 @@ The whole point of Path B is that you can run multiple workspaces against one br
 
 - Each personal agent has its own `~/.claude-lab/<agent-id>/.claude/`.
 - Each has its own Bearer in `agent_tokens`. `audit_log` attributes every write to the correct agent — never to a shared identity.
-- Each has its own write scopes. `coordinator-agent` writes decisions; `marketer-agent` writes external notes; `researcher-agent` writes nothing.
+- Each has its own write scopes. `coordinator-agent` writes decisions; `marketer-agent` writes knowledge notes; `researcher-agent` writes nothing.
 - All read the **same** vault. A decision written by `coordinator-agent` shows up in `researcher-agent`'s recall the next time it queries.
 - All can use `agent_router_mcp` to notify each other: `coordinator-agent` calls `second_brain-agent_router.notify(to_agent='coder-agent', payload={...})`, `coder-agent` polls `list_my_pending()` and acks when done.
 
@@ -466,12 +467,12 @@ You forward a YouTube URL to your Telegram bot at 14:00:
 
 1. **14:00:00** — Bot receives the message. `save-to-raw.sh` runs.
 2. **14:00:00.1** — Raw file written to `${INBOX_AGENT_HOME}/raw/2026/05/16/1716470400-telegram-fwd.md`.
-3. **14:00:00.2** — Hook calls `memory_mcp.create_external_note` with the URL + the forwarded text. Brain returns `second_brain_id`.
+3. **14:00:00.2** — Hook calls a memory write tool with the URL + the forwarded text, scope `knowledge`. Brain returns `second_brain_id`. (This step used to call `memory_mcp.create_external_note`, scope `external`; both were retired in migration `011_retire_unused_scopes.sql` — see docs/troubleshooting.md "Retired scopes".)
 4. **14:00:00.3** — Hook writes `second_brain_id` back into the raw file's frontmatter.
 5. **14:05:00** — Compile cron runs. Sees the raw file is compiled (`second_brain_id` present), skips.
-6. **14:05:01** — Another raw file from a different forward (a voice note) is found. Classifier routes it to `groq-voice`. Transcript is generated and written as a fresh `external` note via memory MCP.
-7. **VPS, async** — `memory_mcp.create_external_note` inserts the new file row into `documents` and enqueues an `embedding_jobs` row. The ingest worker picks the job up within a few seconds, chunks the body, embeds each chunk, and upserts rows into `chunks`. The note is now recallable.
-8. **15:00** — From your coordinator agent's MCP context, you call `memory_router.recent(scope='external', limit=10)`. The YouTube URL appears with `agent: inbox-agent`, score reflecting recency and scope weight.
+6. **14:05:01** — Another raw file from a different forward (a voice note) is found. Classifier routes it to `groq-voice`. Transcript is generated and written as a fresh `knowledge` note via memory MCP.
+7. **VPS, async** — The write inserts the new file row into `documents` and enqueues an `embedding_jobs` row. The ingest worker picks the job up within a few seconds, chunks the body, embeds each chunk, and upserts rows into `chunks`. The note is now recallable.
+8. **15:00** — From your coordinator agent's MCP context, you call `memory_router.recent(scope='knowledge', limit=10)`. The YouTube URL appears with `agent: inbox-agent`, score reflecting recency and scope weight.
 9. **Next morning 07:00** — Daily digest cron runs. Builds yesterday's recap. Bot sends it to you on Telegram.
 
 Total moving parts the user touches: forward a Telegram message. Everything else is automated.
