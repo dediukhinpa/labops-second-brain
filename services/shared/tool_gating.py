@@ -31,6 +31,9 @@ CORE_TOOLS_BY_SERVER: dict[str, frozenset[str]] = {
         # Subject-bucketed knowledge: personal (the human) vs project (the business).
         "create_personal_note",
         "create_project_note",
+        # Reference knowledge (how-tos, external digests): the only writer of the
+        # default-granted knowledge scope in core.
+        "create_knowledge_note",
     }),
     "memory_router_mcp": frozenset({
         "recall",

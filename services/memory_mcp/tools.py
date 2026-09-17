@@ -1097,6 +1097,80 @@ def register_tools(
         return f"created: {rel_path}"
 
     # ------------------------------------------------------------------
+    # 3d. create_knowledge_note  (durable reference knowledge)
+    # ------------------------------------------------------------------
+    @gated_tool("create_knowledge_note", annotations={"readOnlyHint": False})
+    async def create_knowledge_note(
+        title: str,
+        body: str,
+        tags: list[str],
+        source_url: str | None = None,
+        agent: str | None = None,
+        ctx: dict[str, object] | None = None,
+    ) -> str:
+        """Create a knowledge note in knowledge/.
+
+        Subject = durable reference knowledge that is neither a decision nor an
+        error pattern: how-tos, runbooks, facts about tools and services, and
+        digests of external sources (pass ``source_url``). Since migration 011
+        this is also where the retired ``external`` notes live, and it is the
+        only core-set tool that writes the ``knowledge`` scope — before it the
+        scope was granted by default but nothing could write to it.
+        """
+        t0 = time.monotonic()
+        pool: asyncpg.Pool = await get_pool_fn()  # type: ignore[misc]
+        agent_ctx = await _authenticate_request(ctx, pool)
+        scope = "knowledge"
+
+        if not check_write_scope(agent_ctx, scope):
+            raise PermissionError(f"Agent '{agent_ctx.agent}' cannot write to {scope}")
+
+        # C1 fix (security): identity stays authenticated. Tool ``agent``
+        # parameter is human-attribution only — never the audit identity.
+        resolved_agent = agent_ctx.agent
+        declared_author = agent if (agent and agent != agent_ctx.agent) else None
+        slug = _slugify(title)
+        rel_path = f"{scope}/{slug}.md"
+        abs_path = validate_path(rel_path, vault_root)
+
+        fm: dict[str, Any] = {
+            "type": "knowledge",
+            "created": _now_iso(),
+            "updated": _now_iso(),
+            "agent": resolved_agent,
+            "tags": tags,
+            "related": [],
+        }
+        if source_url:
+            fm["source_url"] = source_url
+        if declared_author is not None:
+            fm["declared_author"] = declared_author
+        content = _build_frontmatter(fm) + f"\n# {title}\n\n{body}\n"
+        content_hash = _sha256(content)
+
+        doc_id, changed = await _upsert_document(
+            pool, rel_path, fm, body, content_hash, "knowledge", resolved_agent,
+        )
+        if not changed:
+            await log_audit(
+                pool, resolved_agent, "create_knowledge_note",
+                {"title": title, "path": rel_path}, "unchanged",
+                int((time.monotonic() - t0) * 1000),
+            )
+            return f"unchanged: {rel_path}"
+
+        abs_path.parent.mkdir(parents=True, exist_ok=True)
+        abs_path.write_text(content, encoding="utf-8")
+
+        await _queue_embedding(pool, doc_id)
+        await log_audit(
+            pool, resolved_agent, "create_knowledge_note",
+            {"title": title, "path": rel_path}, "ok",
+            int((time.monotonic() - t0) * 1000),
+        )
+        return f"created: {rel_path}"
+
+    # ------------------------------------------------------------------
     # 4. create_handoff
     # ------------------------------------------------------------------
     @gated_tool("create_handoff", annotations={"readOnlyHint": False})
