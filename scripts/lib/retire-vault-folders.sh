@@ -6,7 +6,13 @@
 # миграция пишет в documents.path, чтобы vault и база не разошлись. Перед
 # переносом кладёт tar-копию папок в <backup-dir>. Файл, чьё место в knowledge/
 # уже занято, не трогает и называет — его разбирает оператор. Служебные
-# README.md и index.md верхнего уровня удаляются, пустые папки — тоже.
+# README.md и index.md верхнего уровня и все .gitkeep удаляются (vault засевается
+# из шаблона, .gitkeep лежит и в knowledge/ — иначе он «конфликтовал» бы
+# с собой, и папки не снимались бы никогда), пустые папки — тоже.
+#
+# Порядок RETIRED_VAULT_FOLDERS совпадает с ord в миграции 011: если две
+# снятые папки дают один путь в knowledge/, и файл, и строка базы достаются
+# первой по этому порядку.
 # Печатает итог; код возврата 1, если что-то осталось на месте.
 RETIRED_VAULT_FOLDERS=(strategy system metrics external tasks
                        10-strategy 10-system 20-metrics 50-external 60-tasks)
@@ -27,6 +33,7 @@ retire_vault_folders() {
 
   for old in "${present[@]}"; do
     rm -f "$vault/$old/README.md" "$vault/$old/index.md"
+    find "$vault/$old" -type f -name .gitkeep -delete
     while IFS= read -r -d '' rel; do
       rel="${rel#./}"
       target="$vault/knowledge/$rel"

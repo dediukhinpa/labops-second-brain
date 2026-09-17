@@ -17,10 +17,14 @@
 
 BEGIN;
 
-CREATE TEMP TABLE _retired_map(old text PRIMARY KEY) ON COMMIT DROP;
-INSERT INTO _retired_map(old) VALUES
-    ('strategy'), ('system'), ('metrics'), ('external'), ('tasks'),
-    ('10-strategy'), ('10-system'), ('20-metrics'), ('50-external'), ('60-tasks');
+-- ord matches RETIRED_VAULT_FOLDERS in scripts/lib/retire-vault-folders.sh:
+-- when two retired folders map to the same knowledge/ path, the file and the
+-- row both go to the first folder in this order.
+CREATE TEMP TABLE _retired_map(old text PRIMARY KEY, ord int NOT NULL) ON COMMIT DROP;
+INSERT INTO _retired_map(old, ord) VALUES
+    ('strategy', 1), ('system', 2), ('metrics', 3), ('external', 4), ('tasks', 5),
+    ('10-strategy', 6), ('10-system', 7), ('20-metrics', 8), ('50-external', 9),
+    ('60-tasks', 10);
 
 -- 1) documents.scope
 UPDATE documents d
@@ -29,16 +33,27 @@ UPDATE documents d
  WHERE d.scope = m.old;
 
 -- 2) documents.path — rewrite the leading "<old>/" folder segment. Path is
--- UNIQUE, so skip any row that would collide with an existing knowledge/ file
--- of the same name; those need a manual rename (rare — flag for review).
+-- UNIQUE, so a row is skipped when its new path already exists, and when two
+-- retired folders map to the same new path only the first (by ord) moves —
+-- NOT EXISTS alone sees the table before this UPDATE, so two such rows would
+-- both move and abort the whole migration. Skipped rows keep their old path
+-- (the alias still resolves it) and need a manual rename.
+WITH candidates AS (
+    SELECT d.id,
+           'knowledge' || substr(d.path, length(m.old) + 1) AS new_path,
+           row_number() OVER (
+               PARTITION BY 'knowledge' || substr(d.path, length(m.old) + 1)
+               ORDER BY m.ord, d.id
+           ) AS rn
+      FROM documents d
+      JOIN _retired_map m ON d.path LIKE m.old || '/%'
+)
 UPDATE documents d
-   SET path = 'knowledge' || substr(d.path, length(m.old) + 1)
-  FROM _retired_map m
- WHERE d.path LIKE m.old || '/%'
-   AND NOT EXISTS (
-         SELECT 1 FROM documents d2
-          WHERE d2.path = 'knowledge' || substr(d.path, length(m.old) + 1)
-       );
+   SET path = c.new_path
+  FROM candidates c
+ WHERE d.id = c.id
+   AND c.rn = 1
+   AND NOT EXISTS (SELECT 1 FROM documents d2 WHERE d2.path = c.new_path);
 
 -- 3) agent_tokens arrays — replace with 'knowledge', then dedup (a token may
 -- already grant 'knowledge' separately) while preserving first-seen order.
