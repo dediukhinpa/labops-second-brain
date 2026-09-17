@@ -1097,54 +1097,65 @@ def register_tools(
         return f"created: {rel_path}"
 
     # ------------------------------------------------------------------
-    # 3. create_external_note
+    # 3d. create_knowledge_note  (durable reference knowledge)
     # ------------------------------------------------------------------
-    @gated_tool("create_external_note", annotations={"readOnlyHint": False})
-    async def create_external_note(
-        source: str,
-        url: str,
+    @gated_tool("create_knowledge_note", annotations={"readOnlyHint": False})
+    async def create_knowledge_note(
         title: str,
         body: str,
         tags: list[str],
+        source_url: str | None = None,
+        agent: str | None = None,
         ctx: dict[str, object] | None = None,
     ) -> str:
-        """Create an external note in external/{source}/."""
+        """Create a knowledge note in knowledge/.
+
+        Subject = durable reference knowledge that is neither a decision nor an
+        error pattern: how-tos, runbooks, facts about tools and services, and
+        digests of external sources (pass ``source_url``). Since migration 011
+        this is also where the retired ``external`` notes live, and it is the
+        only core-set tool that writes the ``knowledge`` scope — before it the
+        scope was granted by default but nothing could write to it.
+        """
         t0 = time.monotonic()
         pool: asyncpg.Pool = await get_pool_fn()  # type: ignore[misc]
         agent_ctx = await _authenticate_request(ctx, pool)
-        scope = "external"
+        scope = "knowledge"
 
         if not check_write_scope(agent_ctx, scope):
-            raise PermissionError(
-                f"Agent '{agent_ctx.agent}' cannot write to {scope}"
-            )
+            raise PermissionError(f"Agent '{agent_ctx.agent}' cannot write to {scope}")
 
+        # C1 fix (security): identity stays authenticated. Tool ``agent``
+        # parameter is human-attribution only — never the audit identity.
+        resolved_agent = agent_ctx.agent
+        declared_author = agent if (agent and agent != agent_ctx.agent) else None
         slug = _slugify(title)
-        safe_source = re.sub(r"[^a-z0-9_-]+", "-", source.lower()).strip("-")
-        rel_path = f"{scope}/{safe_source}/{_today_iso()}-{slug}.md"
+        rel_path = f"{scope}/{slug}.md"
         abs_path = validate_path(rel_path, vault_root)
 
-        fm = {
-            "type": "external",
+        fm: dict[str, Any] = {
+            "type": "knowledge",
             "created": _now_iso(),
             "updated": _now_iso(),
-            "agent": agent_ctx.agent,
-            "source": source,
-            "url": url,
+            "agent": resolved_agent,
             "tags": tags,
             "related": [],
         }
+        if source_url:
+            fm["source_url"] = source_url
+        if declared_author is not None:
+            fm["declared_author"] = declared_author
         content = _build_frontmatter(fm) + f"\n# {title}\n\n{body}\n"
         content_hash = _sha256(content)
 
         doc_id, changed = await _upsert_document(
-            pool, rel_path, fm, body, content_hash, "external", agent_ctx.agent,
+            pool, rel_path, fm, body, content_hash, "knowledge", resolved_agent,
         )
         if not changed:
             await log_audit(
-                pool, agent_ctx.agent, "create_external_note",
-                {"title": title, "source": source, "path": rel_path},
-                "unchanged", int((time.monotonic() - t0) * 1000),
+                pool, resolved_agent, "create_knowledge_note",
+                {"title": title, "path": rel_path}, "unchanged",
+                int((time.monotonic() - t0) * 1000),
             )
             return f"unchanged: {rel_path}"
 
@@ -1153,9 +1164,9 @@ def register_tools(
 
         await _queue_embedding(pool, doc_id)
         await log_audit(
-            pool, agent_ctx.agent, "create_external_note",
-            {"title": title, "source": source, "path": rel_path},
-            "ok", int((time.monotonic() - t0) * 1000),
+            pool, resolved_agent, "create_knowledge_note",
+            {"title": title, "path": rel_path}, "ok",
+            int((time.monotonic() - t0) * 1000),
         )
         return f"created: {rel_path}"
 

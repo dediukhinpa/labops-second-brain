@@ -47,7 +47,7 @@ class TestPathGuard:
             assert str(result).startswith(str(tmp_path.resolve()))
 
     def test_scope_count(self) -> None:
-        assert len(ALLOWED_SCOPES) == 13
+        assert len(ALLOWED_SCOPES) == 8
 
     def test_empty_path_raises(self, tmp_path: Path) -> None:
         with pytest.raises(ValueError, match="must not be empty"):
@@ -70,9 +70,15 @@ class TestPathGuard:
             validate_path("99-secret/note.md", str(tmp_path))
 
     def test_nested_path(self, tmp_path: Path) -> None:
-        result = validate_path("external/twitter/2026-01-01-post.md", str(tmp_path))
-        expected = (tmp_path / "external" / "twitter" / "2026-01-01-post.md").resolve()
+        result = validate_path("knowledge/twitter/2026-01-01-post.md", str(tmp_path))
+        expected = (tmp_path / "knowledge" / "twitter" / "2026-01-01-post.md").resolve()
         assert result == expected
+
+    def test_retired_scope_lands_in_knowledge(self, tmp_path: Path) -> None:
+        # Снятые миграцией 011 папки больше не создаются: путь уходит в knowledge/.
+        for old in ("external", "strategy", "system", "metrics", "tasks", "50-external"):
+            result = validate_path(f"{old}/sub/note.md", str(tmp_path))
+            assert result == (tmp_path / "knowledge" / "sub" / "note.md").resolve()
 
     def test_scope_only_no_file(self, tmp_path: Path) -> None:
         result = validate_path("decisions", str(tmp_path))

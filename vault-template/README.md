@@ -8,18 +8,19 @@ Folders use plain semantic names (no numeric prefixes). Each folder has a single
 
 | Folder | Purpose | Typical author |
 |---|---|---|
-| `strategy/` | Long-term mission, milestones, north-star artifacts | owner, coordinator-agent |
-| `system/` | System configs, infra notes, environment topology | coder-agent, reviewer-agent |
 | `personal/` | Notes about the person: name, skills, experience, life situations | inbox-agent, coordinator-agent |
 | `daily/` | Cross-agent daily timeline (append-only log) | every agent |
-| `metrics/` | Monitoring exports, KPI snapshots, dashboards | inbox-agent, coordinator-agent |
 | `decisions/` | Immutable decision notes with full context | every agent (most trafficked) |
 | `projects/` | Active initiatives, PROJECT.md files, status | coordinator-agent, coder-agent |
-| `external/` | Scout sources: forwards, articles, channels, social posts | inbox-agent |
 | `knowledge/` | Compiled artifacts, documentation for other agents | inbox-agent, coordinator-agent |
-| `tasks/` | Task-board snapshots, archived task histories | coordinator-agent |
 | `error-patterns/` | Incidents + fixes (recall weight 3.0×) | every agent |
 | `inbox/` | Handoffs between agents, state-machine messages | every agent |
+
+`strategy`, `system`, `metrics`, `external` and `tasks` used to be separate
+folders. They were retired in migration `011_retire_unused_scopes.sql` (no
+core-set tool ever wrote to them) and now alias to `knowledge`; on upgrade,
+`scripts/install.sh` moves any files it finds in those folders into
+`knowledge/` — see `docs/troubleshooting.md` "Retired scopes".
 
 ## How indexing works
 
@@ -58,7 +59,7 @@ Every file should start with YAML frontmatter. See `_templates/*.md` for canonic
 
 ```yaml
 ---
-type: decision | error-pattern | external | note
+type: decision | error-pattern | note
 created: '2026-05-16T10:00:00Z'
 updated: '2026-05-16T10:00:00Z'
 agent: <writing-agent-name>

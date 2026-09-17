@@ -82,7 +82,6 @@ def test_memory_core_tools_policy() -> None:
 
     # Other memory tools should be hidden in core.
     for name in [
-        "create_external_note",
         "update_index",
         "update_document",
         "slot_list",

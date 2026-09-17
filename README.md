@@ -191,7 +191,7 @@ flowchart LR
 
 | Server | Port | Purpose | systemd |
 |---|---|---|---|
-| `memory-mcp` | **5001** | writes notes to the vault (decision/error/external/personal/project), dedup by sha256 | `memory-mcp.service` |
+| `memory-mcp` | **5001** | writes notes to the vault (decision/error/personal/project), dedup by sha256 | `memory-mcp.service` |
 | `memory_router-mcp` | **5002** | hybrid search (semantic + lexical + rerank), cross-links | `memory_router-mcp.service` |
 | `agent_router-mcp` | **5000** | swarm coordination: outbox, inter-agent messages | `agent_router-mcp.service` |
 | `task-mcp` | **5003** | tasks, board, agent supervisor | `task-mcp.service` |
@@ -216,21 +216,24 @@ A document flows: written via `memory-mcp` → a file in the vault + a row in `d
 
 ## Scopes & RBAC
 
-Scopes are plain semantic names — simply **top-level folders in the vault** into which knowledge is sorted (strategy, decisions, inbox, etc.). Each scope is a separate "shelf", and read/write access is granted as a list of these shelves. The easiest start for a newcomer is to issue yourself a token with `scopes='*'` (access to every shelf — handy for admin and tests) and narrow the rights later, once it is clear who needs what.
+Scopes are plain semantic names — simply **top-level folders in the vault** into which knowledge is sorted (decisions, knowledge, inbox, etc.). Each scope is a separate "shelf", and read/write access is granted as a list of these shelves. The easiest start for a newcomer is to issue yourself a token with `scopes='*'` (access to every shelf — handy for admin and tests) and narrow the rights later, once it is clear who needs what.
 
 **Scope** = the first folder of a path in the vault. The allowed list is `services/memory_mcp/path_guard.py` (`ALLOWED_SCOPES`):
 
 | Scope | What it stores |
 |---|---|
-| `strategy` / `system` | strategy, system notes |
 | `personal` | about the person: name, skills, experience, life situations |
-| `daily` / `metrics` | daily logs, metrics |
+| `daily` | daily logs |
 | `decisions` | architectural/product decisions |
 | `projects` | business: accounting, contracts, policies, correspondence, commercial secrets |
-| `external` / `knowledge` | external sources, research, articles, reproducible processes |
-| `tasks` | tasks |
+| `knowledge` | external sources, research, articles, reproducible processes |
 | `error-patterns` | bugs and their fixes |
 | `inbox` | incoming, unsorted |
+
+`strategy`, `system`, `metrics`, `external` and `tasks` used to be separate
+scopes; migration `011_retire_unused_scopes.sql` retired them into `knowledge`
+(no core-set tool ever wrote to them) — see `docs/troubleshooting.md` "Retired
+scopes".
 
 **RBAC:** each agent has a token in `agent_tokens` with `can_read_scopes` / `can_write_scopes`. `*` = access to any scope. Tokens are issued by `scripts/issue-agent-token.py` (the raw secret is printed once; the DB stores its sha256).
 
@@ -286,9 +289,9 @@ Details — `docs/INTER-AGENT-WEBHOOKS.md`.
 |---|---|---|
 | `create_decision_note` | `decisions` | architectural/product decisions, API contracts, rules |
 | `create_error_pattern_note` | `error-patterns` | a bug + its fix + how not to repeat it |
-| `create_external_note` | `external` | external sources/research (+ `source_url`) |
 | `create_personal_note` | `personal` | about the person |
 | `create_project_note` | `projects` | about the business/project |
+| `create_knowledge_note` | `knowledge` | reference knowledge: how-tos, facts about tools, digests of external sources (`source_url`) |
 | `append_daily_log` | `daily` | daily progress |
 | `create_handoff` | — | a flush before compaction / at the end of a session |
 | `supersede_decision` | `decisions` | an outdated decision |
@@ -308,7 +311,7 @@ Requirements: **Ubuntu 22.04**, root/sudo. No Docker — native (apt + venv + sy
 sudo bash scripts/install.sh
 ```
 
-Idempotent steps: platform check → apt (Python 3.11, Postgres 16 + pgvector) → system user `second_brain` → `/opt/second_brain` + venv → role/DB + `vector` extension → secrets (0600) → migrations → preload the embedding model (`paraphrase-multilingual-mpnet-base-v2`, ~1.0 GB) → render and install the systemd units → `systemctl enable --now` → **smoke-test** → print the admin token.
+Idempotent steps: platform check → apt (Python 3.11, Postgres 16 + pgvector) → system user `second_brain` → `/opt/second_brain` + venv → role/DB + `vector` extension → secrets (0600) → migrations → preload the embedding model (`paraphrase-multilingual-mpnet-base-v2`, ~1.0 GB) → render and install the systemd units → `systemctl enable --now` → **smoke-test** → print the admin token. Re-running on an existing install is safe: the repo sync (`scripts/lib/sync-repo.sh`) excludes `vault/`, `.cache/`, `.venv/`, `.env` and `secrets/` from its `rsync --delete`, so a reinstall no longer wipes the live vault, and any files still sitting in the vault folders retired by migration `011_retire_unused_scopes.sql` are moved into `knowledge/` (backed up first) — see `docs/troubleshooting.md` "Retired scopes".
 
 **Dependency on the other repos:**
 - The canonical install order is `labops-agent-architecture` → `labops-tg-plugin` → `labops-second-brain` — but these are three **separate** `install.sh` scripts, each run by the operator. `labops-agent-architecture`'s `install.sh` only **clones** this repo to `~/labops-second-brain`; it does **not** run `scripts/install.sh` for you. You install this repo yourself, either manually (`sudo bash scripts/install.sh`) or by handing it to a Claude Code agent with the `AGENT.md` prompt — see step 1 above.

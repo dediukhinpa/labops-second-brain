@@ -8,6 +8,33 @@ FAQ for the most common failures. Find your symptom, follow the fix. If your pro
 
 ---
 
+## Retired scopes
+
+`strategy`, `system`, `metrics`, `external` and `tasks` (and their legacy numbered
+folders `10-strategy`, `10-system`, `20-metrics`, `50-external`, `60-tasks`) were
+retired in migration `011_retire_unused_scopes.sql` — no core-set tool ever wrote
+to them, so they only padded tokens and left empty vault folders. They alias to
+`knowledge` at runtime (`services/shared/scopes.py`).
+
+**On upgrade**, `scripts/install.sh` moves any files it finds under
+`vault/strategy|system|metrics|external|tasks/` into `vault/knowledge/`, matching
+the path rewrite the migration applies to `documents.path`. Before moving
+anything it writes a tar backup of the retired folders to
+`$STATE_DIR/backups/vault-retired-folders-<timestamp>.tar.gz` (default
+`/var/lib/second_brain/backups`). If a file would collide with an existing
+`knowledge/` file of the same name, it is left in place under the old folder and
+named in the install output for you to resolve by hand — the installer does not
+overwrite or silently drop it.
+
+Separately, migration `011_retire_unused_scopes.sql` rewrites the database:
+`documents.scope` and the leading folder segment of `documents.path` are updated
+to `knowledge`, and `agent_tokens.can_write_scopes` / `can_read_scopes` have the
+retired names replaced with `knowledge` (deduplicated). The migration only
+touches Postgres — it never touches the filesystem, which is why the vault-side
+move above is a separate step.
+
+---
+
 ## Q: `smoke-test.sh` fails with 401 Unauthorized
 
 **Cause:** the Bearer token sent does not match any row in `agent_tokens`, or the row is `revoked_at IS NOT NULL`.
@@ -30,7 +57,7 @@ FAQ for the most common failures. Find your symptom, follow the fix. If your pro
 
 ## Q: `ingest-worker` is not embedding new files
 
-**Symptoms:** you write a markdown file under `${VAULT_ROOT}/external/test.md`, wait a minute, and `recall.recent` does not return it.
+**Symptoms:** you write a markdown file under `${VAULT_ROOT}/knowledge/test.md`, wait a minute, and `recall.recent` does not return it.
 
 **Diagnosis:**
 
@@ -42,7 +69,7 @@ Common causes:
 
 - **FastEmbed model not downloaded.** First start downloads ~1GB. If the network was flaky, it may have failed silently. Look for `huggingface_hub` errors in the log. Fix: `sudo -u second_brain /opt/second_brain/.venv/bin/python -c "from fastembed import TextEmbedding; TextEmbedding('sentence-transformers/paraphrase-multilingual-mpnet-base-v2')"` to force the download with visible output.
 
-- **You wrote the file directly to the filesystem.** The ingest worker is **not** a filesystem watcher — it polls the `embedding_jobs` table, and only `memory_mcp` writes jobs to that table. A file dropped into `${VAULT_ROOT}/external/test.md` by hand is invisible to the worker. Fix: either call `memory_mcp.update_document(path=...)` from an authenticated agent, or insert the job manually: `psql -U second_brain -d second_brain -c "INSERT INTO documents(path, body, source_type, agent, scope) VALUES ('<path>', '<body>', 'external', 'admin', 'external') RETURNING id;"` followed by `INSERT INTO embedding_jobs(doc_id, status) VALUES (<id>, 'pending') ON CONFLICT DO NOTHING;`.
+- **You wrote the file directly to the filesystem.** The ingest worker is **not** a filesystem watcher — it polls the `embedding_jobs` table, and only `memory_mcp` writes jobs to that table. A file dropped into `${VAULT_ROOT}/knowledge/test.md` by hand is invisible to the worker. Fix: either call `memory_mcp.update_document(path=...)` from an authenticated agent, or insert the job manually: `psql -U second_brain -d second_brain -c "INSERT INTO documents(path, body, source_type, agent, scope) VALUES ('<path>', '<body>', 'knowledge', 'admin', 'knowledge') RETURNING id;"` followed by `INSERT INTO embedding_jobs(doc_id, status) VALUES (<id>, 'pending') ON CONFLICT DO NOTHING;`.
 
 - **Permissions on the new file.** The `second_brain` user must be able to read the file. Fix: `sudo chown -R second_brain:second_brain ${VAULT_ROOT}`.
 
@@ -81,15 +108,15 @@ Common causes:
 
 ## Q: bot replies "Got it" but `recall.recent` returns empty
 
-**Symptoms:** the bot acks normally, the raw file appears in `${INBOX_AGENT_HOME}/raw/...`, but `recall.recent(scope='external')` from the coordinator agent does not show the URL.
+**Symptoms:** the bot acks normally, the raw file appears in `${INBOX_AGENT_HOME}/raw/...`, but `recall.recent(scope='knowledge')` from the coordinator agent does not show the URL.
 
 **Diagnosis chain:**
 
-1. **Did the dual-write attempt succeed?** `tail -200 ${INBOX_AGENT_HOME}/logs/save-to-raw.log`. The hook logs the HTTP status returned by `memory_mcp.create_external_note`. A `200` means brain accepted it. A `401`/`403`/`5xx` means the brain rejected it — read the body to see why.
+1. **Did the dual-write attempt succeed?** `tail -200 ${INBOX_AGENT_HOME}/logs/save-to-raw.log`. The hook logs the HTTP status returned by the memory MCP write tool it calls (`create_knowledge_note`; the older `create_external_note` and its `external` scope were retired in migration `011_retire_unused_scopes.sql`; see "Retired scopes" below). A `200` means brain accepted it. A `401`/`403`/`5xx` means the brain rejected it — read the body to see why.
 2. **Is the `.mcp.json` Bearer correct?** `cat ${INBOX_AGENT_HOME}/.claude/.mcp.json | jq '.mcpServers["second_brain-memory"]'`. Confirm the URL matches your VPS (`https://mcp.<your-domain>/memory/mcp` or `http://<tailscale-ip>:5001/mcp`) and the bearer header is non-empty. If you see literal `${MCP_HOST}` / `${AGENT_TOKEN}` placeholders, re-run `bash scripts/install-local.sh` — `envsubst` did not substitute.
 3. **VPS reachability:** `curl -sS -H "Authorization: Bearer $(jq -r '.mcpServers["second_brain-memory"].headers.Authorization' ${INBOX_AGENT_HOME}/.claude/.mcp.json | cut -d' ' -f2)" https://mcp.<your-domain>/memory_router/mcp/` (or the Tailscale equivalent). Expect 406 with an MCP error body — that proves the upstream is alive and your token works. 401 → wrong token. Connection refused → firewall blocks 443 (or 5001 on Tailscale).
 4. **Did the embedding job run?** On the VPS: `psql -U second_brain -d second_brain -c "SELECT id, status, created_at FROM embedding_jobs ORDER BY id DESC LIMIT 5;"`. A `pending` job that hasn't moved in minutes means the ingest worker is stuck — see "ingest-worker is not embedding new files" above.
-5. **Scope check.** `recall.recent` filters by scope. The hook writes scope `external` by default — if your `classifier.yaml` rerouted the URL to `knowledge` or `inbox`, change the recall call accordingly.
+5. **Scope check.** `recall.recent` filters by scope. The hook writes scope `knowledge` by default — if your `classifier.yaml` rerouted the URL to `inbox` instead, change the recall call accordingly.
 
 ---
 
@@ -204,7 +231,7 @@ sudo -u second_brain python /opt/second_brain/scripts/issue-agent-token.py --age
 
 1. Check the actual error in the log: `tail -100 ${INBOX_AGENT_HOME}/logs/compile.log`.
 2. Common causes:
-   - The memory MCP call returned 403 (scope mismatch). Inbox-agent token needs `external` and `inbox` scopes.
+   - The memory MCP call returned 403 (scope mismatch). Inbox-agent token needs `knowledge` and `inbox` scopes.
    - The raw file is read-only (permission). `chmod u+w` it.
    - JSON-RPC parse error from a malformed response. Check the memory MCP service logs on the VPS.
 
@@ -218,7 +245,7 @@ sudo -u second_brain python /opt/second_brain/scripts/issue-agent-token.py --age
 
 **Diagnosis:**
 
-1. Was yesterday actually empty? `recall.recent(scope='external', limit=20)` from your coordinator agent should show yesterday's entries.
+1. Was yesterday actually empty? `recall.recent(scope='knowledge', limit=20)` from your coordinator agent should show yesterday's entries.
 2. Time zone mismatch: `daily-digest.sh` uses the local box's TZ to compute "yesterday". If your box is in UTC but you live in UTC+8, "yesterday" starts and ends at unexpected hours. Set `TZ=` in the digest crontab line.
 3. Recall token wrong: `tail ${INBOX_AGENT_HOME}/logs/digest.log` for 401.
 
@@ -229,7 +256,7 @@ sudo -u second_brain python /opt/second_brain/scripts/issue-agent-token.py --age
 **Recommended: archive, do not delete.**
 
 1. Create a `vault/archive/<YYYY>/` folder.
-2. Move old daily entries (`daily/`) and external entries (`external/`) more than 1 year old into it.
+2. Move old daily entries (`daily/`) and old `knowledge/` entries more than 1 year old into it.
 3. Drop them from the search index but keep markdown on disk:
 
    ```sql
@@ -282,7 +309,7 @@ Hard-deleting markdown is supported but irreversible. Always back up before prun
 1. **Bearer wrong.** Open `~/.claude-lab/<agent-id>/.claude/.mcp.json` and confirm the `Authorization: Bearer <token>` header is the actual token from `scripts/issue-agent-token.py --agent <agent-id> ...` — not the literal `<AGENT_BEARER>` placeholder, not the inbox-agent's token, not another agent's. Each agent has its own.
 2. **Bearer not in DB.** On the VPS: `psql -U second_brain -d second_brain -c "SELECT agent, can_write_scopes, can_read_scopes, revoked_at FROM agent_tokens WHERE agent='<agent-id>';"`. `revoked_at` should be `NULL`. Read scope should include `*` (default) or the scope you are querying.
 3. **Brain unreachable.** From the local workstation: `curl -sS -H "Authorization: Bearer <token>" https://<MCP_HOST>/memory_router/mcp/`. Expect HTTP 406 with an MCP error body — that proves both upstream and token are working. 401 → wrong token (or revoked). Connection refused → firewall, DNS, or Tailscale down.
-4. **Scope mismatch.** A `recall.recent(scope='decisions')` call returns nothing if no agent has written to `decisions` yet. Try `recall.recent(scope='external')` to see at minimum the inbox-agent's forwards.
+4. **Scope mismatch.** A `recall.recent(scope='decisions')` call returns nothing if no agent has written to `decisions` yet. Try `recall.recent(scope='knowledge')` to see at minimum the inbox-agent's forwards.
 5. **Token issued but workspace cached the old config.** Restart the Claude Code session — `.mcp.json` is read on launch.
 
 ---

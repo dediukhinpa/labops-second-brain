@@ -18,9 +18,16 @@ def test_legacy_names_map_to_canonical():
     assert normalize_scope("30-decisions") == "decisions"
     assert normalize_scope("90-inbox") == "inbox"
     assert normalize_scope("15-personal") == "personal"
-    # the two "tasks" concepts disambiguate
-    assert normalize_scope("60-tasks") == "tasks"        # vault folder
+    # the retired "tasks" vault folder and the Postgres board stay distinct
+    assert normalize_scope("60-tasks") == "knowledge"    # retired in migration 011
     assert normalize_scope("10-tasks") == "task-board"   # Postgres task board
+
+
+def test_retired_scopes_map_to_knowledge():
+    for old in ("strategy", "system", "metrics", "external", "tasks",
+                "10-strategy", "10-system", "20-metrics", "50-external"):
+        assert normalize_scope(old) == "knowledge"
+        assert old not in CANONICAL_SCOPES
 
 
 def test_canonical_and_unknown_pass_through():

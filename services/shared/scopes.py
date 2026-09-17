@@ -16,21 +16,21 @@ a deployment the aliases are only a safety net.
 The ``runbooks`` scope was retired in migration ``008_remove_runbooks_scope.sql``
 (the tool and folder saw no real usage); both ``runbooks`` and the legacy
 ``70-runbooks`` now alias to ``knowledge``, the closest remaining semantic fit.
+
+``strategy``, ``system``, ``metrics``, ``external`` and ``tasks`` were retired
+the same way in migration ``011_retire_unused_scopes.sql``: on a standard
+(``core``) deploy no tool wrote to them, so they only padded tokens and the
+vault. They alias to ``knowledge`` as well.
 """
 from __future__ import annotations
 
 # Canonical RBAC scopes — what tokens grant and what the system stores.
 CANONICAL_SCOPES = frozenset({
-    "strategy",
-    "system",
     "personal",
     "daily",
-    "metrics",
     "decisions",
     "projects",
-    "external",
     "knowledge",
-    "tasks",
     "task-board",
     "error-patterns",
     "inbox",
@@ -46,19 +46,25 @@ ALLOWED_PATH_SCOPES = (CANONICAL_SCOPES - {"task-board"}) | {"_templates"}
 
 # Legacy numbered name -> canonical semantic name (accepted during the window).
 SCOPE_ALIASES = {
-    "10-strategy": "strategy",
-    "10-system": "system",
+    "10-strategy": "knowledge",
+    "10-system": "knowledge",
     "15-personal": "personal",
     "20-daily": "daily",
-    "20-metrics": "metrics",
+    "20-metrics": "knowledge",
     "30-decisions": "decisions",
     "40-projects": "projects",
-    "50-external": "external",
+    "50-external": "knowledge",
     "50-knowledge": "knowledge",
-    "60-tasks": "tasks",
+    "60-tasks": "knowledge",
     "10-tasks": "task-board",
     "70-runbooks": "knowledge",
     "runbooks": "knowledge",
+    # Retired in migration 011: no core-set tool ever wrote these folders.
+    "strategy": "knowledge",
+    "system": "knowledge",
+    "metrics": "knowledge",
+    "external": "knowledge",
+    "tasks": "knowledge",
     "80-error-patterns": "error-patterns",
     "90-inbox": "inbox",
 }

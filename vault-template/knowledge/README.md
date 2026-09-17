@@ -4,7 +4,7 @@ Knowledge base. Compiled artifacts, documentation for agents.
 
 ## What goes here
 
-- Distilled write-ups synthesized from `external/` forwards
+- Distilled write-ups synthesized from raw forwards captured in `inbox/`
 - Internal playbooks, including step-by-step how-to procedures
 - Glossary entries, concept explanations, reference cards
 - Vendor / API / provider notes (quirks, rate limits, gotchas)
@@ -13,13 +13,18 @@ Knowledge base. Compiled artifacts, documentation for agents.
 
 ## What does NOT go here
 
-- Raw forwards — `external/`
+- Raw, not-yet-triaged forwards — `inbox/`
 - Decision records — `decisions/`
 - Active project notes — `projects/<slug>/notes/`
 
 ## Promote pipeline
 
-`external/` (raw forwards) → reviewer reads + extracts → `knowledge/` (distilled). The knowledge file should back-link to all sources it was synthesized from, so future agents can verify provenance.
+`inbox/` (raw forwards) → reviewer reads + extracts → `knowledge/` (distilled). The knowledge file should back-link to all sources it was synthesized from, so future agents can verify provenance.
+
+There used to be a separate `external/` folder for raw forwards; it was
+retired in migration `011_retire_unused_scopes.sql` (aliased to `knowledge`
+— see `docs/troubleshooting.md` "Retired scopes"), so raw forwards now stage
+in `inbox/` instead.
 
 ## Typical authors
 
@@ -42,7 +47,7 @@ created: '2026-05-16T10:00:00Z'
 updated: '2026-05-16T10:00:00Z'
 agent: inbox-agent
 tags: [mcp, spec]
-related: ['external/2026-05-10-mcp-spec-thread.md']
+related: ['inbox/2026-05-10-mcp-spec-thread.md']
 ---
 ```
 

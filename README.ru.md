@@ -191,7 +191,7 @@ flowchart LR
 
 | Сервер | Порт | Назначение | systemd |
 |---|---|---|---|
-| `memory-mcp` | **5001** | запись заметок в vault (decision/error/external/personal/project), дедуп по sha256 | `memory-mcp.service` |
+| `memory-mcp` | **5001** | запись заметок в vault (decision/error/personal/project), дедуп по sha256 | `memory-mcp.service` |
 | `memory_router-mcp` | **5002** | гибридный поиск (semantic + lexical + rerank), кросс-линки | `memory_router-mcp.service` |
 | `agent_router-mcp` | **5000** | координация роя: outbox, inter-agent сообщения | `agent_router-mcp.service` |
 | `task-mcp` | **5003** | задачи, доска, supervisor агентов | `task-mcp.service` |
@@ -216,21 +216,24 @@ flowchart LR
 
 ## Scopes и RBAC
 
-Scope — это просто **папки верхнего уровня в vault**, по которым раскладывается знание (стратегия, решения, входящее и т.д.). Каждый scope — отдельная «полка», и доступ к чтению/записи выдаётся по списку этих полок. Новичку проще всего выдать себе токен со `scopes='*'` (доступ ко всем полкам — удобно для админки и тестов) и сузить права позже, когда станет ясно, кому что нужно.
+Scope — это просто **папки верхнего уровня в vault**, по которым раскладывается знание (решения, знания, входящее и т.д.). Каждый scope — отдельная «полка», и доступ к чтению/записи выдаётся по списку этих полок. Новичку проще всего выдать себе токен со `scopes='*'` (доступ ко всем полкам — удобно для админки и тестов) и сузить права позже, когда станет ясно, кому что нужно.
 
 **Scope** = первая папка пути в vault. Разрешённый список — `services/memory_mcp/path_guard.py` (`ALLOWED_SCOPES`):
 
 | Scope | Что хранит |
 |---|---|
-| `strategy` / `system` | стратегия, системные заметки |
 | `personal` | про человека: ФИО, навыки, опыт, жизненные ситуации |
-| `daily` / `metrics` | дневные логи, метрики |
+| `daily` | дневные логи |
 | `decisions` | архитектурные/продуктовые решения |
 | `projects` | бизнес: бухгалтерия, договора, регламенты, переписка, коммтайна |
-| `external` / `knowledge` | внешние источники, исследования, статьи, воспроизводимые процессы |
-| `tasks` | задачи |
+| `knowledge` | внешние источники, исследования, статьи, воспроизводимые процессы |
 | `error-patterns` | баги и их фиксы |
 | `inbox` | входящее, не разобранное |
+
+Раньше отдельными scope были `strategy`, `system`, `metrics`, `external` и
+`tasks`; миграция `011_retire_unused_scopes.sql` списала их в `knowledge` (ни
+один core-инструмент в них не писал) — см. `docs/troubleshooting.md`, раздел
+"Retired scopes".
 
 **RBAC:** у каждого агента — токен в `agent_tokens` с `can_read_scopes` / `can_write_scopes`. `*` = доступ к любому scope. Токены выдаёт `scripts/issue-agent-token.py` (raw-секрет печатается один раз, в БД — sha256).
 
@@ -286,9 +289,9 @@ Scope — это просто **папки верхнего уровня в vaul
 |---|---|---|
 | `create_decision_note` | `decisions` | архитектурные/продуктовые решения, API-контракты, правила |
 | `create_error_pattern_note` | `error-patterns` | баг + фикс + как не повторить |
-| `create_external_note` | `external` | внешние источники/исследования (+ `source_url`) |
 | `create_personal_note` | `personal` | про человека |
 | `create_project_note` | `projects` | про бизнес/проект |
+| `create_knowledge_note` | `knowledge` | справочное знание: инструкции, факты об инструментах, выжимки внешних источников (`source_url`) |
 | `append_daily_log` | `daily` | дневной прогресс |
 | `create_handoff` | — | выгрузка перед компакцией/в конце сессии |
 | `supersede_decision` | `decisions` | устаревшее решение |
@@ -308,7 +311,7 @@ Recall: `recall(...)`. Координация: `agent_router_*`. Задачи: `
 sudo bash scripts/install.sh
 ```
 
-Идемпотентные шаги: проверка платформы → apt (Python 3.11, Postgres 16 + pgvector) → системный пользователь `second_brain` → `/opt/second_brain` + venv → роль/БД + расширение `vector` → секреты (0600) → миграции → предзагрузка модели эмбеддингов (`paraphrase-multilingual-mpnet-base-v2`, ~1.0 ГБ) → рендер и установка systemd-юнитов → `systemctl enable --now` → **smoke-test** → печать admin-токена.
+Идемпотентные шаги: проверка платформы → apt (Python 3.11, Postgres 16 + pgvector) → системный пользователь `second_brain` → `/opt/second_brain` + venv → роль/БД + расширение `vector` → секреты (0600) → миграции → предзагрузка модели эмбеддингов (`paraphrase-multilingual-mpnet-base-v2`, ~1.0 ГБ) → рендер и установка systemd-юнитов → `systemctl enable --now` → **smoke-test** → печать admin-токена. Повторный запуск на уже установленной системе безопасен: синхронизация репо (`scripts/lib/sync-repo.sh`) исключает `vault/`, `.cache/`, `.venv/`, `.env` и `secrets/` из своего `rsync --delete`, так что переустановка больше не стирает живой vault, а файлы, оставшиеся в папках, списанных миграцией `011_retire_unused_scopes.sql`, переносятся в `knowledge/` (с предварительным бэкапом) — см. `docs/troubleshooting.md`, раздел "Retired scopes".
 
 **Зависимость от других репо:**
 - Канонический порядок установки: `labops-agent-architecture` → `labops-tg-plugin` → `labops-second-brain` — но это три **отдельных** скрипта `install.sh`, каждый запускает оператор. `install.sh` из `labops-agent-architecture` только **клонирует** этот репо в `~/labops-second-brain` — `scripts/install.sh` он за вас НЕ запускает. Ставите этот репо сами: либо вручную (`sudo bash scripts/install.sh`), либо отдав Claude Code агенту с промптом из `AGENT.md` — см. шаг 1 выше.

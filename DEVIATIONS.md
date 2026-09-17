@@ -428,3 +428,10 @@ plus the board-only RBAC scope `task-board` (was `10-tasks`) and the meta scopes
   safe to run with services live. After it runs the alias layer is a no-op.
 * `vault-template/` folders renamed; `personal/` added (closes the code↔template
   drift). New unit test `tests/test_scopes.py` (6 checks; collection now 430).
+
+> **Later retired:** `runbooks` was folded into `knowledge` by migration
+> `008_remove_runbooks_scope.sql`, and `strategy`, `system`, `metrics`,
+> `external` and `tasks` were folded into `knowledge` by migration
+> `011_retire_unused_scopes.sql` — none of them had a core-set tool writing to
+> them. Both are aliased in `services/shared/scopes.py`; see
+> `docs/troubleshooting.md` "Retired scopes" for the current vault layout.

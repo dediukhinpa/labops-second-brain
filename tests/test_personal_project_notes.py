@@ -1,7 +1,8 @@
-"""Tests for create_personal_note / create_project_note + personal scope.
+"""Tests for create_personal_note / create_project_note / create_knowledge_note.
 
 personal/project notes split data by SUBJECT (the human vs the business),
-orthogonal to the structural note types (decision/error/external).
+orthogonal to the structural note types (decision/error). Knowledge notes hold
+durable reference material, including digests of external sources.
 Both scopes are team-wide read/write (operator decision 2026-06-25).
 """
 from pathlib import Path
@@ -143,5 +144,53 @@ async def test_create_project_note_rbac(tmp_path: Path) -> None:
     with pytest.raises(PermissionError, match="cannot write to projects"):
         await _call_note(
             recorder, pool, ctx, "create_project_note",
+            title="t", body="b", tags=[],
+        )
+
+
+# --- create_knowledge_note ---
+def test_knowledge_note_in_core_surface() -> None:
+    assert should_register_tool("memory_mcp", "create_knowledge_note", "core")
+
+
+@pytest.mark.asyncio
+async def test_create_knowledge_note_writes_knowledge_scope(tmp_path: Path) -> None:
+    pool, recorder = FakePool(), ToolRecorder()
+    _register(tmp_path, recorder, pool)
+    ctx = AgentContext(agent="christopher", write_scopes=["knowledge"], read_scopes=["*"])
+    res = await _call_note(
+        recorder, pool, ctx, "create_knowledge_note",
+        title="Как перевыпустить токен", body="Шаги...", tags=["howto"],
+        source_url="https://example.com/doc",
+    )
+    assert res.startswith("created: knowledge/")
+    files = list((tmp_path / "knowledge").glob("*.md"))
+    assert files, "expected a knowledge note file on disk"
+    content = files[0].read_text(encoding="utf-8")
+    assert "type: knowledge" in content
+    assert "source_url: https://example.com/doc" in content
+
+
+@pytest.mark.asyncio
+async def test_create_knowledge_note_without_source_url(tmp_path: Path) -> None:
+    pool, recorder = FakePool(), ToolRecorder()
+    _register(tmp_path, recorder, pool)
+    ctx = AgentContext(agent="christopher", write_scopes=["knowledge"], read_scopes=["*"])
+    await _call_note(
+        recorder, pool, ctx, "create_knowledge_note",
+        title="Порты сервисов", body="5001 — память", tags=[],
+    )
+    content = next((tmp_path / "knowledge").glob("*.md")).read_text(encoding="utf-8")
+    assert "source_url" not in content
+
+
+@pytest.mark.asyncio
+async def test_create_knowledge_note_rbac(tmp_path: Path) -> None:
+    pool, recorder = FakePool(), ToolRecorder()
+    _register(tmp_path, recorder, pool)
+    ctx = AgentContext(agent="x", write_scopes=["decisions"], read_scopes=["*"])
+    with pytest.raises(PermissionError, match="cannot write to knowledge"):
+        await _call_note(
+            recorder, pool, ctx, "create_knowledge_note",
             title="t", body="b", tags=[],
         )
