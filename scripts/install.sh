@@ -327,6 +327,15 @@ VAULT_ROOT=$VAULT_ROOT
 LOG_DIR=$LOG_DIR
 STATE_DIR=$STATE_DIR
 FASTEMBED_CACHE_DIR=$STATE_DIR/fastembed
+# Plain tracebacks instead of FastMCP's boxed Rich rendering: a client hitting
+# a tool with a stale/invalid bearer token (e.g. a poller retrying every few
+# seconds) turns every rejection into a ~30-line padded panel in syslog, since
+# tool_manager.call_tool logs full exc_info on ANY tool exception regardless
+# of type. Read before rsyslog's next weekly rotation, a few hours of retries
+# is enough to add hundreds of MB. Must be set before the fastmcp package is
+# imported (it reads this at import time), so it has to live in the process
+# environment, not a runtime logging.basicConfig call.
+FASTMCP_ENABLE_RICH_TRACEBACKS=false
 EOF
 chmod 600 "$ETC_DIR/secrets.env"
 chown "$SERVICE_USER":"$SERVICE_USER" "$ETC_DIR/secrets.env"
