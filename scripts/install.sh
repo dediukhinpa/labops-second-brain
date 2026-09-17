@@ -17,6 +17,10 @@ set -o pipefail
 # say/ok/warn/die/step/note — общий вид вывода, см. scripts/lib/ui.sh.
 # shellcheck source=lib/ui.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib/ui.sh"
+# shellcheck source=lib/sync-repo.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/sync-repo.sh"
+# shellcheck source=lib/retire-vault-folders.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/retire-vault-folders.sh"
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
@@ -171,7 +175,7 @@ fi
 mkdir -p \
   "$INSTALL_DIR" \
   "$INSTALL_DIR/services" \
-  "$INSTALL_DIR/vault" \
+  "$VAULT_ROOT" \
   "$INSTALL_DIR/migrations" \
   "$INSTALL_DIR/secrets" \
   "$INSTALL_DIR/.cache" \
@@ -188,20 +192,8 @@ chmod 700 "$INSTALL_DIR/secrets" "$ETC_DIR"
 
 say "5. sync repo → $INSTALL_DIR"
 
-# Use rsync if available, else cp -a. Exclude development artifacts.
-if command -v rsync >/dev/null 2>&1; then
-  rsync -a \
-    --delete \
-    --exclude '.git' \
-    --exclude '.venv' \
-    --exclude '__pycache__' \
-    --exclude '*.pyc' \
-    --exclude '.env' \
-    --exclude 'secrets/' \
-    "$REPO_ROOT/" "$INSTALL_DIR/"
-else
-  cp -a "$REPO_ROOT/." "$INSTALL_DIR/"
-fi
+# vault/, .cache/, .venv/, .env и secrets/ защищены от --delete — см. lib/sync-repo.sh.
+sync_repo_to_install_dir "$REPO_ROOT" "$INSTALL_DIR" "$VAULT_ROOT"
 
 chown -R "$SERVICE_USER":"$SERVICE_USER" "$INSTALL_DIR" "$LOG_DIR" "$STATE_DIR"
 
@@ -221,6 +213,11 @@ if [ -d "$VAULT_TEMPLATE_DIR" ]; then
   else
     cp -an "$VAULT_TEMPLATE_DIR/." "$VAULT_ROOT/" 2>/dev/null || true
   fi
+  # Папки, снятые миграцией 011, на уже работающем vault: заметки переезжают
+  # в knowledge/ (тем же путём, что миграция пишет в базу), папки удаляются.
+  if ! retire_vault_folders "$VAULT_ROOT" "$STATE_DIR/backups"; then
+    warn "часть заметок из снятых папок vault осталась на месте (см. выше) — разберите вручную"
+  fi
   chown -R "$SERVICE_USER":"$SERVICE_USER" "$VAULT_ROOT"
   ok "seeded vault from vault-template → $VAULT_ROOT"
 else
@@ -229,7 +226,7 @@ fi
 
 # Hard verify: a broken/empty sync (wrong VAULT_ROOT, failed copy) must turn
 # the install red here rather than surface later as "scope not allowed" writes.
-EXPECTED_SCOPES=(strategy decisions projects error-patterns inbox)
+EXPECTED_SCOPES=(knowledge decisions projects error-patterns inbox)
 missing_scopes=()
 for scope in "${EXPECTED_SCOPES[@]}"; do
   [ -d "$VAULT_ROOT/$scope" ] || missing_scopes+=("$scope")
@@ -599,7 +596,7 @@ Next steps:
   1. Verify services are listening:  ss -tlnp | grep -E '500[0-3]'
   2. Agent tokens: existing agents were auto-connected above (scripts/connect-agents.sh).
      Restart them to pick up tokens:  systemctl restart claude-agent-<name>
-     For future/remote agents:        $INSTALL_DIR/.venv/bin/python $INSTALL_DIR/scripts/issue-agent-token.py --agent <name> --scopes 'decisions,external,knowledge,inbox'
+     For future/remote agents:        $INSTALL_DIR/.venv/bin/python $INSTALL_DIR/scripts/issue-agent-token.py --agent <name> --scopes 'decisions,knowledge,inbox,error-patterns,task-board,personal,projects,daily'
   3. Point your local agents at:     http://<host>:$MCP_MEMORY_PORT/mcp (memory), :$MCP_MEMORY_ROUTER_PORT/mcp (memory_router), :$MCP_AGENT_ROUTER_PORT/mcp (agent_router), :$MCP_TASK_PORT/mcp (tasks)
   4. Set up the inbox-agent locally: bash $INSTALL_DIR/scripts/install-local.sh
   5. Review $ETC_DIR/secrets.env and add provider API keys you want available.

@@ -1097,69 +1097,6 @@ def register_tools(
         return f"created: {rel_path}"
 
     # ------------------------------------------------------------------
-    # 3. create_external_note
-    # ------------------------------------------------------------------
-    @gated_tool("create_external_note", annotations={"readOnlyHint": False})
-    async def create_external_note(
-        source: str,
-        url: str,
-        title: str,
-        body: str,
-        tags: list[str],
-        ctx: dict[str, object] | None = None,
-    ) -> str:
-        """Create an external note in external/{source}/."""
-        t0 = time.monotonic()
-        pool: asyncpg.Pool = await get_pool_fn()  # type: ignore[misc]
-        agent_ctx = await _authenticate_request(ctx, pool)
-        scope = "external"
-
-        if not check_write_scope(agent_ctx, scope):
-            raise PermissionError(
-                f"Agent '{agent_ctx.agent}' cannot write to {scope}"
-            )
-
-        slug = _slugify(title)
-        safe_source = re.sub(r"[^a-z0-9_-]+", "-", source.lower()).strip("-")
-        rel_path = f"{scope}/{safe_source}/{_today_iso()}-{slug}.md"
-        abs_path = validate_path(rel_path, vault_root)
-
-        fm = {
-            "type": "external",
-            "created": _now_iso(),
-            "updated": _now_iso(),
-            "agent": agent_ctx.agent,
-            "source": source,
-            "url": url,
-            "tags": tags,
-            "related": [],
-        }
-        content = _build_frontmatter(fm) + f"\n# {title}\n\n{body}\n"
-        content_hash = _sha256(content)
-
-        doc_id, changed = await _upsert_document(
-            pool, rel_path, fm, body, content_hash, "external", agent_ctx.agent,
-        )
-        if not changed:
-            await log_audit(
-                pool, agent_ctx.agent, "create_external_note",
-                {"title": title, "source": source, "path": rel_path},
-                "unchanged", int((time.monotonic() - t0) * 1000),
-            )
-            return f"unchanged: {rel_path}"
-
-        abs_path.parent.mkdir(parents=True, exist_ok=True)
-        abs_path.write_text(content, encoding="utf-8")
-
-        await _queue_embedding(pool, doc_id)
-        await log_audit(
-            pool, agent_ctx.agent, "create_external_note",
-            {"title": title, "source": source, "path": rel_path},
-            "ok", int((time.monotonic() - t0) * 1000),
-        )
-        return f"created: {rel_path}"
-
-    # ------------------------------------------------------------------
     # 4. create_handoff
     # ------------------------------------------------------------------
     @gated_tool("create_handoff", annotations={"readOnlyHint": False})

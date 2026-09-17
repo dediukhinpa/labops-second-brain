@@ -14,7 +14,7 @@ pass=0; fail=0
 ok()  { echo "✓ $*"; pass=$((pass+1)); }
 bad() { echo "✗ $*"; fail=$((fail+1)); }
 
-FULL_SCOPES="decisions,external,knowledge,inbox,error-patterns,task-board,personal,projects,daily"
+FULL_SCOPES="decisions,knowledge,inbox,error-patterns,task-board,personal,projects,daily"
 
 # ---- fake second_brain install ----------------------------------------------
 SB="$TMP/opt"; mkdir -p "$SB/.venv/bin" "$SB/scripts" "$TMP/etc"
@@ -66,7 +66,7 @@ chmod +x "$TMP/bin/sudo"
 cat > "$TMP/bin/psql" <<'EOF'
 #!/usr/bin/env bash
 case "$*" in
-  *can_write_scopes*) echo "${FAKE_TOKEN_SCOPES:-decisions,external,knowledge,inbox,error-patterns,task-board,personal,projects,daily}";;
+  *can_write_scopes*) echo "${FAKE_TOKEN_SCOPES:-decisions,knowledge,inbox,error-patterns,task-board,personal,projects,daily}";;
   *) [ "${FAKE_TOKEN_VALID:-1}" = "1" ] && echo 1;;
 esac
 exit 0
@@ -167,7 +167,7 @@ grep -q '^export SECOND_BRAIN_TASKS_URL=http://127.0.0.1:5999/mcp' "$TMP/lab/dev
 # ---- case 1d: узкие scopes расширены до базовых -----------------------------
 grep -q 'AGENT_SCOPES=.*task-board' "$TMP/lab/dev/.claude/agent.env" \
   && ok "scopes дополнены task-board" || bad "scopes не дополнены"
-echo "$out" | grep -q 'scopes=decisions,knowledge,external' \
+echo "$out" | grep -q 'scopes=decisions,knowledge,inbox' \
   && ok "прежние scopes сохранены и дополнены" || bad "scopes потеряли прежние значения: $out"
 
 # ---- case 1e: агент перезапущен, раз сервисы отвечают -----------------------
@@ -259,6 +259,15 @@ out="$(SKIP_AGENT_RESTART=1 run_sut 2>&1)"; rc=$?
 [ $rc -eq 0 ] && echo "$out" | grep -q "noscope: connected (scopes=$FULL_SCOPES" \
   && ok "no AGENT_SCOPES → default scopes" \
   || bad "no AGENT_SCOPES: rc=$rc, script died silently or ignored DEFAULT_SCOPES"
+
+# ---- case 5b-bis: снятые миграцией 011 области из agent.env не переносятся ----
+rm -rf "$TMP/lab"
+mk_agent retired CHANGE_ME "decisions,external,strategy,50-external,knowledge"
+out="$(SKIP_AGENT_RESTART=1 run_sut 2>&1)"; rc=$?
+[ $rc -eq 0 ] && echo "$out" | grep -q "retired: connected (scopes=decisions,knowledge,inbox," \
+  && ! echo "$out" | grep -qE 'scopes=[^ ]*(external|strategy)' \
+  && ok "снятые области отброшены при переиздании" \
+  || bad "снятые области перенесены в новый токен (rc=$rc): $out"
 
 # ---- case 5c: битый .mcp.json — файл не перезаписываем, говорим оператору ---
 rm -rf "$TMP/lab"; mkdir -p "$TMP/lab/brokenjson/.claude"

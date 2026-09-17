@@ -48,7 +48,10 @@ ISSUE_PY="$SB_HOME/scripts/issue-agent-token.py"
 # personal/projects/daily -- без них create_personal_note, create_project_note и
 # append_daily_log из набора core всегда отказывали; список совпадает с
 # AGENT_SCOPES в agent-architecture/skills/create-agent/new-agent.sh.
-DEFAULT_SCOPES="${DEFAULT_SCOPES:-decisions,external,knowledge,inbox,error-patterns,task-board,personal,projects,daily}"
+DEFAULT_SCOPES="${DEFAULT_SCOPES:-decisions,knowledge,inbox,error-patterns,task-board,personal,projects,daily}"
+# Области, снятые миграцией 011 (services/shared/scopes.py) вместе с числовыми
+# старыми именами.
+RETIRED_SCOPES="strategy,system,metrics,external,tasks,10-strategy,10-system,20-metrics,50-external,60-tasks"
 PLACEHOLDER="CHANGE_ME"
 
 # Порты берём из конфигурации установленного second_brain ($SB_HOME/.env, его
@@ -354,7 +357,13 @@ merge_scopes() {  # $1=прежние scopes -> объединённый спи�
   case ",$1," in
     *,\*,*) printf '%s' "$1"; return ;;   # wildcard уже шире любого списка
   esac
-  printf '%s,%s' "$1" "$DEFAULT_SCOPES" | tr ',' '\n' | awk 'NF && !seen[$0]++' | paste -sd, -
+  # Снятые в миграции 011 области из прежнего agent.env не переносим: сервер
+  # всё равно свёл бы их к knowledge, а в токене они только путают.
+  printf '%s,%s' "$1" "$DEFAULT_SCOPES" | tr ',' '\n' \
+    | awk -v retired="$RETIRED_SCOPES" '
+        BEGIN { n = split(retired, r, ","); for (i = 1; i <= n; i++) drop[r[i]] = 1 }
+        NF && !($0 in drop) && !seen[$0]++' \
+    | paste -sd, -
 }
 
 connected=0; skipped=0; failed=0
