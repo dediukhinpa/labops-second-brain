@@ -39,7 +39,7 @@ Same dual Bearer + HMAC model as other second_brain services:
 
 Task write operations (create, update, claim, start, review, done, block, reopen) require the `task-board` scope in `can_write_scopes`.
 
-Since 2026-09-02 this scope is part of the **default** set issued by `scripts/connect-agents.sh` (`decisions,external,knowledge,inbox,error-patterns,task-board`), so a freshly connected agent already has it. The SQL below is only for topping up an agent issued before that:
+Since 2026-09-02 this scope is part of the **default** set issued by `scripts/connect-agents.sh` (`decisions,external,knowledge,inbox,error-patterns,task-board,personal,projects,daily`), so a freshly connected agent already has it. The SQL below is only for topping up an agent issued before that:
 
 ```bash
 # Add task write scope to an existing agent token

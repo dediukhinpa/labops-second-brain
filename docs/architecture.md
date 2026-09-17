@@ -416,7 +416,7 @@ The bearer is per-agent (issued by `scripts/issue-agent-token.py --agent <agent-
 
 Inside Claude Code, this surfaces as four groups of tools the agent can call: `second_brain-memory.create_decision_note(...)`, `second_brain-memory_router.recall(...)`, `second_brain-agent_router.notify(...)`, `second_brain-tasks.task_claim(...)`, etc. No HTTP plumbing — Claude Code handles the JSON-RPC and the Bearer.
 
-The default scope set an agent is issued is `decisions,external,knowledge,inbox,error-patterns,task-board`. The last two are not optional in practice: `task-board` gates every write on the board (`task_mcp/server.py::TASKS_WRITE_SCOPE`), and the agent's own `CLAUDE.md` instructs it to write `decisions/error-patterns` into shared memory.
+The default scope set an agent is issued is `decisions,external,knowledge,inbox,error-patterns,task-board,personal,projects,daily`. `personal`, `projects` and `daily` back the core-set tools `create_personal_note`, `create_project_note` and `append_daily_log`, which were refused without them. `task-board` and `error-patterns` are not optional in practice: `task-board` gates every write on the board (`task_mcp/server.py::TASKS_WRITE_SCOPE`), and the agent's own `CLAUDE.md` instructs it to write `decisions/error-patterns` into shared memory.
 
 ### How hooks glue local memory to the shared brain
 

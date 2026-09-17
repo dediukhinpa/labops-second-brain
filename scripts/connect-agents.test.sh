@@ -14,7 +14,7 @@ pass=0; fail=0
 ok()  { echo "✓ $*"; pass=$((pass+1)); }
 bad() { echo "✗ $*"; fail=$((fail+1)); }
 
-FULL_SCOPES="decisions,external,knowledge,inbox,error-patterns,task-board"
+FULL_SCOPES="decisions,external,knowledge,inbox,error-patterns,task-board,personal,projects,daily"
 
 # ---- fake second_brain install ----------------------------------------------
 SB="$TMP/opt"; mkdir -p "$SB/.venv/bin" "$SB/scripts" "$TMP/etc"
@@ -66,7 +66,7 @@ chmod +x "$TMP/bin/sudo"
 cat > "$TMP/bin/psql" <<'EOF'
 #!/usr/bin/env bash
 case "$*" in
-  *can_write_scopes*) echo "${FAKE_TOKEN_SCOPES:-decisions,external,knowledge,inbox,error-patterns,task-board}";;
+  *can_write_scopes*) echo "${FAKE_TOKEN_SCOPES:-decisions,external,knowledge,inbox,error-patterns,task-board,personal,projects,daily}";;
   *) [ "${FAKE_TOKEN_VALID:-1}" = "1" ] && echo 1;;
 esac
 exit 0

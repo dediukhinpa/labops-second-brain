@@ -45,7 +45,10 @@ ISSUE_PY="$SB_HOME/scripts/issue-agent-token.py"
 # задачу, но не может её взять и закрыть. error-patterns -- CLAUDE.md агента
 # прямо велит писать «decisions/error-patterns to memory», а права не было.
 # Оба доливались вручную после установки; здесь они и должны выдаваться.
-DEFAULT_SCOPES="${DEFAULT_SCOPES:-decisions,external,knowledge,inbox,error-patterns,task-board}"
+# personal/projects/daily -- без них create_personal_note, create_project_note и
+# append_daily_log из набора core всегда отказывали; список совпадает с
+# AGENT_SCOPES в agent-architecture/skills/create-agent/new-agent.sh.
+DEFAULT_SCOPES="${DEFAULT_SCOPES:-decisions,external,knowledge,inbox,error-patterns,task-board,personal,projects,daily}"
 PLACEHOLDER="CHANGE_ME"
 
 # Порты берём из конфигурации установленного second_brain ($SB_HOME/.env, его
