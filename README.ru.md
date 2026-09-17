@@ -291,6 +291,7 @@ Scope — это просто **папки верхнего уровня в vaul
 | `create_error_pattern_note` | `error-patterns` | баг + фикс + как не повторить |
 | `create_personal_note` | `personal` | про человека |
 | `create_project_note` | `projects` | про бизнес/проект |
+| `create_knowledge_note` | `knowledge` | справочное знание: инструкции, факты об инструментах, выжимки внешних источников (`source_url`) |
 | `append_daily_log` | `daily` | дневной прогресс |
 | `create_handoff` | — | выгрузка перед компакцией/в конце сессии |
 | `supersede_decision` | `decisions` | устаревшее решение |

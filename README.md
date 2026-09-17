@@ -291,6 +291,7 @@ Details — `docs/INTER-AGENT-WEBHOOKS.md`.
 | `create_error_pattern_note` | `error-patterns` | a bug + its fix + how not to repeat it |
 | `create_personal_note` | `personal` | about the person |
 | `create_project_note` | `projects` | about the business/project |
+| `create_knowledge_note` | `knowledge` | reference knowledge: how-tos, facts about tools, digests of external sources (`source_url`) |
 | `append_daily_log` | `daily` | daily progress |
 | `create_handoff` | — | a flush before compaction / at the end of a session |
 | `supersede_decision` | `decisions` | an outdated decision |

@@ -56,6 +56,7 @@ All three speak MCP over HTTP using FastMCP's `streamable-http` transport. They 
 |---|---|---|
 | `create_decision_note` | `decisions` | Decision records (context, decision, consequences, alternatives) |
 | `create_error_pattern_note` | `error-patterns` | Recurring failure modes (symptom, root cause, fix) |
+| `create_knowledge_note` | `knowledge` | Reference knowledge: how-tos, tool facts, external-source digests (optional `source_url`) |
 | `create_handoff` | `inbox` | Inter-session handoff notes |
 | `append_daily_log` | `daily` | Daily journal entry append |
 | `supersede_decision` | `decisions` | Mark an old decision as superseded, link to the new one |
@@ -269,7 +270,7 @@ A separate process (`second_brain-ingest-worker.service`) that consumes the `emb
 The local Telegram bot daemon (`inbox-agent/bot.py`, python-telegram-bot polling) is the only ingestion path you actively touch. On each inbound message it calls the hook (`inbox-agent/hooks/save-to-raw.sh`) synchronously, replies with a short ack, and exits the handler. The hook executes:
 
 1. Write the raw message (text + metadata) to a local file under `${INBOX_AGENT_HOME}/raw/YYYY/MM/DD/<timestamp>-<source>.md`.
-2. Immediately attempt to mirror the same content into the shared vault under scope `knowledge`, agent `inbox-agent`. (`memory_mcp.create_external_note` and the `external` scope it wrote were retired in migration `011_retire_unused_scopes.sql` — see docs/troubleshooting.md "Retired scopes"; this step needs a current write tool wired in.)
+2. Immediately attempt to mirror the same content into the shared vault under scope `knowledge`, agent `inbox-agent`. (`memory_mcp.create_external_note` and the `external` scope it wrote were retired in migration `011_retire_unused_scopes.sql` — see docs/troubleshooting.md "Retired scopes"; the step now calls `memory_mcp.create_knowledge_note` with the source URL in `source_url`.)
 
 **Both writes attempt in parallel.** If the network is down or the brain is unreachable, the local raw write still succeeds. The compile cron job (`*/15 * * * *`) re-tries any raw files that still have `compiled: false` in their frontmatter.
 
@@ -467,7 +468,7 @@ You forward a YouTube URL to your Telegram bot at 14:00:
 
 1. **14:00:00** — Bot receives the message. `save-to-raw.sh` runs.
 2. **14:00:00.1** — Raw file written to `${INBOX_AGENT_HOME}/raw/2026/05/16/1716470400-telegram-fwd.md`.
-3. **14:00:00.2** — Hook calls a memory write tool with the URL + the forwarded text, scope `knowledge`. Brain returns `second_brain_id`. (This step used to call `memory_mcp.create_external_note`, scope `external`; both were retired in migration `011_retire_unused_scopes.sql` — see docs/troubleshooting.md "Retired scopes".)
+3. **14:00:00.2** — Hook calls `memory_mcp.create_knowledge_note` with the forwarded text and `source_url`, scope `knowledge`. Brain returns `second_brain_id`. (This step used to call `memory_mcp.create_external_note`, scope `external`; both were retired in migration `011_retire_unused_scopes.sql` — see docs/troubleshooting.md "Retired scopes".)
 4. **14:00:00.3** — Hook writes `second_brain_id` back into the raw file's frontmatter.
 5. **14:05:00** — Compile cron runs. Sees the raw file is compiled (`second_brain_id` present), skips.
 6. **14:05:01** — Another raw file from a different forward (a voice note) is found. Classifier routes it to `groq-voice`. Transcript is generated and written as a fresh `knowledge` note via memory MCP.

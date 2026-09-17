@@ -226,13 +226,12 @@ it asks a slower agent to summarize.
 
 Capture is dumb on purpose. The bot receives your message, writes the
 raw payload to `raw/YYYY-MM/{type}/{slug}.md` on disk, and
-simultaneously calls a memory write tool to mirror it into the shared
-vault under `knowledge/`. (The tool this pattern used to reach for,
+simultaneously calls `memory.create_knowledge_note` (with the source URL
+in `source_url`) to mirror it into the shared vault under `knowledge/`. (The tool this pattern used to reach for,
 `memory.create_external_note`, together with the dedicated `external/`
 folder it wrote into, was retired in migration
 `011_retire_unused_scopes.sql` — see docs/troubleshooting.md "Retired
-scopes". Building this pattern today means adding your own write tool,
-same as the rest of the inbox agent described below.) Dual-writing buys
+scopes".) Dual-writing buys
 you a guarantee: if the VPS is down, the local copy survives; if the
 local disk dies, the shared copy survives. Either alone is a single
 point of failure, and outages always come on the day you most needed

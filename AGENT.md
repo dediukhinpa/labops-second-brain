@@ -427,7 +427,7 @@ This is the only step that proves the Path A system actually works.
 
 1. From the user's Telegram, send a YouTube URL (or any URL) directly to the inbox-agent bot.
 2. Within ~2 seconds the bot should reply with a short ack ("Got it" — see `inbox-agent/bot.py` for the exact text).
-3. The hook (`save-to-raw.sh`) runs synchronously inside the bot: it writes the raw markdown into `${INBOX_AGENT_HOME}/raw/...` AND posts it into the shared brain (scope `knowledge`) over the bearer in `.claude/.mcp.json`. (`memory_mcp.create_external_note` and the `external` scope it used were retired in migration `011_retire_unused_scopes.sql` — see docs/troubleshooting.md "Retired scopes"; point this step at whichever write tool is current in your deploy.)
+3. The hook (`save-to-raw.sh`) runs synchronously inside the bot: it writes the raw markdown into `${INBOX_AGENT_HOME}/raw/...` AND posts it into the shared brain (scope `knowledge`) over the bearer in `.claude/.mcp.json`. (`memory_mcp.create_external_note` and the `external` scope it used were retired in migration `011_retire_unused_scopes.sql` — see docs/troubleshooting.md "Retired scopes"; this step now calls `memory_mcp.create_knowledge_note`, passing the source URL as `source_url`.)
 4. From a fresh Claude Code agent context configured with the coordinator-agent token (use `${INBOX_AGENT_HOME}/.claude/.mcp.json` as reference), call:
 
    ```
