@@ -202,3 +202,54 @@ def test_connect_agents_checks_token_scopes() -> None:
     assert "token_scopes" in text, "connect-agents.sh не сверяет права токена"
     assert "can_write_scopes" in text, "права токена не читаются из БД"
     assert "merge_scopes" in text, "прежние scopes не объединяются с базовыми"
+
+
+# И один, найденный 20.09.2026 у клиента: скилл create-agent оставлял новому
+# агенту CHANGE_ME вместо Bearer. issue-agent-token.py читает .env мозга
+# (0600 second_brain), пользователь агента его не открывает, а правило sudo на
+# выдачу токена заводилось только руками — ни один установщик его не создавал.
+TOKEN_HELPER = "labops-issue-agent-token"
+
+
+def test_install_sets_up_the_agent_token_helper() -> None:
+    """Установщик ставит хелпер выдачи токенов и записывает ему пути."""
+    install = _read("install.sh")
+    assert f'install -m 755 -o root -g root "$TOKEN_HELPER_SRC" "$TOKEN_HELPER"' in install
+    assert 'INSTALL_DIR=%s\\nSERVICE_USER=%s' in install
+    assert '"$TOKEN_HELPER_CONF"' in install
+
+
+def test_token_helper_sudo_rule_is_scoped() -> None:
+    """Правило sudo — на одну команду без звёздочки (иначе sudo-rs его не примет)."""
+    install = _read("install.sh")
+    rule = "%s ALL=(root) NOPASSWD: %s"
+    assert rule in install
+    assert not re.search(r"NOPASSWD:.*\*", install)
+    assert "visudo -cf" in install
+
+
+def test_token_helper_scopes_match_the_brain() -> None:
+    """Список скоупов в хелпере не расходится с services/shared/scopes.py."""
+    from services.shared.scopes import CANONICAL_SCOPES
+
+    helper = (SCRIPTS / f"{TOKEN_HELPER}.sh").read_text(encoding="utf-8")
+    match = re.search(r'^CANONICAL_SCOPES="([^"]+)"', helper, re.M)
+    assert match, "в хелпере нет списка канонических скоупов"
+    assert set(match.group(1).split()) == set(CANONICAL_SCOPES)
+
+
+def test_token_helper_defaults_match_connect_agents() -> None:
+    """Набор по умолчанию — тот же, что выдаёт connect-agents.sh."""
+    helper = (SCRIPTS / f"{TOKEN_HELPER}.sh").read_text(encoding="utf-8")
+    connect = _read("connect-agents.sh")
+    helper_default = re.search(r'^DEFAULT_SCOPES="([^"]+)"', helper, re.M)
+    connect_default = re.search(r'^DEFAULT_SCOPES="\$\{DEFAULT_SCOPES:-([^}]+)\}"', connect, re.M)
+    assert helper_default and connect_default
+    assert helper_default.group(1) == connect_default.group(1)
+
+
+def test_token_helper_refuses_admin_scope() -> None:
+    """Агент не может выписать себе '*' — иначе право sudo даёт доступ ко всему."""
+    helper = (SCRIPTS / f"{TOKEN_HELPER}.sh").read_text(encoding="utf-8")
+    assert "неизвестный скоуп" in helper
+    assert '--scopes "$SCOPES"' in helper

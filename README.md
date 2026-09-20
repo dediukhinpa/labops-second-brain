@@ -237,6 +237,9 @@ scopes".
 
 **RBAC:** each agent has a token in `agent_tokens` with `can_read_scopes` / `can_write_scopes`. `*` = access to any scope. Tokens are issued by `scripts/issue-agent-token.py` (the raw secret is printed once; the DB stores its sha256).
 
+The OS user an agent runs as cannot read that `.env`, so `install.sh` also installs the root helper `/usr/local/sbin/labops-issue-agent-token <agent-id> [scopes]` with a scoped sudo rule — it validates the agent id, allows canonical scopes only and refuses `*`. The `create-agent` skill uses it, which is what keeps a freshly scaffolded agent from coming up with `CHANGE_ME` instead of a token.
+
+
 ---
 
 ## Hybrid recall, dual-write, inter-agent
