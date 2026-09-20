@@ -166,6 +166,28 @@ sudo -u second_brain python scripts/issue-agent-token.py \
 
 Each command prints the token once. Copy both to your password manager immediately.
 
+### From the agent's own user
+
+`issue-agent-token.py` reads `$INSTALL_DIR/.env` (mode 0600, owned by
+`second_brain`), so the OS user an agent runs as cannot call it. That is why the
+`create-agent` skill used to leave `CHANGE_ME` in a new agent's `agent.env` and
+the agent came up with no shared memory.
+
+`install.sh` therefore installs a root helper and a scoped sudo rule for it:
+
+```bash
+sudo -n /usr/local/sbin/labops-issue-agent-token <agent-id> [scopes]
+```
+
+The helper takes the brain's paths from `/etc/second_brain/token-helper.conf`
+(written by root), accepts only canonical scopes and rejects `*`, so the rule
+cannot be turned into an admin token. `create-agent` calls it automatically.
+
+The rule is granted to `AGENT_OS_USER`, defaulting to the user who ran
+`sudo bash scripts/install.sh`. When the agents live under a different user,
+install with `AGENT_OS_USER=<user> sudo -E bash scripts/install.sh` or re-run
+the installer on that host.
+
 To add more agents later (e.g. `coder-agent`, `reviewer-agent`, a research bot), re-run with the appropriate scopes.
 
 > **External HTTPS access.** `install.sh` does not install or configure a reverse proxy. The MCP services are reachable only on `127.0.0.1:<port>` by default. If you need to reach the brain from outside the VPS (a remote agent, a different machine) without Tailscale, front the three ports with a reverse proxy of your choice and TLS — see the note in `docs/architecture.md` for details. That setup is entirely on you.
@@ -406,7 +428,7 @@ Repeat steps 11–14 for every additional agent the user wants. Each one is inde
 
 ## Ongoing operations
 
-**Adding an agent.** `python scripts/issue-agent-token.py --agent <name> --scopes '...'`. Add the token to that agent's `.mcp.json`.
+**Adding an agent.** `python scripts/issue-agent-token.py --agent <name> --scopes '...'`. Add the token to that agent's `.mcp.json`. From the agent's own user: `sudo -n /usr/local/sbin/labops-issue-agent-token <name>` (see "From the agent's own user" above).
 
 **Revoking an agent.** `python scripts/issue-agent-token.py --agent <name> --revoke`.
 

@@ -573,6 +573,57 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 15b. Token helper for the agent host (scoped sudo)
+# ---------------------------------------------------------------------------
+
+say "15b. agent token helper"
+
+# Пользователь агента не может прочитать $INSTALL_DIR/.env (0600 second_brain),
+# поэтому скилл create-agent не умел выдавать токен сам и оставлял CHANGE_ME.
+# Ставим root-хелпер с проверкой аргументов и разрешаем звать только его.
+TOKEN_HELPER_SRC="$INSTALL_DIR/scripts/labops-issue-agent-token.sh"
+TOKEN_HELPER="/usr/local/sbin/labops-issue-agent-token"
+TOKEN_HELPER_CONF="$ETC_DIR/token-helper.conf"
+# Кому выдаём право: AGENT_OS_USER, иначе тот, кто запустил sudo bash install.sh.
+: "${AGENT_OS_USER:=${SUDO_USER:-}}"
+
+if [ ! -f "$TOKEN_HELPER_SRC" ]; then
+  warn "нет $TOKEN_HELPER_SRC — агентам придётся выдавать токены вручную"
+else
+  install -m 755 -o root -g root "$TOKEN_HELPER_SRC" "$TOKEN_HELPER"
+  TOKEN_CONF_TMP="$(mktemp)"
+  printf '# Автосоздано labops-second-brain/scripts/install.sh.\n' > "$TOKEN_CONF_TMP"
+  printf '# Откуда %s берёт issue-agent-token.py. Меняет только root.\n' "$TOKEN_HELPER" >> "$TOKEN_CONF_TMP"
+  printf 'INSTALL_DIR=%s\nSERVICE_USER=%s\n' "$INSTALL_DIR" "$SERVICE_USER" >> "$TOKEN_CONF_TMP"
+  install -m 644 -o root -g root "$TOKEN_CONF_TMP" "$TOKEN_HELPER_CONF"
+  rm -f "$TOKEN_CONF_TMP"
+  ok "хелпер выдачи токенов: $TOKEN_HELPER"
+
+  if [ -z "$AGENT_OS_USER" ] || [ "$AGENT_OS_USER" = "root" ] || ! id "$AGENT_OS_USER" >/dev/null 2>&1; then
+    note "не задан AGENT_OS_USER — правило sudo не выдано; агенту: AGENT_OS_USER=<user> bash scripts/install.sh"
+  elif ! command -v visudo >/dev/null 2>&1; then
+    warn "нет visudo — правило sudo для $AGENT_OS_USER не выдано"
+  else
+    SUDOERS_TOKEN_TMP="$(mktemp)"
+    # Команда без аргументов: sudo разрешает любые, проверяет их сам хелпер.
+    # Звёздочка в sudoers несовместима с sudo-rs (Ubuntu 26.04).
+    {
+      printf '# Автосоздано labops-second-brain/scripts/install.sh.\n'
+      printf '# Разрешает %s выдавать Bearer-токены агентам только через хелпер.\n' "$AGENT_OS_USER"
+      printf '%s ALL=(root) NOPASSWD: %s\n' "$AGENT_OS_USER" "$TOKEN_HELPER"
+    } > "$SUDOERS_TOKEN_TMP"
+    if visudo -cf "$SUDOERS_TOKEN_TMP" >/dev/null 2>&1; then
+      install -m 440 -o root -g root "$SUDOERS_TOKEN_TMP" \
+        "/etc/sudoers.d/labops-issue-agent-token-$AGENT_OS_USER"
+      ok "scoped sudo для $AGENT_OS_USER: только $TOKEN_HELPER"
+    else
+      warn "sudoers-файл для $AGENT_OS_USER не прошёл проверку — токены выдавайте вручную"
+    fi
+    rm -f "$SUDOERS_TOKEN_TMP"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
 # 16. Done
 # ---------------------------------------------------------------------------
 
@@ -597,6 +648,7 @@ Next steps:
   2. Agent tokens: existing agents were auto-connected above (scripts/connect-agents.sh).
      Restart them to pick up tokens:  systemctl restart claude-agent-<name>
      For future/remote agents:        $INSTALL_DIR/.venv/bin/python $INSTALL_DIR/scripts/issue-agent-token.py --agent <name> --scopes 'decisions,knowledge,inbox,error-patterns,task-board,personal,projects,daily'
+     From the agent's own user:       sudo -n $TOKEN_HELPER <name>   (create-agent uses this automatically)
   3. Point your local agents at:     http://<host>:$MCP_MEMORY_PORT/mcp (memory), :$MCP_MEMORY_ROUTER_PORT/mcp (memory_router), :$MCP_AGENT_ROUTER_PORT/mcp (agent_router), :$MCP_TASK_PORT/mcp (tasks)
   4. Set up the inbox-agent locally: bash $INSTALL_DIR/scripts/install-local.sh
   5. Review $ETC_DIR/secrets.env and add provider API keys you want available.
