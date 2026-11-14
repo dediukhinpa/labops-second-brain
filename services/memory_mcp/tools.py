@@ -174,9 +174,67 @@ def _require_slots_write(agent_ctx: AgentContext) -> None:
         )
 
 
+# Simple Cyrillic -> Latin table (Russian + Ukrainian letters), no external deps.
+# Without it a Cyrillic title collapsed to an empty slug and every note of the day
+# landed in the same "YYYY-MM-DD-.md" file, overwriting the previous one.
+_CYRILLIC_TO_LATIN: dict[str, str] = {
+    "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "yo",
+    "ж": "zh", "з": "z", "и": "i", "й": "y", "к": "k", "л": "l", "м": "m",
+    "н": "n", "о": "o", "п": "p", "р": "r", "с": "s", "т": "t", "у": "u",
+    "ф": "f", "х": "kh", "ц": "ts", "ч": "ch", "ш": "sh", "щ": "shch",
+    "ъ": "", "ы": "y", "ь": "", "э": "e", "ю": "yu", "я": "ya",
+    "і": "i", "ї": "yi", "є": "ye", "ґ": "g",
+}
+_CYRILLIC_TRANS = str.maketrans(_CYRILLIC_TO_LATIN)
+
+# Length of the hex hash used when a title leaves no usable characters at all.
+FALLBACK_SLUG_HASH_LEN = 8
+# Upper bound for "-2", "-3", ... suffix search when a path is taken by another note.
+MAX_PATH_SUFFIX = 1000
+
+
 def _slugify(title: str) -> str:
-    """Generate a URL-safe slug from a title."""
-    return re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:MAX_SLUG_LENGTH]
+    """Generate a URL-safe slug from a title (Cyrillic is transliterated)."""
+    latin = title.lower().translate(_CYRILLIC_TRANS)
+    return re.sub(r"[^a-z0-9]+", "-", latin).strip("-")[:MAX_SLUG_LENGTH]
+
+
+def _note_slug(title: str) -> str:
+    """Slug for a note file name; never empty.
+
+    If nothing usable is left after cleaning (e.g. a title made of symbols or of
+    non-Cyrillic scripts), fall back to a short stable hash of the title, so that
+    different titles still get different files and the same title the same one.
+    """
+    slug = _slugify(title)
+    if slug:
+        return slug
+    digest = hashlib.sha256(title.encode("utf-8")).hexdigest()
+    return f"note-{digest[:FALLBACK_SLUG_HASH_LEN]}"
+
+
+def _resolve_note_path(vault_root: str, scope: str, prefix: str, title: str) -> str:
+    """Pick the vault-relative path for a new note without clobbering another one.
+
+    The base name is ``<scope>/<prefix><slug>.md``. If that file already exists and
+    its ``# heading`` is a different title, it belongs to another note, so try
+    ``-2``, ``-3``, ... A file with the same title is the same document: the base
+    path is returned unchanged, so re-writing it stays idempotent (sha256 dedup /
+    update in ``_upsert_document``). Existing files are never renamed.
+    """
+    slug = _note_slug(title)
+    # The file heading is a single line, so compare against the first line only.
+    lines = title.strip().splitlines()
+    wanted = lines[0].strip() if lines else ""
+    for n in range(1, MAX_PATH_SUFFIX + 1):
+        suffix = "" if n == 1 else f"-{n}"
+        rel_path = f"{scope}/{prefix}{slug}{suffix}.md"
+        abs_path = validate_path(rel_path, vault_root)
+        if not abs_path.exists():
+            return rel_path
+        if _extract_title(abs_path).strip() == wanted:
+            return rel_path
+    raise ValueError(f"No free note path for title '{title}' in {scope}")
 
 
 def _today_iso() -> str:
@@ -487,8 +545,7 @@ def register_tools(
         # frontmatter attribution only.
         resolved_agent = agent_ctx.agent
         declared_author = agent if (agent and agent != agent_ctx.agent) else None
-        slug = _slugify(title)
-        rel_path = f"{scope}/{_today_iso()}-{slug}.md"
+        rel_path = _resolve_note_path(vault_root, scope, f"{_today_iso()}-", title)
         abs_path = validate_path(rel_path, vault_root)
 
         # Read thresholds dynamically per-call so tests + operators can flip
@@ -917,8 +974,7 @@ def register_tools(
         # parameter is human-attribution only — never the audit identity.
         resolved_agent = agent_ctx.agent
         declared_author = agent if (agent and agent != agent_ctx.agent) else None
-        slug = _slugify(title)
-        rel_path = f"{scope}/{_today_iso()}-{slug}.md"
+        rel_path = _resolve_note_path(vault_root, scope, f"{_today_iso()}-", title)
         abs_path = validate_path(rel_path, vault_root)
 
         fm: dict[str, Any] = {
@@ -989,8 +1045,7 @@ def register_tools(
         # parameter is human-attribution only — never the audit identity.
         resolved_agent = agent_ctx.agent
         declared_author = agent if (agent and agent != agent_ctx.agent) else None
-        slug = _slugify(title)
-        rel_path = f"{scope}/{slug}.md"
+        rel_path = _resolve_note_path(vault_root, scope, "", title)
         abs_path = validate_path(rel_path, vault_root)
 
         fm: dict[str, Any] = {
@@ -1057,8 +1112,7 @@ def register_tools(
         # parameter is human-attribution only — never the audit identity.
         resolved_agent = agent_ctx.agent
         declared_author = agent if (agent and agent != agent_ctx.agent) else None
-        slug = _slugify(title)
-        rel_path = f"{scope}/{slug}.md"
+        rel_path = _resolve_note_path(vault_root, scope, "", title)
         abs_path = validate_path(rel_path, vault_root)
 
         fm: dict[str, Any] = {
@@ -1129,8 +1183,7 @@ def register_tools(
         # parameter is human-attribution only — never the audit identity.
         resolved_agent = agent_ctx.agent
         declared_author = agent if (agent and agent != agent_ctx.agent) else None
-        slug = _slugify(title)
-        rel_path = f"{scope}/{slug}.md"
+        rel_path = _resolve_note_path(vault_root, scope, "", title)
         abs_path = validate_path(rel_path, vault_root)
 
         fm: dict[str, Any] = {
@@ -1432,8 +1485,7 @@ def register_tools(
         if not old_abs.exists():
             raise ValueError(f"Original decision not found: {old_path}")
 
-        slug = _slugify(new_title)
-        rel_path = f"{scope}/{_today_iso()}-{slug}.md"
+        rel_path = _resolve_note_path(vault_root, scope, f"{_today_iso()}-", new_title)
         abs_path = validate_path(rel_path, vault_root)
 
         supersedes_line = f"Supersedes [[{old_path}]]"
