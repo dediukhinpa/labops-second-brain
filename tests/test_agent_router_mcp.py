@@ -160,6 +160,52 @@ def test_format_virtual_prompt_smoke_short_circuits() -> None:
     assert "ack-only fast path" in prompt
 
 
+def test_format_virtual_prompt_memory_consolidate_is_silent() -> None:
+    """Service consolidation nudge: ack-only, no owner report, no notify."""
+    prompt = _format_virtual_prompt(
+        from_agent="agent-2",
+        to_agent="agent-2",
+        task_id="agent-2::agent-2::c0ffee",
+        payload={
+            "title": "Memory consolidation",
+            "body": "wake-up body",
+            "instruction_type": "memory_consolidate",
+        },
+    )
+    assert "memory-consolidate" in prompt
+    assert "silent" in prompt
+    assert 'agent_router.ack(task_id="agent-2::agent-2::c0ffee")' in prompt
+    assert "wake-up body" in prompt
+    # Nothing that asks for a report or a notify.
+    assert "detailed chat report" not in prompt
+    assert "ALSO SEND A SHORT SUMMARY" not in prompt
+    assert "Send the owner" not in prompt
+    assert "DO NOT write to the owner" in prompt
+    assert "DO NOT call agent_router.notify" in prompt
+
+
+def test_format_virtual_prompt_regular_task_keeps_full_report_flow() -> None:
+    """A normal task (other instruction_type) keeps the dual-report text."""
+    for payload in (
+        {"title": "Do thing", "body": "details"},
+        {"title": "Do thing", "body": "details", "instruction_type": "other"},
+    ):
+        prompt = _format_virtual_prompt("agent-1", "agent-2", "t-1", payload)
+        assert "Send the owner a detailed chat report" in prompt
+        assert "ALSO SEND A SHORT SUMMARY TO THE COORDINATOR" in prompt
+        assert "silent" not in prompt
+
+
+def test_format_virtual_prompt_coordinator_and_smoke_unchanged_by_nudge_type() -> None:
+    """Coordinator / smoke branches keep their ack-only text."""
+    smoke = _format_virtual_prompt(
+        "agent-1", "agent-2", "t-2", {"title": "ping", "_smoke": True}
+    )
+    assert "(smoke ping)" in smoke
+    assert "send the owner a 1-3 line note" in smoke
+    assert "silent service run" not in smoke
+
+
 def test_load_gateways_handles_bad_json(monkeypatch: pytest.MonkeyPatch) -> None:
     """Malformed AGENT_GATEWAYS env yields an empty dict, not a crash."""
     monkeypatch.setenv("AGENT_GATEWAYS", "{not json}")

@@ -55,6 +55,8 @@ BATCH_SIZE = 20
 OWNER_CHAT_ID = int(os.environ.get("OWNER_CHAT_ID", "0"))
 GATEWAY_TOKEN = os.environ.get("GATEWAY_WEBHOOK_TOKEN", "")
 COORDINATOR_AGENT = os.environ.get("COORDINATOR_AGENT", "coordinator-agent")
+# instruction_type of the self-nudge sent by agent-architecture reflect-nudge.sh.
+MEMORY_CONSOLIDATE_TYPE = "memory_consolidate"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -175,6 +177,8 @@ def _format_virtual_prompt(from_agent: str, to_agent: str, task_id: str, payload
       detected by title prefix "Report from " or `_origin_task` field; (b) explicit
       smoke pings via `_smoke=true`. These skip the full report + dual-notify flow
       which would otherwise cause infinite recursion (coordinator → coordinator).
+    - Silent ack-only path for `instruction_type == "memory_consolidate"` (service
+      self-nudge): no owner report, no notify.
     """
     title = payload.get("title") or "(no title)"
     body = payload.get("body") or ""
@@ -183,6 +187,28 @@ def _format_virtual_prompt(from_agent: str, to_agent: str, task_id: str, payload
     extra = ""
     if reason:
         extra = f"\nEscalation reason: {reason}"
+
+    # Service nudge (reflect-nudge.sh wakes the agent up for memory consolidation):
+    # this is housekeeping, not an owner task. The generic template below would make
+    # the agent write a detailed report to the owner's chat and notify the coordinator
+    # on every nudge; the consolidation then feeds itself through the stop-hook that
+    # logs the agent's last message. chatId stays in the gateway body (the channel
+    # plugin needs it to deliver at all), so silence is enforced by this prompt only.
+    if payload.get("instruction_type") == MEMORY_CONSOLIDATE_TYPE:
+        return (
+            f"[Inter-agent from {from_agent} -> {to_agent}] urgency={urgency} "
+            f"(service: memory consolidation)\n"
+            f"Task: {title}\n"
+            f"{body}{extra}\n"
+            f"---\n"
+            f"ACTIONS (silent service run, ack-only):\n"
+            f"1. This is a service memory consolidation: run the memory-consolidate "
+            f"skill silently.\n"
+            f"2. DO NOT write to the owner, to any chat or channel, and DO NOT call "
+            f"the channel reply tool. No report of any kind.\n"
+            f"3. DO NOT call agent_router.notify (neither to the coordinator nor to anyone).\n"
+            f"4. When done, call agent_router.ack(task_id=\"{task_id}\") and stop."
+        )
 
     # Hard loop gate: COORDINATOR_AGENT is the coordinator; it never needs a
     # dual-report back to itself. Any agent_router.notify(coordinator, ...) → ack-only.
