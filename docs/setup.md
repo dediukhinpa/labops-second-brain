@@ -1,6 +1,6 @@
 # Setup — manual install
 
-If you want to deploy this without handing `AGENT.md` to a Claude Code agent, follow these steps yourself. They mirror what the agent does, written for a human who already knows SSH and Postgres.
+If you want to deploy this without handing `AGENT.md` to an agent (Claude Code or Codex), follow these steps yourself. They mirror what the agent does, written for a human who already knows SSH and Postgres.
 
 The steps assume:
 
@@ -148,7 +148,7 @@ If step 5 fails, the AuthCaptureMiddleware is not loaded. Verify `services/memor
 
 Decide which agents will use the brain. At minimum:
 
-- **coordinator-agent** — your main Claude Code agent. Full scope set.
+- **coordinator-agent** — your main agent (Claude Code or Codex). Full scope set.
 - **inbox-agent** — the local Telegram bot. Restricted scopes.
 
 On the VPS:
@@ -286,7 +286,7 @@ On your phone or desktop Telegram:
 
 1. Send `/start` to your bot. It should reply with a brief help message within 2 seconds.
 2. Send a URL (YouTube, article, anything). It should ack within ~2 seconds: `Got it` (the exact text lives in `inbox-agent/bot.py`).
-3. From your Claude Code agent (configured with the coordinator-agent token in `.claude/.mcp.json`), call:
+3. From your agent (configured with the coordinator-agent token: in `.claude/.mcp.json` on Claude Code, in `AGENT_BEARER` of `agent.env` on Codex), call:
 
    ```
    recall.recent(scope="knowledge", limit=5)
@@ -304,7 +304,7 @@ If no — read `docs/troubleshooting.md` in this order: bot not responding → i
 
 This step is **optional**. Skip it if you only want the brain + inbox-agent (that is Path A — you are already done at step 10).
 
-If you want one or more personal Claude Code agents that share this brain (a coordinator, a coder, a marketer, a researcher), use the `agent-template/` generator. Run it once per agent.
+If you want one or more personal agents (Claude Code or Codex) that share this brain (a coordinator, a coder, a marketer, a researcher), use the `agent-template/` generator. Run it once per agent.
 
 ```bash
 cd ~/public-second_brain-agentos

@@ -24,7 +24,7 @@
   <a href="https://github.com/dediukhinpa/labops-agent-architecture">agent-architecture</a>
 </p>
 
-> **Общий мозг команды Claude Code-агентов.** Self-hosted на одном VPS: Postgres 16 + pgvector, набор MCP-серверов (память, гибридный recall, координация роя, задачи) и фоновые воркеры. Markdown-vault как единый источник правды + семантический поиск поверх него. Часть архитектуры **labops** (см. [`labops-tg-plugin`](#часть-labops) и [`labops-agent-architecture`](#часть-labops)).
+> **Общий мозг команды агентов (Claude Code или Codex).** Self-hosted на одном VPS: Postgres 16 + pgvector, набор MCP-серверов (память, гибридный recall, координация роя, задачи) и фоновые воркеры. Markdown-vault как единый источник правды + семантический поиск поверх него. Часть архитектуры **labops** (см. [`labops-tg-plugin`](#часть-labops) и [`labops-agent-architecture`](#часть-labops)).
 
 Это слой **долговременной общей памяти**. Каждый агент держит свою «горячую» память в workspace (`CLAUDE.md`, `hot/`, `warm/`), а `labops-second-brain` — это **L4**: смысловой, общий для всей команды, с поиском по эмбеддингам и строгим разграничением доступа.
 
@@ -65,7 +65,7 @@ cd ~/labops-second-brain    # установщик использует отно
 # а) вручную:
 sudo bash scripts/install.sh
 
-# б) или отдать Claude Code агенту (он следует AGENT.md и спрашивает
+# б) или отдать агенту — Claude Code или Codex (он следует AGENT.md и спрашивает
 #    подтверждение на разрушительных шагах — root-провижининг, systemd-юниты и т.д.):
 claude
 #   в сессии вставьте:
@@ -81,7 +81,7 @@ claude
 
 Установка считается успешной только при зелёном **smoke-test** в конце (если он падает — см. [Troubleshooting](#troubleshooting)).
 
-**3. Первая запись + запрос (через MCP).** Выдайте per-agent Bearer-токен на VPS, пропишите его в `.mcp.json` агента, затем пишите и ищите:
+**3. Первая запись + запрос (через MCP).** Выдайте per-agent Bearer-токен на VPS, пропишите его в MCP-конфиг агента (`.mcp.json` у Claude Code, `config.toml` у Codex), затем пишите и ищите:
 
 ```bash
 # выдать токен (печатается один раз — сохраните)
@@ -93,7 +93,7 @@ sudo -u second_brain python /opt/second_brain/scripts/issue-agent-token.py \
 > Raw-секрет печатается один раз — сохраните его; в БД хранится только его sha256.
 
 ```jsonc
-// ~/.claude/.mcp.json на хосте агента
+// Claude Code: ~/.claude/.mcp.json на хосте агента (в рое: ~/.claude-lab/<агент>/.claude/.mcp.json)
 {
   "mcpServers": {
     "second_brain-memory": { "url": "http://<VPS>:5001/mcp", "headers": { "Authorization": "Bearer <token>" } },
@@ -103,6 +103,40 @@ sudo -u second_brain python /opt/second_brain/scripts/issue-agent-token.py \
   }
 }
 ```
+
+В рое на **Codex** (`HARNESS=codex` в `~/.claude-lab/shared/swarm.env`) те же четыре сервера
+описаны в `CODEX_HOME` агента — `~/.claude-lab/<агент>/.codex/config.toml`. Токен туда **не**
+пишется: Codex берёт его из переменной окружения `AGENT_BEARER`, которую сессия агента получает
+из `~/.claude-lab/<агент>/.claude/agent.env` (`chmod 600`):
+
+```toml
+# ~/.claude-lab/<агент>/.codex/config.toml — токена в этом файле нет
+[mcp_servers.second_brain-memory]
+url = "http://<VPS>:5001/mcp"
+bearer_token_env_var = "AGENT_BEARER"
+
+[mcp_servers.second_brain-memory_router]
+url = "http://<VPS>:5002/mcp"
+bearer_token_env_var = "AGENT_BEARER"
+
+[mcp_servers.second_brain-agent_router]
+url = "http://<VPS>:5000/mcp"
+bearer_token_env_var = "AGENT_BEARER"
+
+[mcp_servers.second_brain-tasks]
+url = "http://<VPS>:5003/mcp"
+bearer_token_env_var = "AGENT_BEARER"
+```
+
+```bash
+# ~/.claude-lab/<агент>/.claude/agent.env (chmod 600)
+export AGENT_BEARER="<token>"
+```
+
+Какой файл используется, решает харнес роя — один на весь рой: Claude Code → `.mcp.json`,
+Codex → `[mcp_servers.<имя>]` в `config.toml`. Самому мозгу разницы нет — оба присылают один и
+тот же заголовок `Authorization: Bearer <token>`. `scripts/connect-agents.sh` заполняет любой из
+этих файлов сам (см. «Зависимость от других репо» ниже).
 
 ```text
 # запись — агент вызывает memory-инструмент
@@ -150,7 +184,7 @@ flowchart LR
 ```mermaid
 %%{init: {'theme':'base','themeVariables':{'primaryColor':'#EDE9FE','primaryTextColor':'#4C1D95','primaryBorderColor':'#8B5CF6','lineColor':'#8B5CF6','secondaryColor':'#F1F5F9','tertiaryColor':'#ffffff','clusterBkg':'transparent','clusterBorder':'#B794F4','fontFamily':'Helvetica,Arial,sans-serif'}}}%%
 flowchart LR
-    subgraph agents["Агенты (Claude Code сессии)"]
+    subgraph agents["Агенты (сессии Claude Code или Codex)"]
         A1["агент 1"]; A2["агент 2"]; A3["агент N"]
     end
 
@@ -317,13 +351,13 @@ sudo bash scripts/install.sh
 Идемпотентные шаги: проверка платформы → apt (Python 3.11, Postgres 16 + pgvector) → системный пользователь `second_brain` → `/opt/second_brain` + venv → роль/БД + расширение `vector` → секреты (0600) → миграции → предзагрузка модели эмбеддингов (`paraphrase-multilingual-mpnet-base-v2`, ~1.0 ГБ) → рендер и установка systemd-юнитов → `systemctl enable --now` → **smoke-test** → печать admin-токена. Повторный запуск на уже установленной системе безопасен: синхронизация репо (`scripts/lib/sync-repo.sh`) исключает `vault/`, `.cache/`, `.venv/`, `.env` и `secrets/` из своего `rsync --delete`, так что переустановка больше не стирает живой vault, а файлы, оставшиеся в папках, списанных миграцией `011_retire_unused_scopes.sql`, переносятся в `knowledge/` (с предварительным бэкапом) — см. `docs/troubleshooting.md`, раздел "Retired scopes".
 
 **Зависимость от других репо:**
-- Канонический порядок установки: `labops-agent-architecture` → `labops-tg-plugin` → `labops-second-brain` — но это три **отдельных** скрипта `install.sh`, каждый запускает оператор. `install.sh` из `labops-agent-architecture` только **клонирует** этот репо в `~/labops-second-brain` — `scripts/install.sh` он за вас НЕ запускает. Ставите этот репо сами: либо вручную (`sudo bash scripts/install.sh`), либо отдав Claude Code агенту с промптом из `AGENT.md` — см. шаг 1 выше.
+- Канонический порядок установки: `labops-agent-architecture` → `labops-tg-plugin` → `labops-second-brain` — но это три **отдельных** скрипта `install.sh`, каждый запускает оператор. `install.sh` из `labops-agent-architecture` только **клонирует** этот репо в `~/labops-second-brain` — `scripts/install.sh` он за вас НЕ запускает. Ставите этот репо сами: либо вручную (`sudo bash scripts/install.sh`), либо отдав агенту (Claude Code или Codex) с промптом из `AGENT.md` — см. шаг 1 выше.
 - Если этот репо (или любой из трёх `labops-*`) приватный — при клонировании вручную (или через `labops-agent-architecture`) на машине без `gh` CLI и без SSH-ключа потребуется переменная `GITHUB_TOKEN` (fine-grained PAT, права `Contents: Read` на этот репо, выдаётся от аккаунта владельца репо на GitHub).
-- Если на машине **уже есть агенты** (поставлен [`labops-agent-architecture`](#часть-labops)) — установщик подключает их автоматически через `scripts/connect-agents.sh`. Для каждого воркспейса под `~/.claude-lab/*/.claude` он: выдаёт реальный токен взамен плейсхолдера `CHANGE_ME` (а также если токена нет в БД или ему не хватает базовых прав), дописывает в `.mcp.json` сервисы, которых там нет (у агентов прежних выпусков не было доски задач), доливает недостающие `SECOND_BRAIN_*_URL` в `agent.env` объединяет прежние scopes (из БД, если их удалось прочитать) с базовым набором, а если токен оставлен — выравнивает отставшую строку `AGENT_SCOPES` по БД, без перезапуска агента. Агенты роя на **Codex CLI** узнаются по `<агент>/.codex/config.toml`: недостающие серверы дописываются туда как `[mcp_servers.second_brain-*]` с `bearer_token_env_var = "AGENT_BEARER"` (сам токен остаётся только в `agent.env`), `.mcp.json` не создаётся. Бэкапы — `*.bak-connect`. Перед перезапуском сессии агента скрипт дожидается, пока все четыре MCP-сервиса ответят (`memory_router` греет модель эмбеддингов и слушает порт не сразу) — иначе сессия подключилась бы мимо них. Отключить: `SKIP_AGENT_CONNECT=1`; не ждать сервисы: `SKIP_SERVICE_WAIT=1`; не трогать scopes: `KEEP_AGENT_SCOPES=1`; повторить отдельно: `sudo bash scripts/connect-agents.sh`.
+- Если на машине **уже есть агенты** (поставлен [`labops-agent-architecture`](#часть-labops)) — установщик подключает их автоматически через `scripts/connect-agents.sh`. Для каждого воркспейса под `~/.claude-lab/*/.claude` он: выдаёт реальный токен взамен плейсхолдера `CHANGE_ME` (а также если токена нет в БД или ему не хватает базовых прав), дописывает в `.mcp.json` сервисы, которых там нет (у агентов прежних выпусков не было доски задач), доливает недостающие `SECOND_BRAIN_*_URL` в `agent.env` объединяет прежние scopes (из БД, если их удалось прочитать) с базовым набором, а если токен оставлен — выравнивает отставшую строку `AGENT_SCOPES` по БД, без перезапуска агента. Агенты роя на **Codex CLI** (`HARNESS=codex` в `~/.claude-lab/shared/swarm.env`) узнаются по `<агент>/.codex/config.toml`: недостающие серверы дописываются туда как `[mcp_servers.second_brain-*]` с `bearer_token_env_var = "AGENT_BEARER"` (сам токен остаётся только в `agent.env`), `.mcp.json` не создаётся. Бэкапы — `*.bak-connect`. Перед перезапуском сессии агента скрипт дожидается, пока все четыре MCP-сервиса ответят (`memory_router` греет модель эмбеддингов и слушает порт не сразу) — иначе сессия подключилась бы мимо них. Отключить: `SKIP_AGENT_CONNECT=1`; не ждать сервисы: `SKIP_SERVICE_WAIT=1`; не трогать scopes: `KEEP_AGENT_SCOPES=1`; повторить отдельно: `sudo bash scripts/connect-agents.sh`.
 
 Установка считается успешной только при зелёном **smoke-test** в конце.
 
-Ручной, человеческий walkthrough (без Claude Code-агента) — [`docs/setup.md`](docs/setup.md).
+Ручной, человеческий walkthrough (без агента) — [`docs/setup.md`](docs/setup.md).
 
 </details>
 

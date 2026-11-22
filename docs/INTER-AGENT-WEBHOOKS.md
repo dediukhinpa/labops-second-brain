@@ -9,7 +9,7 @@
 ## 1. Полный flow
 
 ```
-Агент A (любой runtime: Claude Code, Hermes, кастом)
+Агент A (любой runtime: Claude Code, Codex, Hermes, кастом)
     │
     │ MCP-вызов: notify(to_agent="B", payload={"type":"task_assigned",...})
     ▼
@@ -147,6 +147,13 @@ journalctl -u second_brain-agent_router-worker -f  # tail для verify
 - Inject mechanism: пишет payload через [Claude Code CLI](https://docs.claude.com/en/docs/claude-code) plugin protocol → user-facing message в активной сессии
 - Telegram bot для outbound: каждый агент имеет свой бот через `BotFather`, ответы идут в Telegram чат оператору
 - systemd unit (Linux) + launchd plist (macOS) шаблоны
+
+> **Рой на Codex.** Сам second-brain от харнеса не зависит: worker `agent_router` только
+> отправляет POST в шлюз из `AGENT_GATEWAYS` и ничего не знает о том, какой CLI на той стороне.
+> Привязка к Claude Code — на принимающей стороне: `webhook-listener` из tg-plugin выполняет
+> задачу через `claude -p`. Для роя на Codex (`HARNESS=codex` в `~/.claude-lab/shared/swarm.env`)
+> исполнение через `codex exec` делается в `labops-ai-assistant` (`tg-plugin/webhook-listener`) —
+> сверяйтесь с его README, поддерживает ли ваша версия Codex.
 
 **Setup (TL;DR):**
 

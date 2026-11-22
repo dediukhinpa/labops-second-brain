@@ -24,7 +24,7 @@
   <a href="https://github.com/dediukhinpa/labops-agent-architecture">agent-architecture</a>
 </p>
 
-> **A shared brain for a team of Claude Code agents.** Self-hosted on a single VPS: Postgres 16 + pgvector, a set of MCP servers (memory, hybrid recall, swarm coordination, tasks) and background workers. A Markdown vault as the single source of truth + semantic search on top of it. Part of the **labops** architecture (see [`labops-tg-plugin`](#part-of-labops) and [`labops-agent-architecture`](#part-of-labops)).
+> **A shared brain for a team of agents (Claude Code or Codex).** Self-hosted on a single VPS: Postgres 16 + pgvector, a set of MCP servers (memory, hybrid recall, swarm coordination, tasks) and background workers. A Markdown vault as the single source of truth + semantic search on top of it. Part of the **labops** architecture (see [`labops-tg-plugin`](#part-of-labops) and [`labops-agent-architecture`](#part-of-labops)).
 
 This is the **long-term shared memory** layer. Each agent keeps its own "hot" memory in its workspace (`CLAUDE.md`, `hot/`, `warm/`), while `labops-second-brain` is **L4**: semantic, shared across the whole team, with embedding search and strict access control.
 
@@ -65,7 +65,7 @@ cd ~/labops-second-brain    # the installer uses relative paths — run it from 
 # a) manually:
 sudo bash scripts/install.sh
 
-# b) or hand it to a Claude Code agent (it follows AGENT.md and asks you to
+# b) or hand it to an agent — Claude Code or Codex (it follows AGENT.md and asks you to
 #    confirm destructive steps — root-level provisioning, systemd units, etc.):
 claude
 #   in the session, paste:
@@ -81,7 +81,7 @@ claude
 
 The install is considered successful only when the **smoke-test** at the end is green (if it fails, see [Troubleshooting](#troubleshooting)).
 
-**3. First write + query (via MCP).** Issue a per-agent Bearer token on the VPS, wire it into the agent's `.mcp.json`, then write and recall:
+**3. First write + query (via MCP).** Issue a per-agent Bearer token on the VPS, wire it into the agent's MCP config (`.mcp.json` for Claude Code, `config.toml` for Codex), then write and recall:
 
 ```bash
 # issue a token (printed once — save it)
@@ -93,7 +93,7 @@ sudo -u second_brain python /opt/second_brain/scripts/issue-agent-token.py \
 > The raw secret is printed once — save it; the DB stores only its sha256.
 
 ```jsonc
-// ~/.claude/.mcp.json on the agent host
+// Claude Code: ~/.claude/.mcp.json on the agent host (in a swarm: ~/.claude-lab/<agent>/.claude/.mcp.json)
 {
   "mcpServers": {
     "second_brain-memory": { "url": "http://<VPS>:5001/mcp", "headers": { "Authorization": "Bearer <token>" } },
@@ -103,6 +103,40 @@ sudo -u second_brain python /opt/second_brain/scripts/issue-agent-token.py \
   }
 }
 ```
+
+On a **Codex** swarm (`HARNESS=codex` in `~/.claude-lab/shared/swarm.env`) the same four servers
+live in the agent's `CODEX_HOME` — `~/.claude-lab/<agent>/.codex/config.toml`. The token is **not**
+written there: Codex reads it from the `AGENT_BEARER` environment variable, which the agent's
+session gets from `~/.claude-lab/<agent>/.claude/agent.env` (`chmod 600`):
+
+```toml
+# ~/.claude-lab/<agent>/.codex/config.toml — no token in this file
+[mcp_servers.second_brain-memory]
+url = "http://<VPS>:5001/mcp"
+bearer_token_env_var = "AGENT_BEARER"
+
+[mcp_servers.second_brain-memory_router]
+url = "http://<VPS>:5002/mcp"
+bearer_token_env_var = "AGENT_BEARER"
+
+[mcp_servers.second_brain-agent_router]
+url = "http://<VPS>:5000/mcp"
+bearer_token_env_var = "AGENT_BEARER"
+
+[mcp_servers.second_brain-tasks]
+url = "http://<VPS>:5003/mcp"
+bearer_token_env_var = "AGENT_BEARER"
+```
+
+```bash
+# ~/.claude-lab/<agent>/.claude/agent.env (chmod 600)
+export AGENT_BEARER="<token>"
+```
+
+Which file is used is decided by the swarm's harness, one for the whole swarm: Claude Code →
+`.mcp.json`, Codex → `[mcp_servers.<name>]` in `config.toml`. The brain itself does not care —
+both send the same `Authorization: Bearer <token>` header. `scripts/connect-agents.sh` fills in
+either file for you (see "Dependency on the other repos" below).
 
 ```text
 # write — the agent calls the memory tool
@@ -150,7 +184,7 @@ flowchart LR
 ```mermaid
 %%{init: {'theme':'base','themeVariables':{'primaryColor':'#EDE9FE','primaryTextColor':'#4C1D95','primaryBorderColor':'#8B5CF6','lineColor':'#8B5CF6','secondaryColor':'#F1F5F9','tertiaryColor':'#ffffff','clusterBkg':'transparent','clusterBorder':'#B794F4','fontFamily':'Helvetica,Arial,sans-serif'}}}%%
 flowchart LR
-    subgraph agents["Agents (Claude Code sessions)"]
+    subgraph agents["Agents (Claude Code or Codex sessions)"]
         A1["agent 1"]; A2["agent 2"]; A3["agent N"]
     end
 
@@ -317,13 +351,13 @@ sudo bash scripts/install.sh
 Idempotent steps: platform check → apt (Python 3.11, Postgres 16 + pgvector) → system user `second_brain` → `/opt/second_brain` + venv → role/DB + `vector` extension → secrets (0600) → migrations → preload the embedding model (`paraphrase-multilingual-mpnet-base-v2`, ~1.0 GB) → render and install the systemd units → `systemctl enable --now` → **smoke-test** → print the admin token. Re-running on an existing install is safe: the repo sync (`scripts/lib/sync-repo.sh`) excludes `vault/`, `.cache/`, `.venv/`, `.env` and `secrets/` from its `rsync --delete`, so a reinstall no longer wipes the live vault, and any files still sitting in the vault folders retired by migration `011_retire_unused_scopes.sql` are moved into `knowledge/` (backed up first) — see `docs/troubleshooting.md` "Retired scopes".
 
 **Dependency on the other repos:**
-- The canonical install order is `labops-agent-architecture` → `labops-tg-plugin` → `labops-second-brain` — but these are three **separate** `install.sh` scripts, each run by the operator. `labops-agent-architecture`'s `install.sh` only **clones** this repo to `~/labops-second-brain`; it does **not** run `scripts/install.sh` for you. You install this repo yourself, either manually (`sudo bash scripts/install.sh`) or by handing it to a Claude Code agent with the `AGENT.md` prompt — see step 1 above.
+- The canonical install order is `labops-agent-architecture` → `labops-tg-plugin` → `labops-second-brain` — but these are three **separate** `install.sh` scripts, each run by the operator. `labops-agent-architecture`'s `install.sh` only **clones** this repo to `~/labops-second-brain`; it does **not** run `scripts/install.sh` for you. You install this repo yourself, either manually (`sudo bash scripts/install.sh`) or by handing it to an agent (Claude Code or Codex) with the `AGENT.md` prompt — see step 1 above.
 - If this repo (or any of the three `labops-*` repos) is private, cloning it standalone (or letting `labops-agent-architecture` clone it) on a machine with no `gh` CLI and no SSH key configured requires a `GITHUB_TOKEN` env var (fine-grained PAT, `Contents: Read` on this repo, issued from the repo-owner GitHub account).
-- If **agents already exist** on the machine (`labops-agent-architecture` is installed) — the installer auto-connects them via `scripts/connect-agents.sh`. For every workspace under `~/.claude-lab/*/.claude` it: issues a real token when the bearer is still `CHANGE_ME`, absent from the DB, or short of the baseline scopes; adds MCP servers missing from `.mcp.json` (agents scaffolded before the task board have no `second_brain-tasks` entry); appends the missing `SECOND_BRAIN_*_URL` vars to `agent.env`; merges the agent's existing scopes (read from the DB when available) with the default set; and, when the token is kept, rewrites a stale `AGENT_SCOPES` line to match the DB — without restarting the agent. Agents of a swarm running on **Codex CLI** are recognised by `<agent>/.codex/config.toml`: missing servers are appended there as `[mcp_servers.second_brain-*]` with `bearer_token_env_var = "AGENT_BEARER"` (the token itself stays only in `agent.env`), and no `.mcp.json` is created. Backups land next to each file as `*.bak-connect`. Before restarting an agent session it waits for all four MCP services to answer (`memory_router` warms the embedding model and binds its port late) — restarting earlier would leave the session permanently attached to nothing. Opt out with `SKIP_AGENT_CONNECT=1`, skip the wait with `SKIP_SERVICE_WAIT=1`, keep scopes untouched with `KEEP_AGENT_SCOPES=1`; re-run standalone any time: `sudo bash scripts/connect-agents.sh`.
+- If **agents already exist** on the machine (`labops-agent-architecture` is installed) — the installer auto-connects them via `scripts/connect-agents.sh`. For every workspace under `~/.claude-lab/*/.claude` it: issues a real token when the bearer is still `CHANGE_ME`, absent from the DB, or short of the baseline scopes; adds MCP servers missing from `.mcp.json` (agents scaffolded before the task board have no `second_brain-tasks` entry); appends the missing `SECOND_BRAIN_*_URL` vars to `agent.env`; merges the agent's existing scopes (read from the DB when available) with the default set; and, when the token is kept, rewrites a stale `AGENT_SCOPES` line to match the DB — without restarting the agent. Agents of a swarm running on **Codex CLI** (`HARNESS=codex` in `~/.claude-lab/shared/swarm.env`) are recognised by `<agent>/.codex/config.toml`: missing servers are appended there as `[mcp_servers.second_brain-*]` with `bearer_token_env_var = "AGENT_BEARER"` (the token itself stays only in `agent.env`), and no `.mcp.json` is created. Backups land next to each file as `*.bak-connect`. Before restarting an agent session it waits for all four MCP services to answer (`memory_router` warms the embedding model and binds its port late) — restarting earlier would leave the session permanently attached to nothing. Opt out with `SKIP_AGENT_CONNECT=1`, skip the wait with `SKIP_SERVICE_WAIT=1`, keep scopes untouched with `KEEP_AGENT_SCOPES=1`; re-run standalone any time: `sudo bash scripts/connect-agents.sh`.
 
 The install is considered successful only when the **smoke-test** at the end is green.
 
-A manual, human-driven walkthrough (no Claude Code agent required) lives in [`docs/setup.md`](docs/setup.md).
+A manual, human-driven walkthrough (no agent required) lives in [`docs/setup.md`](docs/setup.md).
 
 </details>
 

@@ -60,7 +60,7 @@ Sets `revoked_at = now()`. The next auth check excludes the row.
 **Rotate** (replace without downtime):
 
 1. Issue a new token: `python scripts/issue-agent-token.py --agent <name> --scopes '...'` (this leaves the old one valid).
-2. Update the agent's `.mcp.json` with the new token.
+2. Update the agent's `.mcp.json` with the new token (on a Codex swarm: `AGENT_BEARER` in the agent's `agent.env` — `.codex/config.toml` holds no token).
 3. Restart the agent.
 4. Wait long enough to confirm the new token works (1 minute is plenty).
 5. Revoke the old token: `python scripts/issue-agent-token.py --agent <name> --revoke`. This revokes ALL active tokens for that agent by default — pass `--revoke-id <id>` if you want only the old one.
