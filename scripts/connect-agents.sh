@@ -17,6 +17,10 @@
 # недостающие серверы и адреса в agent.env, сверяет права токена с базовым
 # набором и ждёт готовности сервисов, прежде чем перезапускать сессию агента.
 #
+# Агент на Codex (рой с харнесом codex) узнаётся по <агент>/.codex/config.toml: серверы
+# дописываются туда как [mcp_servers.*] с bearer_token_env_var = "AGENT_BEARER", а токен
+# живёт только в agent.env — в config.toml его нет.
+#
 # Usage (root, after install.sh — install.sh calls it automatically):
 #   bash scripts/connect-agents.sh
 # Env:
@@ -320,6 +324,57 @@ print(f"ok:{','.join(added) if added else '-'}:{retoken}")
 SYNCPY
 )
 
+# ---- config.toml агента на Codex: только состав серверов ------------------------
+# У агента на Codex (харнес роя codex) MCP-серверы описаны в CODEX_HOME/config.toml, а токен
+# туда не пишется вовсе: bearer_token_env_var = "AGENT_BEARER" берёт его из agent.env. Значит,
+# здесь достаточно дописать недостающие серверы; уже прописанные (URL мог увести оператор)
+# не трогаем. TOML читаем tomllib, а дописываем текстом в конец — так сохраняются
+# комментарии и порядок файла, который сгенерировал установщик агента.
+SYNC_CODEX_PY=$(cat <<'SYNCPY'
+import json
+import sys
+import tomllib
+from pathlib import Path
+
+path = Path(sys.argv[1])
+servers = {}
+for line in sys.stdin.read().split("\n"):
+    if "=" in line:
+        name, url = line.split("=", 1)
+        servers[name.strip()] = url.strip()
+
+try:
+    raw = path.read_text(encoding="utf-8")
+    doc = tomllib.loads(raw)
+except (OSError, ValueError) as exc:
+    print(f"unreadable:{exc}")
+    raise SystemExit(3)
+
+mcp = doc.get("mcp_servers", {})
+if not isinstance(mcp, dict):
+    print("unreadable:mcp_servers is not a table")
+    raise SystemExit(3)
+
+added = [name for name in servers if name not in mcp]
+if added:
+    blocks = "".join(
+        f'\n[mcp_servers.{name}]\nurl = {json.dumps(servers[name])}\n'
+        'bearer_token_env_var = "AGENT_BEARER"\n'
+        for name in added
+    )
+    text = raw if raw.endswith("\n") else raw + "\n"
+    tmp = path.with_name(path.name + ".tmp-connect")
+    tmp.write_text(text + blocks, encoding="utf-8")
+    tomllib.loads(tmp.read_text(encoding="utf-8"))  # дописанное обязано разбираться
+    tmp.replace(path)
+print(f"ok:{','.join(added) if added else '-'}:0")
+SYNCPY
+)
+
+sync_codex_toml() {  # $1=config.toml; токен не нужен — его читает Codex из AGENT_BEARER
+  printf '%s\n' "$SB_SERVERS" | "$VENV_PY" -c "$SYNC_CODEX_PY" "$1"
+}
+
 sync_mcp_json() {  # $1=файл, $2=токен (уходит питону через stdin, не в argv)
   # Код передаём через -c, а токен и состав серверов — через stdin: скрипт
   # на stdin («python -») занял бы тот же канал, и данные до него не дошли бы.
@@ -480,9 +535,24 @@ for ws in "$AGENT_LAB_DIR"/*/.claude; do
     changed=1
   fi
 
-  # .mcp.json — отсюда MCP-инструменты агента берут и адреса сервисов, и токен.
+  # Агент на Codex: серверы в CODEX_HOME/config.toml, токен — только в agent.env (выше).
+  codex_cfg="$(dirname "$ws")/.codex/config.toml"
   effective_token="${token:-$current}"
-  if [ -f "$mcp_json" ] || [ -n "$effective_token" ]; then
+  if [ -f "$codex_cfg" ]; then
+    cp -p "$codex_cfg" "$codex_cfg.bak-connect"
+    if sync_out="$(sync_codex_toml "$codex_cfg")"; then
+      sync_added="$(printf '%s' "$sync_out" | cut -d: -f2)"
+      if [ -n "$sync_added" ] && [ "$sync_added" != "-" ]; then
+        ok "$agent: в config.toml (Codex) добавлены сервисы: $sync_added"
+        changed=1
+      fi
+      chmod 600 "$codex_cfg"; chown "$owner" "$codex_cfg" "$codex_cfg.bak-connect"
+    else
+      warn "$agent: config.toml не удалось разобрать (${sync_out#unreadable:}) — почините файл и запустите скрипт снова"
+      failed=$((failed+1)); continue
+    fi
+  # .mcp.json — отсюда MCP-инструменты агента берут и адреса сервисов, и токен.
+  elif [ -f "$mcp_json" ] || [ -n "$effective_token" ]; then
     [ -f "$mcp_json" ] && cp -p "$mcp_json" "$mcp_json.bak-connect"
     if sync_out="$(sync_mcp_json "$mcp_json" "$effective_token")"; then
       sync_added="$(printf '%s' "$sync_out" | cut -d: -f2)"

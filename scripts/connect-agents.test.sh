@@ -279,6 +279,51 @@ out="$(SKIP_AGENT_RESTART=1 run_sut 2>&1)"; rc=$?
 grep -q 'not json at all' "$TMP/lab/brokenjson/.claude/.mcp.json" \
   && ok "битый .mcp.json не перезаписан" || bad "битый .mcp.json затёрт"
 
+# ---- case 5d: агент на Codex — серверы в config.toml, токен только в agent.env -
+rm -rf "$TMP/lab"; mkdir -p "$TMP/lab/cx/.claude" "$TMP/lab/cx/.codex"
+printf 'export AGENT_ID="cx"\nexport AGENT_BEARER="CHANGE_ME"\nexport AGENT_SCOPES="decisions"\n' \
+  > "$TMP/lab/cx/.claude/agent.env"
+cfg="$TMP/lab/cx/.codex/config.toml"
+cat > "$cfg" <<'EOF'
+# конфиг агента — комментарий должен уцелеть
+model = "gpt-6.2-sol"
+
+[mcp_servers.second_brain-memory]
+url = "http://proxy.local/memory"
+bearer_token_env_var = "AGENT_BEARER"
+EOF
+out="$(SKIP_AGENT_RESTART=1 run_sut 2>&1)"; rc=$?
+[ $rc -eq 0 ] && ok "Codex: exit 0" || bad "Codex: exit $rc: $out"
+grep -q 'AGENT_BEARER="tok_cx_AbCdEf123456"' "$TMP/lab/cx/.claude/agent.env" \
+  && ok "Codex: токен в agent.env" || bad "Codex: agent.env без токена"
+python3 - "$cfg" <<'PY' && ok "Codex: недостающие серверы дописаны, свой URL сохранён" || bad "Codex: config.toml не тот: $(cat "$cfg")"
+import sys, tomllib
+d = tomllib.load(open(sys.argv[1], "rb"))["mcp_servers"]
+assert sorted(d) == ["second_brain-agent_router", "second_brain-memory",
+                     "second_brain-memory_router", "second_brain-tasks"], sorted(d)
+assert d["second_brain-memory"]["url"] == "http://proxy.local/memory"
+assert d["second_brain-tasks"]["url"] == "http://127.0.0.1:5999/mcp"
+assert all(v["bearer_token_env_var"] == "AGENT_BEARER" for v in d.values())
+PY
+grep -q 'комментарий должен уцелеть' "$cfg" && ok "Codex: комментарии файла сохранены" \
+  || bad "Codex: файл переписан целиком"
+grep -q 'tok_cx' "$cfg" && bad "Codex: токен попал в config.toml" || ok "Codex: токена в config.toml нет"
+[ ! -e "$TMP/lab/cx/.claude/.mcp.json" ] && ok "Codex: .mcp.json не создан" \
+  || bad "Codex: создан лишний .mcp.json"
+[ "$(stat -c %a "$cfg")" = "600" ] && ok "Codex: config.toml 600" || bad "Codex: права $(stat -c %a "$cfg")"
+out="$(FAKE_TOKEN_VALID=1 SKIP_AGENT_RESTART=1 run_sut 2>&1)"
+echo "$out" | grep -q 'cx: уже подключён полностью' && ok "Codex: повтор ничего не меняет" \
+  || bad "Codex: не идемпотентно: $out"
+[ "$(grep -c '^\[mcp_servers.second_brain-tasks\]' "$cfg")" = 1 ] && ok "Codex: серверы не задвоены" \
+  || bad "Codex: задвоение серверов"
+
+# ---- case 5e: битый config.toml — не трогаем, говорим оператору ------------------
+printf 'model = \n' > "$cfg"
+out="$(SKIP_AGENT_RESTART=1 run_sut 2>&1)"; rc=$?
+[ $rc -eq 1 ] && echo "$out" | grep -q 'config.toml не удалось разобрать' \
+  && ok "Codex: битый config.toml → внятная ошибка" || bad "Codex: битый toml молча (rc=$rc): $out"
+[ "$(cat "$cfg")" = "model = " ] && ok "Codex: битый config.toml не перезаписан" || bad "Codex: битый toml затёрт"
+
 # ---- case 6: no lab at all → clean exit 0 -----------------------------------
 out="$(SB_HOME="$SB" SB_ETC="$TMP/etc" SECRETS="$TMP/etc/secrets.env" \
   SERVICE_USER="$(id -un)" AGENT_LAB_DIR="$TMP/nope" bash "$SUT" 2>&1)"; rc=$?
