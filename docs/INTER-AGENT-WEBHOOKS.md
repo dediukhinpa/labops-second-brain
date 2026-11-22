@@ -150,10 +150,12 @@ journalctl -u second_brain-agent_router-worker -f  # tail для verify
 
 > **Рой на Codex.** Сам second-brain от харнеса не зависит: worker `agent_router` только
 > отправляет POST в шлюз из `AGENT_GATEWAYS` и ничего не знает о том, какой CLI на той стороне.
-> Привязка к Claude Code — на принимающей стороне: `webhook-listener` из tg-plugin выполняет
-> задачу через `claude -p`. Для роя на Codex (`HARNESS=codex` в `~/.claude-lab/shared/swarm.env`)
-> исполнение через `codex exec` делается в `labops-ai-assistant` (`tg-plugin/webhook-listener`) —
-> сверяйтесь с его README, поддерживает ли ваша версия Codex.
+> Харнес выбирает принимающая сторона: `webhook-listener` из tg-plugin читает `HARNESS` из
+> `~/.claude-lab/shared/swarm.env` и выполняет задачу через `claude -p` (рой на Claude Code)
+> или `codex exec` с `CODEX_HOME` агента (рой на Codex). Перед запуском codex listener проверяет
+> `/health` pii-proxy агента; если прокси не отвечает, отвечает 503 и задача остаётся pending
+> (повтор по расписанию outbox, после `max_attempts` — failed). Подробности — README listener
+> в `labops-ai-assistant`.
 
 **Setup (TL;DR):**
 
