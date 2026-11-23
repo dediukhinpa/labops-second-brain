@@ -31,7 +31,8 @@ HTTP POST {AGENT_GATEWAYS["B"]}/webhook
     │   Authorization: Bearer <token>           (если AGENT_GATEWAY_AUTH=bearer:env:...)
     │   X-Hermes-Signature: sha256=<hex>        (если AGENT_GATEWAY_AUTH=hmac:env:...)
     │   X-Hermes-Timestamp: <unix>
-    │ Body: JSON с payload + task_id + from_agent
+    │ Body: message + chatId + task_id + from_agent + title + body + instruction_type
+    │       (не весь payload — см. «Формат payload» ниже)
     ▼
 Webhook listener на стороне агента B
     │
@@ -69,6 +70,63 @@ result = mcp__second_brain-agent_router__notify(
 )
 # returns: {"task_id": "nova::vega::abc123", "status": "pending"}
 ```
+
+### Формат payload: что дойдёт до получателя
+
+`payload` — произвольный JSON-объект, и в `delivery_outbox` он сохраняется целиком
+(виден через `get_delivery`). Но **получателю worker пересылает не payload, а
+собственное тело webhook**, собранное из нескольких ключей payload
+(`services/agent_router_mcp/worker.py`, `_deliver_one`; `chatId` — число из
+`OWNER_CHAT_ID` воркера):
+
+```text
+{
+  "message": "[Inter-agent from nova -> vega] urgency=normal\nTask: <title>\n<body>\n---\nACTIONS: ...",
+  "chatId": "<OWNER_CHAT_ID>",
+  "task_id": "nova::vega::abc123",
+  "from_agent": "nova",
+  "title": "<payload.title или \"(no title)\">",
+  "body": "<payload.body или \"\">",
+  "instruction_type": "<payload.instruction_type или \"\">"
+}
+```
+
+Ключи payload, которые worker читает:
+
+| Ключ | Куда попадает |
+|---|---|
+| `title` | поле `title` и строка `Task:` в `message` |
+| `body` | поле `body` и текст задачи в `message` — **сюда кладётся сама задача** |
+| `instruction_type` | поле `instruction_type`; `memory_consolidate` включает тихий служебный режим |
+| `urgency` (или `_priority`) | `urgency=` в заголовке `message` |
+| `_escalation_reason` | строка `Escalation reason:` в `message` (ставит `escalate`) |
+| `_smoke`, `_origin_task` | переключают `message` на короткий ack-only сценарий |
+
+Все остальные ключи (`task_id` внутри payload, `priority`, `from_agent`, свои поля)
+**до получателя не доходят** — webhook-listener и канал читают `title`/`body`
+из тела запроса, а не исходный payload. Поэтому всё, что получатель должен
+прочитать (номер задачи на доске, ссылки, критерии готовности), пишите текстом в
+`body`:
+
+```python
+mcp__second_brain-agent_router__notify(
+    to_agent="vega",
+    payload={
+        "title": "Напиши пост про X",
+        "body": "Задача #42 на доске. Черновик — в vault, срок — сегодня.",
+        "urgency": "high",
+    },
+)
+```
+
+`from_agent` и `task_id` доставки получатель всё равно видит: их ставит сам
+сервер (отправитель определяется по Bearer-токену, а не по полю в payload).
+
+Pull-доступ к входящим (`list_my_pending`) в стандартном наборе инструментов
+(`SECOND_BRAIN_TOOLS=core`) не открыт: у `agent_router_mcp` в `core` есть только
+`notify` и `ack` (`services/shared/tool_gating.py`). Доставка — push через worker,
+а всё содержимое задачи уже лежит в теле webhook; `list_my_pending` доступен
+только при `SECOND_BRAIN_TOOLS=all`.
 
 ### Что worker делает дальше
 
