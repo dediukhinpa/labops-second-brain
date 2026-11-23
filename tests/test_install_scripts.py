@@ -17,7 +17,9 @@
 * `task-mcp` юнит ставился, но не включался, а verify его требовал;
 * проверки живости открывали MCP-сессии и бросали их до таймаута простоя.
 """
+import os
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -92,7 +94,53 @@ def test_verify_requires_task_mcp() -> None:
     """task-mcp проверяется всегда, а не «если юнит найден»."""
     text = _read("verify.sh")
     block = re.search(r"MCP_ENDPOINTS=\((.*?)\n\)", text, flags=re.S)
-    assert block is not None and "second_brain-task-mcp:5003" in block.group(1)
+    assert block is not None and "second_brain-task-mcp:${MCP_TASK_PORT}" in block.group(1)
+    assert 'MCP_TASK_PORT="${MCP_TASK_PORT:-5003}"' in text
+
+
+def test_verify_ports_are_overridable_with_old_defaults() -> None:
+    """Порты MCP_ENDPOINTS берутся из окружения, по умолчанию — прежние."""
+    text = _read("verify.sh")
+    defaults = {
+        "MCP_MEMORY_PORT": "5001",
+        "MCP_AGENT_ROUTER_PORT": "5000",
+        "MCP_MEMORY_ROUTER_PORT": "5002",
+        "MCP_TASK_PORT": "5003",
+    }
+    block = re.search(r"MCP_ENDPOINTS=\((.*?)\n\)", text, flags=re.S)
+    assert block is not None
+    for name, port in defaults.items():
+        assert f'{name}="${{{name}:-{port}}}"' in text, f"нет дефолта {name}={port}"
+        assert f":${{{name}}}:/mcp" in block.group(1), f"{name} не используется в MCP_ENDPOINTS"
+    assert not re.search(r":\d{4}:/mcp", block.group(1)), "в MCP_ENDPOINTS снова зашит порт"
+
+
+def _eval_verify_endpoints(env: dict[str, str]) -> list[str]:
+    """Вычислить MCP_ENDPOINTS из verify.sh в bash с заданным окружением."""
+    text = _read("verify.sh")
+    block = re.search(r'^MCP_MEMORY_PORT=.*?^\)$', text, flags=re.S | re.M)
+    assert block is not None, "не найден блок портов и MCP_ENDPOINTS"
+    script = block.group(0) + '\nprintf "%s\\n" "${MCP_ENDPOINTS[@]}"\n'
+    clean_env = {k: v for k, v in os.environ.items() if not k.startswith("MCP_")}
+    result = subprocess.run(
+        ["bash", "-c", script], env={**clean_env, **env},
+        capture_output=True, text=True, check=True,
+    )
+    return result.stdout.split()
+
+
+def test_verify_endpoints_default_and_override() -> None:
+    """Без переменных — прежние порты; с переменной — её значение."""
+    assert _eval_verify_endpoints({}) == [
+        "second_brain-memory-mcp:5001:/mcp",
+        "second_brain-agent_router-mcp:5000:/mcp",
+        "second_brain-memory_router-mcp:5002:/mcp",
+        "second_brain-task-mcp:5003:/mcp",
+    ]
+    overridden = _eval_verify_endpoints({"MCP_MEMORY_PORT": "15001", "MCP_TASK_PORT": "15003"})
+    assert "second_brain-memory-mcp:15001:/mcp" in overridden
+    assert "second_brain-task-mcp:15003:/mcp" in overridden
+    assert "second_brain-agent_router-mcp:5000:/mcp" in overridden
 
 
 def test_verify_auth_probe_uses_a_session_and_closes_it() -> None:
