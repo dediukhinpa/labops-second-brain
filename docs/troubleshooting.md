@@ -306,11 +306,11 @@ Hard-deleting markdown is supported but irreversible. Always back up before prun
 
 **Diagnosis chain:**
 
-1. **Bearer wrong.** Open `~/.claude-lab/<agent-id>/.claude/.mcp.json` and confirm the `Authorization: Bearer <token>` header is the actual token from `scripts/issue-agent-token.py --agent <agent-id> ...` — not the literal `<AGENT_BEARER>` placeholder, not the inbox-agent's token, not another agent's. Each agent has its own.
+1. **Bearer wrong.** Open `~/.claude-lab/<agent-id>/.claude/.mcp.json` (on a Codex swarm: `AGENT_BEARER` in `~/.claude-lab/<agent-id>/.claude/agent.env`; `.codex/config.toml` must only name that variable, never hold the token) and confirm the `Authorization: Bearer <token>` header is the actual token from `scripts/issue-agent-token.py --agent <agent-id> ...` — not the literal `<AGENT_BEARER>` placeholder, not the inbox-agent's token, not another agent's. Each agent has its own.
 2. **Bearer not in DB.** On the VPS: `psql -U second_brain -d second_brain -c "SELECT agent, can_write_scopes, can_read_scopes, revoked_at FROM agent_tokens WHERE agent='<agent-id>';"`. `revoked_at` should be `NULL`. Read scope should include `*` (default) or the scope you are querying.
 3. **Brain unreachable.** From the local workstation: `curl -sS -H "Authorization: Bearer <token>" https://<MCP_HOST>/memory_router/mcp/`. Expect HTTP 406 with an MCP error body — that proves both upstream and token are working. 401 → wrong token (or revoked). Connection refused → firewall, DNS, or Tailscale down.
 4. **Scope mismatch.** A `recall.recent(scope='decisions')` call returns nothing if no agent has written to `decisions` yet. Try `recall.recent(scope='knowledge')` to see at minimum the inbox-agent's forwards.
-5. **Token issued but workspace cached the old config.** Restart the Claude Code session — `.mcp.json` is read on launch.
+5. **Token issued but workspace cached the old config.** Restart the agent session — `.mcp.json` (Claude Code) and `.codex/config.toml` + `agent.env` (Codex) are read on launch.
 
 ---
 

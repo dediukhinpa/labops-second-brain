@@ -307,11 +307,11 @@ The `skills/` folder is a vendored set of optional ingestion skills your agents 
 
 ## Agent workspace layer (Path B)
 
-This section covers the **optional** per-agent workspace layer produced by `agent-template/install.sh`. If you installed Path A only (brain + inbox-agent), you can skip this section. If you installed Path B (brain + N personal Claude Code agents), this is how each of those agents is structured and how they talk to the brain.
+This section covers the **optional** per-agent workspace layer produced by `agent-template/install.sh`. If you installed Path A only (brain + inbox-agent), you can skip this section. If you installed Path B (brain + N personal agents, Claude Code or Codex), this is how each of those agents is structured and how they talk to the brain.
 
 ### What an agent workspace is
 
-A workspace is a self-contained Claude Code agent home directory at `~/.claude-lab/<agent-id>/.claude/`. It contains the agent's SOUL (its identity prompt), its operational rules, its layered memory, its hooks, and its `.mcp.json` wired to the shared brain. One workspace = one agent identity. Multiple workspaces share **one** brain — that is the design.
+A workspace is a self-contained agent home directory at `~/.claude-lab/<agent-id>/.claude/` (the agent runs in Claude Code or Codex — one harness for the whole swarm, `HARNESS` in `~/.claude-lab/shared/swarm.env`). It contains the agent's SOUL (its identity prompt), its operational rules, its layered memory, its hooks, and its MCP config wired to the shared brain: `.mcp.json` on Claude Code, `~/.claude-lab/<agent-id>/.codex/config.toml` on Codex (`[mcp_servers.<name>]` with `url` and `bearer_token_env_var = "AGENT_BEARER"`; the token itself lives in `agent.env`, not in `config.toml`). One workspace = one agent identity. Multiple workspaces share **one** brain — that is the design.
 
 The skeleton:
 
@@ -416,7 +416,7 @@ The `.mcp.json` rendered at install time registers four MCP servers — memory, 
 
 The bearer is per-agent (issued by `scripts/issue-agent-token.py --agent <agent-id> --scopes '...'`). The scope set the token has determines what the agent can write. A `coordinator-agent` token typically holds the full write set; a `researcher-agent` token might have an empty write set (recall only).
 
-Inside Claude Code, this surfaces as four groups of tools the agent can call: `second_brain-memory.create_decision_note(...)`, `second_brain-memory_router.recall(...)`, `second_brain-agent_router.notify(...)`, `second_brain-tasks.task_claim(...)`, etc. No HTTP plumbing — Claude Code handles the JSON-RPC and the Bearer.
+Inside the agent (Claude Code or Codex), this surfaces as four groups of tools the agent can call: `second_brain-memory.create_decision_note(...)`, `second_brain-memory_router.recall(...)`, `second_brain-agent_router.notify(...)`, `second_brain-tasks.task_claim(...)`, etc. No HTTP plumbing — the harness handles the JSON-RPC and the Bearer (Claude Code takes it from the `Authorization` header in `.mcp.json`, Codex from the `AGENT_BEARER` environment variable). The brain sees the same `Authorization: Bearer` header either way.
 
 The default scope set an agent is issued is `decisions,knowledge,inbox,error-patterns,task-board,personal,projects,daily`. `personal`, `projects` and `daily` back the core-set tools `create_personal_note`, `create_project_note` and `append_daily_log`, which were refused without them. `task-board` and `error-patterns` are not optional in practice: `task-board` gates every write on the board (`task_mcp/server.py::TASKS_WRITE_SCOPE`), and the agent's own `CLAUDE.md` instructs it to write `decisions/error-patterns` into shared memory.
 

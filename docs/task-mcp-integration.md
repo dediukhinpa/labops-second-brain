@@ -55,7 +55,7 @@ Read operations (task_get, task_list, task_history, agent_status, agent_list) wo
 
 ## MCP client config
 
-Add to your agent's `.mcp.json`:
+Claude Code: add to your agent's `.mcp.json`:
 
 ```json
 {
@@ -67,6 +67,16 @@ Add to your agent's `.mcp.json`:
     }
   }
 }
+```
+
+On a Codex swarm (`HARNESS=codex` in `~/.claude-lab/shared/swarm.env`) add a table to
+`~/.claude-lab/<agent-id>/.codex/config.toml` instead. The token stays out of that file: Codex
+reads it from `AGENT_BEARER`, which the agent session gets from its `agent.env`:
+
+```toml
+[mcp_servers.second_brain-tasks]
+url = "http://<second_brain-host>:5003/mcp"
+bearer_token_env_var = "AGENT_BEARER"
 ```
 
 ## Tools (14 total)
