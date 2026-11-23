@@ -8,7 +8,12 @@ httpx>=0.27,<0.29
 pyyaml>=6.0,<7.0
 pydantic>=2.6,<3.0
 pgvector>=0.3,<0.4
-fastembed>=0.4,<1.0
+# fastembed закреплён точно: такая версия стоит в бою. 0.9.x ищет кэш модели в
+# models--Xenova--<имя> (с заглавной), а прогретый боевой кэш лежит в
+# models--xenova--<имя> — после обновления библиотека молча перекачала бы модель
+# с HuggingFace. Обновлять только вместе с переименованием каталога кэша
+# (см. docs/troubleshooting.md).
+fastembed==0.8.0
 numpy>=1.26,<3.0
 
 # Test dependencies (install with pip install -r requirements.txt -r requirements-dev.txt
