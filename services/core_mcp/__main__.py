@@ -10,11 +10,16 @@ recall (5002) deliberately stays a SEPARATE service: it loads the e5 + reranker
 models (~2.2 GB) and must be isolated so a write-path fault here can never
 OOM-kill the search hot path.
 
-Ports are unchanged, so agent ``.mcp.json`` configs need no edit.
+Ports are unchanged, so agent ``.mcp.json`` configs need no edit. Each port can
+be overridden with its canonical env var (``MCP_MEMORY_PORT``,
+``MCP_AGENT_ROUTER_PORT``, ``MCP_TASK_PORT``, see ``.env.example``); unset or
+empty means the module's ``DEFAULT_PORT``.
 """
 import asyncio
 import logging
 import os
+from collections.abc import Mapping
+from types import ModuleType
 
 import uvicorn
 
@@ -28,17 +33,54 @@ logger = logging.getLogger("second_brain-core-mcp")
 
 # (label, module, port). Each module exposes `mcp` (FastMCP) + its own
 # `AuthCaptureMiddleware`; tools are registered at import time.
-_SERVICES = [
+_SERVICES: list[tuple[str, ModuleType, int]] = [
     ("memory", memory_server, memory_server.DEFAULT_PORT),
     ("agent_router", agent_router_server, agent_router_server.DEFAULT_PORT),
     ("task", task_server, task_server.DEFAULT_PORT),
 ]
 
+# Переменная окружения с портом для каждого сервиса. Имена — канонические из
+# .env.example (их же проверяет sanitize-check). Раньше порты брались только из
+# DEFAULT_PORT, и поднять core на других портах (песочница, второй стенд на той
+# же машине) было нельзя без подмены _SERVICES снаружи.
+_PORT_ENV: dict[str, str] = {
+    "memory": "MCP_MEMORY_PORT",
+    "agent_router": "MCP_AGENT_ROUTER_PORT",
+    "task": "MCP_TASK_PORT",
+}
+
+
+def _resolve_services(
+    services: list[tuple[str, ModuleType, int]],
+    environ: Mapping[str, str],
+) -> list[tuple[str, ModuleType, int]]:
+    """Apply per-service port overrides from the environment.
+
+    Args:
+        services: ``(label, module, default_port)`` triples.
+        environ: Environment to read overrides from (usually ``os.environ``).
+
+    Returns:
+        The same triples with ports replaced where the service's env var is set
+        to a non-empty value; other entries keep their default port.
+
+    Raises:
+        ValueError: If an override is not an integer.
+    """
+    resolved: list[tuple[str, ModuleType, int]] = []
+    for label, mod, default_port in services:
+        env_name = _PORT_ENV.get(label)
+        raw = environ.get(env_name, "").strip() if env_name else ""
+        port = int(raw) if raw else default_port
+        resolved.append((label, mod, port))
+    return resolved
+
 
 async def _serve_all() -> None:
     host = os.environ.get("MCP_HOST", "0.0.0.0")
+    services = _resolve_services(_SERVICES, os.environ)
     servers = []
-    for _label, mod, port in _SERVICES:
+    for _label, mod, port in services:
         # build_http_app вместо mcp.http_app: включает протухание брошенных
         # MCP-сессий, иначе они копятся на сервере до перезапуска.
         app = mod.AuthCaptureMiddleware(build_http_app(mod.mcp))
@@ -46,7 +88,7 @@ async def _serve_all() -> None:
         servers.append(uvicorn.Server(cfg))
     logger.info(
         "second_brain-core-mcp: serving %s in one process",
-        " ".join(f"{lbl}:{p}" for lbl, _m, p in _SERVICES),
+        " ".join(f"{lbl}:{p}" for lbl, _m, p in services),
     )
     # Each app carries its own FastMCP lifespan (pool init / swarm recovery /
     # task supervisor); the shared pool singleton means only the first opens it.
