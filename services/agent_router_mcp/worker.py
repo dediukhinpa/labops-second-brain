@@ -166,6 +166,22 @@ def _hmac_outbound_enabled() -> bool:
     return os.environ.get("SECOND_BRAIN_HMAC_OUTBOUND_ENABLED", "1") != "0"
 
 
+def _payload_body(payload: dict) -> str:
+    """Возвращает текст задачи из payload notify.
+
+    Агенты кладут текст и в `body`, и в `text` (notify принимает любой payload):
+    раньше `text` молча терялся, и получатель видел пустую задачу (дымовой прогон
+    2026-11-23). `body` главнее, `text` — запасной.
+
+    Args:
+        payload: payload доставки из outbox.
+
+    Returns:
+        Текст задачи или пустая строка.
+    """
+    return payload.get("body") or payload.get("text") or ""
+
+
 def _format_virtual_prompt(from_agent: str, to_agent: str, task_id: str, payload: dict) -> str:
     """Pack inter-agent payload into a chat-style prompt the agent will see.
 
@@ -181,7 +197,7 @@ def _format_virtual_prompt(from_agent: str, to_agent: str, task_id: str, payload
       self-nudge): no owner report, no notify.
     """
     title = payload.get("title") or "(no title)"
-    body = payload.get("body") or ""
+    body = _payload_body(payload)
     urgency = payload.get("urgency") or payload.get("_priority") or "normal"
     reason = payload.get("_escalation_reason") or ""
     extra = ""
@@ -337,7 +353,7 @@ async def _deliver_one(
         "task_id": row["task_id"],
         "from_agent": row["from_agent"],
         "title": payload.get("title") or "(no title)",
-        "body": payload.get("body") or "",
+        "body": _payload_body(payload),
         "instruction_type": payload.get("instruction_type") or "",
     }
 

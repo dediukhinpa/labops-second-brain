@@ -86,7 +86,7 @@ result = mcp__second_brain-agent_router__notify(
   "task_id": "nova::vega::abc123",
   "from_agent": "nova",
   "title": "<payload.title или \"(no title)\">",
-  "body": "<payload.body или \"\">",
+  "body": "<payload.body, иначе payload.text, иначе \"\">",
   "instruction_type": "<payload.instruction_type или \"\">"
 }
 ```
@@ -96,7 +96,7 @@ result = mcp__second_brain-agent_router__notify(
 | Ключ | Куда попадает |
 |---|---|
 | `title` | поле `title` и строка `Task:` в `message` |
-| `body` | поле `body` и текст задачи в `message` — **сюда кладётся сама задача** |
+| `body` (или `text`) | поле `body` и текст задачи в `message` — **сюда кладётся сама задача**; `text` берётся, только если `body` пуст |
 | `instruction_type` | поле `instruction_type`; `memory_consolidate` включает тихий служебный режим |
 | `urgency` (или `_priority`) | `urgency=` в заголовке `message` |
 | `_escalation_reason` | строка `Escalation reason:` в `message` (ставит `escalate`) |
