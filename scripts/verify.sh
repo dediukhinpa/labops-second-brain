@@ -38,17 +38,24 @@ ADMIN_TOKEN_FILE="${ADMIN_TOKEN_FILE:-$SB_HOME/secrets/admin.token}"
 
 # MCP endpoints to probe: "unit:port:path". This MUST mirror what
 # scripts/install.sh actually deploys: SEPARATE units per service (there is no
-# consolidated core unit in systemd/). Edit the ports here only if you changed
-# them at install time.
+# consolidated core unit in systemd/). Ports come from the canonical env vars
+# (.env.example) and default to the standard ones, so a stand on non-standard
+# ports is checked with e.g. MCP_MEMORY_PORT=15001 verify.sh.
 # task-mcp обязателен: на нём доска задач, которую агенты опрашивают поллером
 # (SECOND_BRAIN_TASKS_URL в agent-architecture) и на запись в которую им выдают
 # scope task-board. Раньше install.sh юнит клал, но не включал, а verify проверял
 # его только «если юнит установлен» — то есть всегда и всегда красным.
+# Порты переопределяемые: раньше они были зашиты, и стенд на других портах
+# (песочница дымового прогона) verify проверить не мог.
+MCP_MEMORY_PORT="${MCP_MEMORY_PORT:-5001}"
+MCP_AGENT_ROUTER_PORT="${MCP_AGENT_ROUTER_PORT:-5000}"
+MCP_MEMORY_ROUTER_PORT="${MCP_MEMORY_ROUTER_PORT:-5002}"
+MCP_TASK_PORT="${MCP_TASK_PORT:-5003}"
 MCP_ENDPOINTS=(
-  "second_brain-memory-mcp:5001:/mcp"         # memory (write-side)
-  "second_brain-agent_router-mcp:5000:/mcp"   # agent_router
-  "second_brain-memory_router-mcp:5002:/mcp"  # memory_router (recall)
-  "second_brain-task-mcp:5003:/mcp"           # tasks / board
+  "second_brain-memory-mcp:${MCP_MEMORY_PORT}:/mcp"                # memory (write-side)
+  "second_brain-agent_router-mcp:${MCP_AGENT_ROUTER_PORT}:/mcp"    # agent_router
+  "second_brain-memory_router-mcp:${MCP_MEMORY_ROUTER_PORT}:/mcp"  # memory_router (recall)
+  "second_brain-task-mcp:${MCP_TASK_PORT}:/mcp"                    # tasks / board
 )
 WORKER_UNITS=( second_brain-ingest-worker second_brain-agent_router-worker )
 REQUIRED_SECRET_KEYS=( PG_HOST PG_PORT PG_DATABASE PG_USER PG_PASSWORD \
