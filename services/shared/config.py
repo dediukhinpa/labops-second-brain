@@ -352,16 +352,19 @@ class Config:
     def get_pg_dsn(self) -> dict[str, str | int]:
         """Return asyncpg connection kwargs.
 
-        Uses unix socket when pg_host starts with '/', TCP otherwise.
+        Uses unix socket when pg_host starts with '/', TCP otherwise. The port
+        is passed in both cases.
+
+        Returns:
+            Keyword arguments for ``asyncpg.create_pool``.
         """
-        base: dict[str, str | int] = {
+        # Порт передаём всегда, и для unix-сокета тоже: asyncpg строит из него
+        # имя сокета (<каталог>/.s.PGSQL.<порт>). Без порта он подставлял 5432,
+        # и кластер на нестандартном порту через сокет был недоступен.
+        return {
             "database": self.pg_database,
             "user": self.pg_user,
             "password": self.pg_password,
             "host": self.pg_host,
+            "port": self.pg_port,
         }
-        # Only include explicit port for TCP. Unix-socket hosts (paths starting
-        # with '/') ignore port but asyncpg is happy either way.
-        if not self.pg_host.startswith("/"):
-            base["port"] = self.pg_port
-        return base
