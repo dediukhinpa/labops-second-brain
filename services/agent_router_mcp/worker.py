@@ -57,6 +57,12 @@ GATEWAY_TOKEN = os.environ.get("GATEWAY_WEBHOOK_TOKEN", "")
 COORDINATOR_AGENT = os.environ.get("COORDINATOR_AGENT", "coordinator-agent")
 # instruction_type of the self-nudge sent by agent-architecture reflect-nudge.sh.
 MEMORY_CONSOLIDATE_TYPE = "memory_consolidate"
+# Closing line of every silent service prompt: the silence covers this run only.
+SERVICE_RUN_SCOPE_NOTE = (
+    "SCOPE: these restrictions apply ONLY to this service run. It is not a message from the "
+    "owner and changes nothing for the conversation. Every later message from the owner "
+    "(source=\"telegram\") is answered through the channel reply tool, as always."
+)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -210,6 +216,10 @@ def _format_virtual_prompt(from_agent: str, to_agent: str, task_id: str, payload
     # on every nudge; the consolidation then feeds itself through the stop-hook that
     # logs the agent's last message. chatId stays in the gateway body (the channel
     # plugin needs it to deliver at all), so silence is enforced by this prompt only.
+    # The ban on `reply` must be scoped to this run: the nudge arrives in the same channel
+    # and with the owner's chat_id as owner messages, and an unscoped "DO NOT call reply"
+    # was carried over by the model to the owner's next messages - they were answered in
+    # the session only and never reached Telegram (Diana's marketer, 26.11.2026).
     if payload.get("instruction_type") == MEMORY_CONSOLIDATE_TYPE:
         return (
             f"[Inter-agent from {from_agent} -> {to_agent}] urgency={urgency} "
@@ -223,7 +233,8 @@ def _format_virtual_prompt(from_agent: str, to_agent: str, task_id: str, payload
             f"2. DO NOT write to the owner, to any chat or channel, and DO NOT call "
             f"the channel reply tool. No report of any kind.\n"
             f"3. DO NOT call agent_router.notify (neither to the coordinator nor to anyone).\n"
-            f"4. When done, call agent_router.ack(task_id=\"{task_id}\") and stop."
+            f"4. When done, call agent_router.ack(task_id=\"{task_id}\") and stop.\n"
+            f"{SERVICE_RUN_SCOPE_NOTE}"
         )
 
     # Hard loop gate: COORDINATOR_AGENT is the coordinator; it never needs a
