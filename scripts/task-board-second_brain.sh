@@ -31,72 +31,120 @@ if [[ -z "${SECOND_BRAIN_TOKEN:-}" ]]; then
     fi
 fi
 
+# MCP-клиент одного вызова: initialize → notifications/initialized → tools/call → DELETE.
+# Раньше утилита слала tools/call без сессии, и task-mcp (Streamable HTTP со
+# сессиями) отвечал на каждую команду «400 Bad Request: Missing session ID» — CLI
+# не работал совсем (найдено на HRV 26.11.2026). Сессию закрываем всегда, даже при
+# ошибке: брошенные сессии копятся в сервисе и съедают память.
+_MCP_CLIENT_PY="$(cat <<'PY'
+import json
+import os
+import sys
+import urllib.error
+import urllib.request
+
+PROTOCOL_VERSION = "2025-03-26"
+TIMEOUT_S = 30
+
+tool, url = sys.argv[1], sys.argv[2]
+token = os.environ["SECOND_BRAIN_TOKEN_ENV"].strip()
+args = json.loads(sys.stdin.read())
+
+
+def die(msg):
+    print(f"ERROR: {msg}", file=sys.stderr)
+    sys.exit(1)
+
+
+def headers(session):
+    h = {"Authorization": f"Bearer {token}"}
+    if session:
+        h["Mcp-Session-Id"] = session
+        h["MCP-Protocol-Version"] = PROTOCOL_VERSION
+    return h
+
+
+def post(payload, session=None):
+    h = headers(session)
+    h["Content-Type"] = "application/json"
+    h["Accept"] = "application/json, text/event-stream"
+    req = urllib.request.Request(url, data=json.dumps(payload).encode(), headers=h, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT_S) as resp:
+            return resp.headers.get("Mcp-Session-Id"), resp.read().decode()
+    except urllib.error.HTTPError as e:
+        die(f"HTTP {e.code}: {e.read().decode()[:200]}")
+    except urllib.error.URLError as e:
+        die(str(e.reason))
+
+
+def message(body, want_id):
+    # Ответ — JSON целиком или поток SSE (строки «data: …»): берём сообщение с нашим id.
+    chunks = [line[6:] for line in body.splitlines() if line.startswith("data: ")] or [body]
+    for raw in chunks:
+        try:
+            d = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(d, dict) and d.get("id") == want_id:
+            return d
+    die("empty response")
+
+
+def close(session):
+    req = urllib.request.Request(url, headers=headers(session), method="DELETE")
+    try:
+        urllib.request.urlopen(req, timeout=TIMEOUT_S).close()
+    except (urllib.error.URLError, OSError):
+        pass
+
+
+session, body = post({
+    "jsonrpc": "2.0", "id": 1, "method": "initialize",
+    "params": {"protocolVersion": PROTOCOL_VERSION, "capabilities": {},
+               "clientInfo": {"name": "task-board-cli", "version": "1"}},
+})
+init = message(body, 1)
+if "error" in init:
+    die(init["error"].get("message", "initialize failed"))
+try:
+    post({"jsonrpc": "2.0", "method": "notifications/initialized"}, session)
+    _, body = post({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                    "params": {"name": tool, "arguments": args}}, session)
+    d = message(body, 2)
+finally:
+    # Сервер без сессий (stateless) заголовка не присылает — тогда и закрывать нечего.
+    if session:
+        close(session)
+
+if "error" in d:
+    die(d["error"].get("message", "tools/call failed"))
+result = d.get("result", {})
+if result.get("isError"):
+    msg = (result.get("content") or [{}])[0].get("text", "unknown error")
+    die(msg)
+
+sc = result.get("structuredContent")
+if sc:
+    json.dump(sc, sys.stdout, indent=2, ensure_ascii=False, default=str)
+else:
+    for c in result.get("content", []):
+        txt = c.get("text", "")
+        try:
+            json.dump(json.loads(txt), sys.stdout, indent=2, ensure_ascii=False, default=str)
+        except (json.JSONDecodeError, TypeError):
+            sys.stdout.write(txt)
+print()
+PY
+)"
+
 _call_mcp() {
     local tool_name="$1"
     local args_json="$2"
 
     local response
-    response=$(SECOND_BRAIN_TOKEN_ENV="$SECOND_BRAIN_TOKEN" python3 -c "
-import json, os, sys, urllib.request, urllib.error
-
-tool = sys.argv[1]
-url = sys.argv[2]
-token = os.environ['SECOND_BRAIN_TOKEN_ENV']
-args = json.loads(sys.stdin.read())
-
-payload = json.dumps({
-    'jsonrpc': '2.0', 'id': 1,
-    'method': 'tools/call',
-    'params': {'name': tool, 'arguments': args}
-}).encode()
-
-req = urllib.request.Request(url, data=payload, headers={
-    'Content-Type': 'application/json',
-    'Accept': 'application/json, text/event-stream',
-    'Authorization': f'Bearer {token}',
-})
-
-try:
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        body = resp.read().decode()
-except urllib.error.HTTPError as e:
-    print(f'ERROR: HTTP {e.code}: {e.read().decode()[:200]}', file=sys.stderr)
-    sys.exit(1)
-except urllib.error.URLError as e:
-    print(f'ERROR: {e.reason}', file=sys.stderr)
-    sys.exit(1)
-
-data_line = ''
-for line in body.splitlines():
-    if line.startswith('data: '):
-        data_line = line[6:]
-        break
-
-if not data_line:
-    print('ERROR: empty response', file=sys.stderr)
-    sys.exit(1)
-
-d = json.loads(data_line)
-result = d.get('result', {})
-
-if result.get('isError'):
-    msg = result.get('content', [{}])[0].get('text', 'unknown error')
-    print(f'ERROR: {msg}', file=sys.stderr)
-    sys.exit(1)
-
-sc = result.get('structuredContent')
-if sc:
-    json.dump(sc, sys.stdout, indent=2, ensure_ascii=False, default=str)
-else:
-    for c in result.get('content', []):
-        txt = c.get('text', '')
-        try:
-            parsed = json.loads(txt)
-            json.dump(parsed, sys.stdout, indent=2, ensure_ascii=False, default=str)
-        except (json.JSONDecodeError, TypeError):
-            sys.stdout.write(txt)
-print()
-" "$tool_name" "$TASK_MCP_URL" <<< "$args_json") || exit 1
+    response=$(SECOND_BRAIN_TOKEN_ENV="$SECOND_BRAIN_TOKEN" \
+        python3 -c "$_MCP_CLIENT_PY" "$tool_name" "$TASK_MCP_URL" <<< "$args_json") || exit 1
 
     echo "$response"
 }
