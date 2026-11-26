@@ -182,6 +182,9 @@ def test_format_virtual_prompt_memory_consolidate_is_silent() -> None:
     assert "Send the owner" not in prompt
     assert "DO NOT write to the owner" in prompt
     assert "DO NOT call agent_router.notify" in prompt
+    # The ban on reply is scoped to this run, not carried over to owner messages.
+    assert "apply ONLY to this service run" in prompt
+    assert prompt.rstrip().endswith("as always.")
 
 
 def test_format_virtual_prompt_regular_task_keeps_full_report_flow() -> None:
